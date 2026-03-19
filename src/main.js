@@ -84,6 +84,30 @@ const STATE_PRIORITY = {
   carrying: 4, juggling: 4, working: 3, thinking: 2, idle: 1, sleeping: 0,
 };
 
+// ── CSS <object> sizing (mirrors styles.css #clawd) ──
+const OBJ_SCALE_W = 1.9;   // width: 190%
+const OBJ_SCALE_H = 1.3;   // height: 130%
+const OBJ_OFF_X   = -0.45; // left: -45%
+const OBJ_OFF_Y   = -0.25; // top: -25%
+
+function getObjRect(bounds) {
+  return {
+    x: bounds.x + bounds.width * OBJ_OFF_X,
+    y: bounds.y + bounds.height * OBJ_OFF_Y,
+    w: bounds.width * OBJ_SCALE_W,
+    h: bounds.height * OBJ_SCALE_H,
+  };
+}
+
+// ── Hit-test bounding boxes (SVG coordinate system) ──
+const HIT_BOXES = {
+  default:  { x: -1, y: 5, w: 17, h: 12 },   // 站姿：身体+腿+手臂
+  sleeping: { x: -2, y: 9, w: 19, h: 7 },     // 趴姿：更宽更矮
+  wide:     { x: -3, y: 3, w: 21, h: 14 },    // 带特效（error/building/notification）
+};
+const WIDE_SVGS = new Set(["clawd-error.svg", "clawd-working-building.svg", "clawd-notification.svg"]);
+let currentHitBox = HIT_BOXES.default;
+
 let win;
 let tray = null;
 let currentSize = "S";
@@ -100,7 +124,11 @@ let currentSvg = null;
 let stateChangedAt = Date.now();
 let pendingTimer = null;
 let autoReturnTimer = null;
-let cursorPollTimer = null;
+let mainTickTimer = null;
+let mouseOverPet = false;
+let dragLocked = false;
+let idlePaused = false;
+let idleWasActive = false;
 let lastEyeDx = 0, lastEyeDy = 0;
 let forceEyeResend = false;
 
@@ -156,7 +184,10 @@ function setState(newState, svgOverride) {
     pendingTimer = setTimeout(() => {
       pendingTimer = null;
       pendingState = null;
-      applyState(newState, svgOverride);
+      // Re-resolve from live sessions — the captured newState may be stale
+      // (e.g. SessionEnd arrived while we waited, sessions is now empty)
+      const resolved = resolveDisplayState();
+      applyState(resolved, getSvgOverride(resolved));
     }, remaining);
   } else {
     applyState(newState, svgOverride);
@@ -166,18 +197,28 @@ function setState(newState, svgOverride) {
 function applyState(state, svgOverride) {
   currentState = state;
   stateChangedAt = Date.now();
+  // Main process state change overrides any renderer reaction — clear pause flag
+  // to prevent idlePaused from getting stranded when cancelReaction() doesn't
+  // send resumeFromReaction (because the reaction was cancelled, not ended).
+  idlePaused = false;
 
   const svgs = STATE_SVGS[state] || STATE_SVGS.idle;
   const svg = svgOverride || svgs[Math.floor(Math.random() * svgs.length)];
   currentSvg = svg;
 
+  // Update hit box based on SVG
+  if (svg === "clawd-sleeping.svg") {
+    currentHitBox = HIT_BOXES.sleeping;
+  } else if (WIDE_SVGS.has(svg)) {
+    currentHitBox = HIT_BOXES.wide;
+  } else {
+    currentHitBox = HIT_BOXES.default;
+  }
+
   sendToRenderer("state-change", state, svg);
 
-  // Eye tracking: only poll during idle
-  if (state === "idle") {
-    startCursorPolling();
-  } else {
-    stopCursorPolling();
+  // Reset eyes when leaving idle (mainTick handles idle logic gating)
+  if (state !== "idle") {
     sendToRenderer("eye-move", 0, 0);
   }
 
@@ -212,20 +253,74 @@ function applyState(state, svgOverride) {
   }
 }
 
-// ── Eye tracking (cursor polling + mouse idle detection) ──
-function startCursorPolling() {
-  if (cursorPollTimer) return;
-  isMouseIdle = false;
-  hasTriggeredYawn = false;
-  lastCursorX = null;
-  lastCursorY = null;
-  mouseStillSince = Date.now();
+// ── Hit-test: SVG bounding box → screen coordinates ──
+function getHitRectScreen(bounds) {
+  const obj = getObjRect(bounds);
 
-  cursorPollTimer = setInterval(() => {
+  // viewBox="-15 -25 45 45", preserveAspectRatio default xMidYMid meet
+  const scale = Math.min(obj.w, obj.h) / 45;
+  const offsetX = obj.x + (obj.w - 45 * scale) / 2;
+  const offsetY = obj.y + (obj.h - 45 * scale) / 2;
+
+  const hb = currentHitBox;
+  return {
+    left:   offsetX + (hb.x + 15) * scale,
+    top:    offsetY + (hb.y + 25) * scale,
+    right:  offsetX + (hb.x + 15 + hb.w) * scale,
+    bottom: offsetY + (hb.y + 25 + hb.h) * scale,
+  };
+}
+
+// ── Unified main tick (hit-test + eye tracking + sleep detection) ──
+function startMainTick() {
+  if (mainTickTimer) return;
+  win.setIgnoreMouseEvents(true);
+  mouseOverPet = false;
+
+  mainTickTimer = setInterval(() => {
     if (!win || win.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
 
-    // Detect mouse movement
+    // ── Hit-test (always-on) ──
+    const bounds = win.getBounds();
+    if (!dragLocked) {
+      const hit = getHitRectScreen(bounds);
+      const over = cursor.x >= hit.left && cursor.x <= hit.right
+                && cursor.y >= hit.top  && cursor.y <= hit.bottom;
+      if (over !== mouseOverPet) {
+        mouseOverPet = over;
+        win.setIgnoreMouseEvents(!over);
+      }
+    }
+
+    // ── Eye tracking + sleep detection (idle only, not during reactions) ──
+    const idleNow = currentState === "idle" && !idlePaused;
+
+    // Edge detection: idle entry → reset state variables
+    if (idleNow && !idleWasActive) {
+      isMouseIdle = false;
+      hasTriggeredYawn = false;
+      idleLookPlayed = false;
+      lastCursorX = null;
+      lastCursorY = null;
+      mouseStillSince = Date.now();
+      lastEyeDx = 0;
+      lastEyeDy = 0;
+      if (idleLookReturnTimer) { clearTimeout(idleLookReturnTimer); idleLookReturnTimer = null; }
+      if (yawnDelayTimer) { clearTimeout(yawnDelayTimer); yawnDelayTimer = null; }
+    }
+
+    // Edge detection: idle exit → clear pending timers
+    // (variable resets not needed here — idle entry will overwrite them all)
+    if (!idleNow && idleWasActive) {
+      if (idleLookReturnTimer) { clearTimeout(idleLookReturnTimer); idleLookReturnTimer = null; }
+      if (yawnDelayTimer) { clearTimeout(yawnDelayTimer); yawnDelayTimer = null; }
+    }
+    idleWasActive = idleNow;
+
+    if (!idleNow) return;
+
+    // ── Below: idle-only logic (eye tracking + mouse idle detection) ──
     const moved = lastCursorX !== null && (cursor.x !== lastCursorX || cursor.y !== lastCursorY);
     lastCursorX = cursor.x;
     lastCursorY = cursor.y;
@@ -237,7 +332,6 @@ function startCursorPolling() {
       if (idleLookReturnTimer) { clearTimeout(idleLookReturnTimer); idleLookReturnTimer = null; }
       if (yawnDelayTimer) { clearTimeout(yawnDelayTimer); yawnDelayTimer = null; }
       if (isMouseIdle) {
-        // Wake from idle-look → back to idle-follow with eye tracking
         isMouseIdle = false;
         sendToRenderer("state-change", "idle", SVG_IDLE_FOLLOW);
       }
@@ -261,19 +355,16 @@ function startCursorPolling() {
       isMouseIdle = true;
       idleLookPlayed = true;
       sendToRenderer("eye-move", 0, 0);
-      // Delay swap to let eyes ease back to center
       setTimeout(() => {
         if (isMouseIdle && currentState === "idle") {
           sendToRenderer("state-change", "idle", SVG_IDLE_LOOK);
         }
       }, 250);
-      // Auto-return to idle-follow after one 10s cycle
       idleLookReturnTimer = setTimeout(() => {
         idleLookReturnTimer = null;
         if (isMouseIdle && currentState === "idle") {
           isMouseIdle = false;
           sendToRenderer("state-change", "idle", SVG_IDLE_FOLLOW);
-          // Force eye position re-send after SVG has loaded
           setTimeout(() => { forceEyeResend = true; }, 200);
         }
       }, 250 + IDLE_LOOK_DURATION);
@@ -285,15 +376,9 @@ function startCursorPolling() {
     const skipDedup = forceEyeResend;
     forceEyeResend = false;
 
-    const bounds = win.getBounds();
-
-    // Eye center in screen coords, compensating for CSS oversizing/offset
-    const objW = bounds.width * 1.9;
-    const objH = bounds.height * 1.3;
-    const objX = bounds.x + bounds.width * (-0.45);
-    const objY = bounds.y + bounds.height * (-0.25);
-    const eyeScreenX = objX + objW * (22 / 45);
-    const eyeScreenY = objY + objH * (34 / 45);
+    const obj = getObjRect(bounds);
+    const eyeScreenX = obj.x + obj.w * (22 / 45);
+    const eyeScreenY = obj.y + obj.h * (34 / 45);
 
     const relX = cursor.x - eyeScreenX;
     const relY = cursor.y - eyeScreenY;
@@ -307,10 +392,8 @@ function startCursorPolling() {
       eyeDy = (relY / dist) * MAX_OFFSET * scale;
     }
 
-    // Quantize to 0.5px grid for pixel-art feel
     eyeDx = Math.round(eyeDx * 2) / 2;
     eyeDy = Math.round(eyeDy * 2) / 2;
-    // Clamp vertical tighter — eyes shouldn't go too far up/down
     eyeDy = Math.max(-1.5, Math.min(1.5, eyeDy));
 
     if (skipDedup || eyeDx !== lastEyeDx || eyeDy !== lastEyeDy) {
@@ -318,21 +401,7 @@ function startCursorPolling() {
       lastEyeDy = eyeDy;
       sendToRenderer("eye-move", eyeDx, eyeDy);
     }
-  }, 67); // ~15fps
-}
-
-function stopCursorPolling() {
-  if (cursorPollTimer) {
-    clearInterval(cursorPollTimer);
-    cursorPollTimer = null;
-  }
-  if (idleLookReturnTimer) { clearTimeout(idleLookReturnTimer); idleLookReturnTimer = null; }
-  if (yawnDelayTimer) { clearTimeout(yawnDelayTimer); yawnDelayTimer = null; }
-  lastEyeDx = 0;
-  lastEyeDy = 0;
-  isMouseIdle = false;
-  hasTriggeredYawn = false;
-  idleLookPlayed = false;
+  }, 50); // ~20fps — hit-test needs faster response than 67ms eye tracking
 }
 
 // ── Wake poll (detect mouse movement during dozing → wake up) ──
@@ -491,10 +560,11 @@ function getJugglingSvg() {
 
 // ── Do Not Disturb ──
 function enableDoNotDisturb() {
+  if (doNotDisturb) return;
   doNotDisturb = true;
+  sendToRenderer("dnd-change", true);
   if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; pendingState = null; }
   if (autoReturnTimer) { clearTimeout(autoReturnTimer); autoReturnTimer = null; }
-  stopCursorPolling();
   stopWakePoll();
   applyState("sleeping");
   buildContextMenu();
@@ -502,7 +572,9 @@ function enableDoNotDisturb() {
 }
 
 function disableDoNotDisturb() {
+  if (!doNotDisturb) return;
   doNotDisturb = false;
+  sendToRenderer("dnd-change", false);
   // Resolve from active sessions instead of blindly forcing idle
   const resolved = resolveDisplayState();
   applyState(resolved, getSvgOverride(resolved));
@@ -531,7 +603,12 @@ function startHttpServer() {
           const { state, svg, session_id, event } = data;
           if (STATE_SVGS[state]) {
             const sid = session_id || "default";
-            updateSession(sid, state, event);
+            if (svg) {
+              // Direct SVG override (test-demo.sh, manual curl) — bypass session logic
+              setState(state, svg);
+            } else {
+              updateSession(sid, state, event);
+            }
             res.writeHead(200);
             res.end("ok");
           } else {
@@ -644,26 +721,46 @@ function createWindow() {
     win.setBounds({ ...clamped, width: size.width, height: size.height });
   });
 
-  ipcMain.on("pause-cursor-polling", () => stopCursorPolling());
+  ipcMain.on("pause-cursor-polling", () => { idlePaused = true; });
   ipcMain.on("resume-from-reaction", () => {
+    idlePaused = false;
     // Re-send current state to renderer without resetting stateChangedAt or timers.
-    // Using applyState() here would reset MIN_DISPLAY_MS timing and interfere
-    // with pending state transitions (e.g. a deferred error could be disrupted).
     sendToRenderer("state-change", currentState, currentSvg);
-    if (currentState === "idle") startCursorPolling();
   });
 
+  ipcMain.on("drag-lock", (event, locked) => {
+    dragLocked = !!locked;
+    if (locked && !mouseOverPet) {
+      mouseOverPet = true;
+      win.setIgnoreMouseEvents(false);
+    }
+  });
+
+  startMainTick();
   startHttpServer();
   startStaleCleanup();
   // Wait for renderer to be ready before sending initial state
-  // (prevents race where IPC arrives before renderer listeners exist)
+  // If hooks arrived during startup, respect them instead of forcing idle
+  // Also handles crash recovery (render-process-gone → reload)
   win.webContents.on("did-finish-load", () => {
-    applyState("idle");
+    if (doNotDisturb) {
+      sendToRenderer("dnd-change", true);
+      applyState("sleeping");
+    } else if (sessions.size > 0) {
+      const resolved = resolveDisplayState();
+      applyState(resolved, getSvgOverride(resolved));
+    } else {
+      applyState("idle");
+    }
   });
 
   // ── Crash recovery: renderer process can die from <object> churn ──
   win.webContents.on("render-process-gone", (_event, details) => {
     console.error("Renderer crashed:", details.reason);
+    dragLocked = false;
+    idlePaused = false;
+    mouseOverPet = false;
+    win.setIgnoreMouseEvents(true);
     win.webContents.reload();
   });
 
@@ -705,9 +802,15 @@ function clampToScreen(x, y, w, h) {
     const dist = dx * dx + dy * dy;
     if (dist < minDist) { minDist = dist; nearest = wa; }
   }
+  // Allow window to overflow screen so the CHARACTER can reach screen edges.
+  // Margins derived from CSS object sizing (OBJ_SCALE/OBJ_OFF constants).
+  const mLeft  = Math.round(w * 0.25);  // character left edge ~25% from window left
+  const mRight = Math.round(w * 0.25);  // character right edge ~25% from window right
+  const mTop   = Math.round(h * 0.6);   // character top ~60% from window top
+  const mBot   = Math.round(h * 0.04);  // character bottom ~4% from window bottom
   return {
-    x: Math.max(nearest.x, Math.min(x, nearest.x + nearest.width - w)),
-    y: Math.max(nearest.y, Math.min(y, nearest.y + nearest.height - h)),
+    x: Math.max(nearest.x - mLeft, Math.min(x, nearest.x + nearest.width - w + mRight)),
+    y: Math.max(nearest.y - mTop,  Math.min(y, nearest.y + nearest.height - h + mBot)),
   };
 }
 
@@ -756,7 +859,7 @@ if (!gotTheLock) {
     savePrefs();
     if (pendingTimer) clearTimeout(pendingTimer);
     if (autoReturnTimer) clearTimeout(autoReturnTimer);
-    if (cursorPollTimer) clearInterval(cursorPollTimer);
+    if (mainTickTimer) clearInterval(mainTickTimer);
     if (wakePollTimer) clearInterval(wakePollTimer);
     stopStaleCleanup();
     if (httpServer) httpServer.close();

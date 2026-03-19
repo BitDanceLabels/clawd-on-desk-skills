@@ -1,15 +1,16 @@
-// --- JS manual drag + click detection (delta-based, throttled to ~60fps) ---
+// --- Pointer-based drag + click detection (with Pointer Capture for safety) ---
 const container = document.getElementById("pet-container");
 let isDragging = false;
-let didDrag = false; // true if mouse moved > threshold during this press
+let didDrag = false; // true if pointer moved > threshold during this press
 let lastScreenX, lastScreenY;
 let mouseDownX, mouseDownY;
 let pendingDx = 0, pendingDy = 0;
 let dragRAF = null;
 const DRAG_THRESHOLD = 3; // px — less than this = click, more = drag
 
-container.addEventListener("mousedown", (e) => {
+container.addEventListener("pointerdown", (e) => {
   if (e.button === 0) {
+    container.setPointerCapture(e.pointerId);  // Guarantees pointerup even if pointer leaves window
     isDragging = true;
     didDrag = false;
     lastScreenX = e.screenX;
@@ -18,11 +19,12 @@ container.addEventListener("mousedown", (e) => {
     mouseDownY = e.clientY;
     pendingDx = 0;
     pendingDy = 0;
+    window.electronAPI.dragLock(true);
     container.classList.add("dragging");
   }
 });
 
-document.addEventListener("mousemove", (e) => {
+document.addEventListener("pointermove", (e) => {
   if (isDragging) {
     pendingDx += e.screenX - lastScreenX;
     pendingDy += e.screenY - lastScreenY;
@@ -51,12 +53,14 @@ document.addEventListener("mousemove", (e) => {
 });
 
 function stopDrag() {
+  if (!isDragging) return;
   isDragging = false;
+  window.electronAPI.dragLock(false);
   container.classList.remove("dragging");
   endDragReaction();
 }
 
-document.addEventListener("mouseup", (e) => {
+document.addEventListener("pointerup", (e) => {
   if (e.button === 0) {
     const wasDrag = didDrag;
     stopDrag();
@@ -66,7 +70,17 @@ document.addEventListener("mouseup", (e) => {
   }
 });
 
+// Pointer Capture can end via OS interruption (Alt+Tab, system dialog, etc.)
+container.addEventListener("pointercancel", stopDrag);
+container.addEventListener("lostpointercapture", () => {
+  if (isDragging) stopDrag();
+});
+
 window.addEventListener("blur", stopDrag);
+
+// --- Do Not Disturb (synced from main process) ---
+let dndEnabled = false;
+window.electronAPI.onDndChange((enabled) => { dndEnabled = enabled; });
 
 // --- Click reaction (2-click = poke, 4-click = flail) ---
 const CLICK_WINDOW_MS = 400;  // max gap between consecutive clicks
@@ -200,6 +214,7 @@ function swapToSvg(svgFile) {
 
 function startDragReaction() {
   if (isDragReacting) return;
+  if (dndEnabled) return;  // DND: just move the window, no reaction animation
 
   // Drag interrupts click reaction if active
   if (isReacting) {

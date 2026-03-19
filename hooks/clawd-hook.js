@@ -40,8 +40,9 @@ process.stdin.on("end", () => {
   send(sessionId);
 });
 
-// Safety: if stdin doesn't end in 200ms, send with default session
-setTimeout(() => send("default"), 200);
+// Safety: if stdin doesn't end in 400ms, send with default session
+// (200ms was too aggressive on slow machines / AV scanning)
+setTimeout(() => send("default"), 400);
 
 function send(sessionId) {
   if (sent) return;
@@ -58,7 +59,7 @@ function send(sessionId) {
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(data),
       },
-      timeout: 800,
+      timeout: 500,  // 400ms stdin + 500ms HTTP = 900ms < 1000ms Claude Code budget
     },
     () => process.exit(0)
   );

@@ -48,7 +48,9 @@ let skipped = 0;
 
 for (const event of HOOK_EVENTS) {
   if (!Array.isArray(settings.hooks[event])) {
-    settings.hooks[event] = [];
+    // Preserve existing non-array config by wrapping it
+    const existing = settings.hooks[event];
+    settings.hooks[event] = existing && typeof existing === "object" ? [existing] : [];
   }
 
   // Check if our hook is already registered (search nested hooks arrays too)
