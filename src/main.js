@@ -90,6 +90,7 @@ const STATE_SVGS = {
   notification: ["clawd-notification.svg"],
   carrying: ["clawd-working-carrying.svg"],
   sleeping: ["clawd-sleeping.svg"],
+  waking: ["clawd-wake.svg"],
 };
 
 // Mini mode SVG mappings
@@ -128,8 +129,9 @@ const MOUSE_SLEEP_TIMEOUT = 60000;  // 60s → yawning → dozing
 const DEEP_SLEEP_TIMEOUT = 600000;  // 10min → collapsing → sleeping
 const YAWN_DURATION = 3000;
 const COLLAPSE_DURATION = 800;
+const WAKE_DURATION = 1500;
 const IDLE_LOOK_DURATION = 10000;  // idle-look CSS loop is 10s
-const SLEEP_SEQUENCE = new Set(["yawning", "dozing", "collapsing", "sleeping"]);
+const SLEEP_SEQUENCE = new Set(["yawning", "dozing", "collapsing", "sleeping", "waking"]);
 
 // ── Session tracking ──
 const sessions = new Map(); // session_id → { state, updatedAt }
@@ -338,6 +340,11 @@ function applyState(state, svgOverride) {
       autoReturnTimer = null;
       applyState(doNotDisturb ? "collapsing" : "dozing");
     }, YAWN_DURATION);
+  } else if (state === "waking") {
+    autoReturnTimer = setTimeout(() => {
+      autoReturnTimer = null;
+      applyState("idle");
+    }, WAKE_DURATION);
   } else if (AUTO_RETURN_MS[state]) {
     autoReturnTimer = setTimeout(() => {
       autoReturnTimer = null;
@@ -561,8 +568,7 @@ function stopWakePoll() {
 
 function wakeFromDoze() {
   if (currentState === "sleeping" || currentState === "collapsing") {
-    // Direct wake from sleep/collapse (→ idle, no smooth transition yet)
-    applyState("idle");
+    applyState("waking");
     return;
   }
   sendToRenderer("wake-from-doze");
@@ -708,8 +714,7 @@ function disableDoNotDisturb() {
   if (miniMode) {
     applyState("mini-idle");
   } else {
-    const resolved = resolveDisplayState();
-    applyState(resolved, getSvgOverride(resolved));
+    applyState("waking");
   }
   buildContextMenu();
   buildTrayMenu();
