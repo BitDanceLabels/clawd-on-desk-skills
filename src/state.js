@@ -1,7 +1,17 @@
 // src/state.js — State machine + session management + DND + wake poll
 // Extracted from main.js L158-240, L299-505, L544-960
 
-const { screen } = require("electron");
+let screen;
+try {
+  ({ screen } = require("electron"));
+} catch {
+  // Allow pure Node test runs to load state.js without Electron.
+  screen = {
+    getCursorScreenPoint() {
+      return { x: 0, y: 0 };
+    },
+  };
+}
 const path = require("path");
 
 module.exports = function initState(ctx) {
