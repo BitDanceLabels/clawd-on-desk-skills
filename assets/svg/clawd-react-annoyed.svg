@@ -1,167 +1,99 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
+    <linearGradient id="hair-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5A3131"/>
+      <stop offset="100%" stop-color="#2B1818"/>
+    </linearGradient>
+    <linearGradient id="blazer-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#373746"/>
+      <stop offset="100%" stop-color="#1D1D24"/>
+    </linearGradient>
     <style>
-      /* ===== 6s one-shot: annoyed, pause, resigned sigh, slow return =====
-         Phase 1 (0-6%,    ~0.36s): Flinch
-         Phase 2 (6-18%,   ~0.72s): Lean away + hand block + question mark
-         Phase 3 (18-35%,  ~1.02s): Hold — stay annoyed, question mark fades
-         Phase 4 (35-55%,  ~1.20s): Sigh — hand drops, body slumps, puff cloud
-         Phase 5 (55-70%,  ~0.90s): Linger slumped — still tired
-         Phase 6 (70-90%,  ~1.20s): Slow return
-         Phase 7 (90-100%, ~0.60s): Still
-      */
-
-      .body-react {
-        transform-origin: 7.5px 12px;
-        animation: body-react 6s 1 ease-in-out forwards;
+      .body-float { transform-origin: 7.5px 10px; animation: bodyFloat 3.8s infinite ease-in-out; }
+      .hair-sway { transform-origin: 7.5px 4.5px; animation: hairSway 4.8s infinite ease-in-out; }
+      .sparkle-pulse { animation: sparklePulse 1.8s infinite ease-in-out; }
+      .alert-pop { animation: alertPop 0.9s infinite ease-in-out; }
+      .sleep-breathe { transform-origin: 7.5px 10px; animation: sleepBreathe 4.6s infinite ease-in-out; }
+      .mini-hover { animation: miniHover 2.6s infinite ease-in-out; }
+      @keyframes bodyFloat {
+        0%,100% { transform: translate(0,0); }
+        50% { transform: translate(0,0.65px); }
       }
-      .arm-l-react {
-        transform-origin: 2px 10px;
-        animation: arm-l-react 6s 1 ease-in-out forwards;
+      @keyframes hairSway {
+        0%,100% { transform: rotate(0deg); }
+        50% { transform: rotate(-1.6deg); }
       }
-      .eyes-react {
-        transform-origin: 7.5px 9px;
-        animation: eyes-react 6s 1 ease-in-out forwards;
+      @keyframes sparklePulse {
+        0%,100% { opacity: 0.65; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.08); }
       }
-      .shadow-react {
-        transform-origin: 7.5px 15.5px;
-        animation: shadow-react 6s 1 ease-in-out forwards;
+      @keyframes alertPop {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.7px); }
       }
-      .qmark {
-        opacity: 0;
-        transform-origin: 8px -2px;
-        animation: qmark-pop 6s 1 ease-out forwards;
+      @keyframes sleepBreathe {
+        0%,100% { transform: translate(0,0) scale(1,1); }
+        50% { transform: translate(0,0.8px) scale(1.02,0.98); }
       }
-      .sigh-cloud {
-        opacity: 0;
-        transform-origin: 16px 9px;
-        animation: sigh-puff 6s 1 ease-out forwards;
-      }
-
-      /* Body: flinch, lean, HOLD, sigh slump, LINGER, slow return */
-      @keyframes body-react {
-        0%        { transform: translate(0, 0) scale(1, 1); }
-        4%        { transform: translate(0, 1.5px) scale(1, 1); }
-        6%        { transform: translate(0, 1px) scale(1, 1); }
-        14%       { transform: translate(2px, 0) scale(1, 1); }
-        /* hold annoyed pose */
-        35%       { transform: translate(2px, 0) scale(1, 1); }
-        /* sigh: rise then slump */
-        40%       { transform: translate(1.5px, -0.5px) scale(1, 1.01); }
-        46%       { transform: translate(1px, 1px) scale(1.03, 0.97); }
-        52%       { transform: translate(0.5px, 0.5px) scale(1.01, 0.99); }
-        /* linger slumped */
-        68%       { transform: translate(0.3px, 0.3px) scale(1, 1); }
-        /* slow return */
-        85%       { transform: translate(0, 0) scale(1, 1); }
-        100%      { transform: translate(0, 0) scale(1, 1); }
-      }
-
-      /* Left arm: block, hold, resigned drop */
-      @keyframes arm-l-react {
-        0%        { transform: rotate(0deg); }
-        6%        { transform: rotate(0deg); }
-        14%       { transform: rotate(-50deg); }
-        /* hold block through pause */
-        35%       { transform: rotate(-45deg); }
-        /* resigned drop */
-        43%       { transform: rotate(-15deg); }
-        48%       { transform: rotate(0deg); }
-        100%      { transform: rotate(0deg); }
-      }
-
-      /* Eyes: squint, half-lid, HOLD, sigh-close, tired linger, recover */
-      @keyframes eyes-react {
-        0%        { transform: scaleY(1); }
-        3%        { transform: scaleY(0.2); }
-        6%        { transform: scaleY(0.6); }
-        14%       { transform: scaleY(0.5); }
-        /* hold half-lid through pause */
-        35%       { transform: scaleY(0.5); }
-        /* sigh: close then reopen tired */
-        40%       { transform: scaleY(0.1); }
-        46%       { transform: scaleY(0.6); }
-        /* linger tired */
-        68%       { transform: scaleY(0.6); }
-        /* blink, back to normal */
-        74%       { transform: scaleY(0.1); }
-        78%       { transform: scaleY(1); }
-        100%      { transform: scaleY(1); }
-      }
-
-      /* Question mark: pop during lean, fade during hold */
-      @keyframes qmark-pop {
-        0%, 4%    { opacity: 0; transform: translate(0, 4px) scale(0.5); }
-        10%       { opacity: 1; transform: translate(0, 0) scale(1.1); }
-        14%, 26%  { opacity: 1; transform: translate(0, 0) scale(1); }
-        34%       { opacity: 0; transform: translate(0, -3px) scale(1.1); }
-        100%      { opacity: 0; }
-      }
-
-      /* Sigh puff: breath cloud after hold */
-      @keyframes sigh-puff {
-        0%, 37%   { opacity: 0; transform: translate(0, 1px) scale(0.3); }
-        43%       { opacity: 0.6; transform: translate(0, 0) scale(0.8); }
-        48%       { opacity: 0.7; transform: translate(1px, 0) scale(1); }
-        60%       { opacity: 0; transform: translate(4px, -4px) scale(1.3); }
-        100%      { opacity: 0; }
-      }
-
-      /* Shadow */
-      @keyframes shadow-react {
-        0%        { transform: translate(0, 0) scaleX(1); opacity: 0.5; }
-        4%        { transform: translate(0, 0) scaleX(0.93); opacity: 0.45; }
-        14%       { transform: translate(1px, 0) scaleX(1); opacity: 0.5; }
-        35%       { transform: translate(1px, 0) scaleX(1); opacity: 0.5; }
-        46%       { transform: translate(0.5px, 0) scaleX(1.05); opacity: 0.55; }
-        68%       { transform: translate(0.3px, 0) scaleX(1.02); opacity: 0.52; }
-        85%       { transform: translate(0, 0) scaleX(1); opacity: 0.5; }
-        100%      { transform: translate(0, 0) scaleX(1); opacity: 0.5; }
+      @keyframes miniHover {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.8px); }
       }
     </style>
   </defs>
-
-  <!-- Ground Shadow -->
-  <rect class="shadow-react" x="3" y="15" width="9" height="1" fill="#000" opacity="0.5"/>
-
-  <!-- Static Legs -->
-  <g fill="#DE886D">
-    <rect x="3" y="11" width="1" height="4"/>
-    <rect x="5" y="11" width="1" height="4"/>
-    <rect x="9" y="11" width="1" height="4"/>
-    <rect x="11" y="11" width="1" height="4"/>
+  
+  <g transform="translate(-4 -9)">
+    <ellipse cx="8" cy="5" rx="7" ry="5" fill="#FFF4F1" opacity="0.96"/>
+    <path d="M12 8 L14 11 L10 9 Z" fill="#FFF4F1" opacity="0.96"/>
+    <path d="M5.2 2.2 L10.6 7.7 M10.6 2.2 L5.2 7.7" stroke="#FF587A" stroke-width="0.8" stroke-linecap="round"/>
   </g>
-
-  <!-- Animated Upper Body -->
-  <g class="body-react">
-    <!-- Torso -->
-    <g fill="#DE886D">
-      <rect x="2" y="6" width="11" height="7"/>
+  <g transform="translate(0 0) scale(1 1)">
+    <ellipse cx="7.6" cy="15.1" rx="4.5" ry="1.05" fill="#24171F" opacity="0.28"/>
+  </g>
+  <g >
+    <g transform="translate(0 0) rotate(-3 7.5 9.5)" class="body-float">
+      <g class="hair-sway">
+        <path d="M2.2 1.9 Q3.8 -2.4 7.5 -2.4 Q11.7 -2.4 13 2.1 L13 7.8 Q12.3 10.8 10.6 12.2 L9.6 12.2 L10 5.5 Q7.8 7.2 5.1 7.4 L4.7 12.2 L3.5 12.2 Q1.7 10.7 2.2 7.1 Z" fill="url(#hair-grad)"/>
+        <path d="M2.9 0.3 Q7.2 -4.1 12.4 1.3 Q11.4 0.8 10.5 1.2 Q7.6 -1.6 4.4 1.7 Q3.4 1.2 2.9 0.3 Z" fill="#5A3131" opacity="0.88"/>
+      </g>
+      <ellipse cx="7.6" cy="2.6" rx="3.9" ry="4.45" fill="#F2C7B5"/>
+      <ellipse cx="5.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      <ellipse cx="10.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      
+      <g fill="#1C1115">
+        <ellipse cx="5.6" cy="1.4" rx="0.42" ry="0.6"/>
+        <ellipse cx="10.6" cy="1.4" rx="0.42" ry="0.6"/>
+      </g>
+      <path d="M6.5 4.7 q1 -0.45 2 0" stroke="#B84C67" stroke-width="0.42" fill="none" stroke-linecap="round"/>
+      <path d="M4.35 -0.5 Q7.5 1.2 10.65 -0.5" stroke="#5A3131" stroke-width="0.42" fill="none" stroke-linecap="round"/>
+      <path d="M3.3 6.1 L11.8 6.1 L12.7 11.1 L2.4 11.1 Z" fill="url(#blazer-grad)"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" fill="#F7E7E2"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" stroke="#C9A45C" stroke-width="0.22" fill="#F7E7E2"/>
+      <path d="M6.65 4.7 H8.3" stroke="#D9778B" stroke-width="0.35" stroke-linecap="round"/>
+      <rect x="5.15" y="5.2" width="4.8" height="5.7" rx="0.6" fill="#2A2A33"/>
+      <path d="M5.15 5.5 Q7.55 6.5 9.95 5.5" stroke="#C9A45C" stroke-width="0.24" fill="none"/>
+      
+        <path d="M1.8 7.8 L4.2 6.1 L5.1 7.1 L2.6 8.8 Z" fill="#F2C7B5"/>
+        <path d="M11.9 7.2 L14.8 5.2 L15.4 6.4 L12.7 8.2 Z" fill="#F2C7B5"/>
+      <path d="M5.8 10.7 L5.15 14.8" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M9.25 10.7 L10 15" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M4.85 14.8 Q5.8 15.35 6.6 14.95" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      <path d="M9.55 15 Q10.65 15.55 11.55 15.1" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      
+          <g transform="translate(10 5.7) rotate(9 2 3)">
+            <rect x="0" y="0" width="3.9" height="6.8" rx="0.85" fill="#2B2430"/>
+            <rect x="0.45" y="0.55" width="3" height="5.2" rx="0.55" fill="#FFD7E0"/>
+            <circle cx="1.95" cy="6.15" r="0.3" fill="#C9A45C"/>
+          </g>
+      
     </g>
-    <!-- Arms -->
-    <g fill="#DE886D">
-      <g class="arm-l-react"><rect x="0" y="9" width="2" height="2"/></g>
-      <rect x="13" y="9" width="2" height="2"/>
-    </g>
-    <!-- Eyes -->
-    <g class="eyes-react" fill="#000">
-      <rect x="4" y="8" width="1" height="2"/>
-      <rect x="10" y="8" width="1" height="2"/>
-    </g>
-    <!-- Question mark -->
-    <g class="qmark" fill="#5C9CE6">
-      <rect x="7" y="-5" width="2" height="1"/>
-      <rect x="6" y="-4" width="1" height="1"/>
-      <rect x="9" y="-4" width="1" height="2"/>
-      <rect x="8" y="-2" width="1" height="1"/>
-      <rect x="7" y="-1" width="1" height="1"/>
-      <rect x="7" y="1" width="1" height="1"/>
-    </g>
-    <!-- Sigh puff cloud (right side of face) -->
-    <g class="sigh-cloud" fill="#FFF">
-      <rect x="14" y="9" width="2" height="1"/>
-      <rect x="15" y="8" width="2" height="1"/>
-      <rect x="16" y="7" width="2" height="1"/>
-    </g>
+  </g>
+  
+  
+  <g fill="#FFE8B0" opacity="0.95">
+    <rect x="-1" y="2" width="1.2" height="3"/>
+    <rect x="-1.9" y="2.9" width="3" height="1.2"/>
+    <rect x="16.8" y="3.3" width="1" height="2.6"/>
+    <rect x="16" y="4.1" width="2.6" height="1"/>
   </g>
 </svg>

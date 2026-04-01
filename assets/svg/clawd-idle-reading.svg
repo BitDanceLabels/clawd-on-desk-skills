@@ -1,201 +1,88 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
+    <linearGradient id="hair-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5A3131"/>
+      <stop offset="100%" stop-color="#2B1818"/>
+    </linearGradient>
+    <linearGradient id="blazer-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#373746"/>
+      <stop offset="100%" stop-color="#1D1D24"/>
+    </linearGradient>
     <style>
-      /* ═══ 14s story: arm sway → grab book → read (with thought bits) → book slides away ═══ */
-
-      /* ── Independent ── */
-
-      .breathe {
-        transform-origin: 7.5px 13px;
-        animation: breathe 3.2s infinite ease-in-out;
+      .body-float { transform-origin: 7.5px 10px; animation: bodyFloat 3.8s infinite ease-in-out; }
+      .hair-sway { transform-origin: 7.5px 4.5px; animation: hairSway 4.8s infinite ease-in-out; }
+      .sparkle-pulse { animation: sparklePulse 1.8s infinite ease-in-out; }
+      .alert-pop { animation: alertPop 0.9s infinite ease-in-out; }
+      .sleep-breathe { transform-origin: 7.5px 10px; animation: sleepBreathe 4.6s infinite ease-in-out; }
+      .mini-hover { animation: miniHover 2.6s infinite ease-in-out; }
+      @keyframes bodyFloat {
+        0%,100% { transform: translate(0,0); }
+        50% { transform: translate(0,0.65px); }
       }
-      @keyframes breathe {
-        0%, 100% { transform: scale(1, 1) translate(0, 0); }
-        50% { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      @keyframes hairSway {
+        0%,100% { transform: rotate(0deg); }
+        50% { transform: rotate(-1.6deg); }
       }
-
-      .blink {
-        transform-origin: 7.5px 9px;
-        animation: blink 5s infinite;
+      @keyframes sparklePulse {
+        0%,100% { opacity: 0.65; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.08); }
       }
-      @keyframes blink {
-        0%, 6%, 100% { transform: scaleY(1); }
-        3% { transform: scaleY(0.1); }
+      @keyframes alertPop {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.7px); }
       }
-
-      .shadow {
-        transform-origin: 7.5px 15.5px;
-        animation: shadow-breathe 3.2s infinite ease-in-out;
+      @keyframes sleepBreathe {
+        0%,100% { transform: translate(0,0) scale(1,1); }
+        50% { transform: translate(0,0.8px) scale(1.02,0.98); }
       }
-      @keyframes shadow-breathe {
-        0%, 100% { transform: scaleX(1); opacity: 0.5; }
-        50% { transform: scaleX(1.03); opacity: 0.47; }
-      }
-
-      /* ── Main 14s ── */
-
-      /* Body: nod twice during reading */
-      .body-nod {
-        animation: body-nod 14s infinite ease-in-out;
-      }
-      @keyframes body-nod {
-        0%, 36%, 44%, 54%, 62%, 100% { transform: translateY(0); }
-        40% { transform: translateY(0.4px); }
-        58% { transform: translateY(0.4px); }
-      }
-
-      /* Left arm: BIG casual sway → reach → hold → follow book → return */
-      .arm-l {
-        transform-origin: 2px 10px;
-        animation: arm-l-anim 14s infinite ease-in-out;
-      }
-      @keyframes arm-l-anim {
-        /* sway (big, visible fidgeting) */
-        0%        { transform: translate(0, 0) rotate(0deg); }
-        2.5%      { transform: translate(-0.5px, 0) rotate(25deg); }
-        5%        { transform: translate(0.3px, 0) rotate(-20deg); }
-        7.5%      { transform: translate(-0.5px, 0) rotate(22deg); }
-        10%       { transform: translate(0, 0) rotate(0deg); }
-        /* reach out left to grab book */
-        18%       { transform: translate(-1px, -1px) rotate(15deg); }
-        /* bring to chest (hand visible at book left edge) */
-        26%       { transform: translate(2px, 0) rotate(-5deg); }
-        /* hold during reading */
-        76%       { transform: translate(2px, 0) rotate(-5deg); }
-        /* follow book sliding down */
-        84%       { transform: translate(1px, 2px) rotate(0deg); }
-        /* return to normal */
-        92%       { transform: translate(0, 0) rotate(0deg); }
-        100%      { transform: translate(0, 0) rotate(0deg); }
-      }
-
-      /* Right arm: nudge inward during reading */
-      .arm-r {
-        animation: arm-r-anim 14s infinite ease-in-out;
-      }
-      @keyframes arm-r-anim {
-        0%, 22%   { transform: translate(0, 0); }
-        28%, 76%  { transform: translate(-1px, 0); }
-        84%, 100% { transform: translate(0, 0); }
-      }
-
-      /* Book: appear in hand → widen to chest → slide down → gone */
-      .book {
-        opacity: 0;
-        transform-origin: 7px 11.5px;
-        animation: book-anim 14s infinite ease-in-out;
-      }
-      @keyframes book-anim {
-        0%, 12%   { opacity: 0; transform: translate(-5px, -2px) scaleX(0.5); }
-        18%       { opacity: 1; transform: translate(-5px, -2px) scaleX(0.5); }
-        26%       { opacity: 1; transform: translate(0, 0) scaleX(1); }
-        76%       { opacity: 1; transform: translate(0, 0) scaleX(1); }
-        84%       { opacity: 0; transform: translate(0, 4px) scaleX(0.8); }
-        100%      { opacity: 0; transform: translate(0, 4px) scaleX(0.8); }
-      }
-
-      /* Eyes: normal → slow gaze down → drift → normal */
-      .eyes-read {
-        animation: eyes-read 14s infinite ease-in-out;
-      }
-      @keyframes eyes-read {
-        0%, 22%   { transform: translate(0, 0); }
-        30%       { transform: translate(0, 0.5px); }
-        46%       { transform: translate(-0.3px, 0.5px); }
-        60%       { transform: translate(0.3px, 0.5px); }
-        70%       { transform: translate(0, 0.5px); }
-        80%, 100% { transform: translate(0, 0); }
-      }
-
-      /* ── Thought particles (visible only during reading) ── */
-      .reading-fx {
-        animation: reading-fx-vis 14s infinite;
-      }
-      @keyframes reading-fx-vis {
-        0%, 27%   { opacity: 0; }
-        32%, 75%  { opacity: 1; }
-        78%, 100% { opacity: 0; }
-      }
-
-      .thought-bit {
-        opacity: 0;
-        animation: float-thought 2.5s infinite linear;
-      }
-      .t1 { animation-delay: 0s; }
-      .t2 { animation-delay: -0.7s; }
-      .t3 { animation-delay: -1.4s; }
-      .t4 { animation-delay: -2.1s; }
-
-      @keyframes float-thought {
-        0%   { transform: translateY(0); opacity: 0; }
-        10%  { opacity: 0.6; }
-        100% { transform: translateY(-12px); opacity: 0; }
+      @keyframes miniHover {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.8px); }
       }
     </style>
   </defs>
-
-  <!-- Ground shadow -->
-  <rect class="shadow" x="3" y="15" width="9" height="1" fill="#000"/>
-
-  <!-- Thought particles (behind body, float up during reading) -->
-  <g class="reading-fx">
-    <rect class="thought-bit t1" x="2"  y="4" width="2" height="2" fill="#40C4FF"/>
-    <rect class="thought-bit t2" x="8"  y="3" width="1.5" height="1.5" fill="#B388FF"/>
-    <rect class="thought-bit t3" x="12" y="5" width="2" height="2" fill="#40C4FF"/>
-    <rect class="thought-bit t4" x="5"  y="3" width="1.5" height="1.5" fill="#69F0AE"/>
+  
+  <g transform="translate(0 0) scale(1 1)">
+    <ellipse cx="7.6" cy="15.1" rx="4.5" ry="1.05" fill="#24171F" opacity="0.28"/>
   </g>
-
-  <!-- Nod wrapper -->
-  <g class="body-nod">
-
-    <!-- ── Body layer ── -->
-    <g class="breathe">
-      <!-- Legs (idle style) -->
-      <g fill="#DE886D">
-        <rect x="3" y="11" width="1" height="4"/>
-        <rect x="5" y="11" width="1" height="4"/>
-        <rect x="9" y="11" width="1" height="4"/>
-        <rect x="11" y="11" width="1" height="4"/>
+  <g >
+    <g transform="translate(0 0) rotate(-2 7.5 9.5)" class="body-float">
+      <g class="hair-sway">
+        <path d="M2.2 1.9 Q3.8 -2.4 7.5 -2.4 Q11.7 -2.4 13 2.1 L13 7.8 Q12.3 10.8 10.6 12.2 L9.6 12.2 L10 5.5 Q7.8 7.2 5.1 7.4 L4.7 12.2 L3.5 12.2 Q1.7 10.7 2.2 7.1 Z" fill="url(#hair-grad)"/>
+        <path d="M2.9 0.3 Q7.2 -4.1 12.4 1.3 Q11.4 0.8 10.5 1.2 Q7.6 -1.6 4.4 1.7 Q3.4 1.2 2.9 0.3 Z" fill="#5A3131" opacity="0.88"/>
       </g>
-      <!-- Torso -->
-      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
-      <!-- Eyes -->
-      <g class="eyes-read">
-        <g class="blink" fill="#000">
-          <rect x="4" y="8" width="1" height="2"/>
-          <rect x="10" y="8" width="1" height="2"/>
-        </g>
+      <ellipse cx="7.6" cy="2.6" rx="3.9" ry="4.45" fill="#F2C7B5"/>
+      <ellipse cx="5.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      <ellipse cx="10.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      
+      <g fill="#1C1115">
+        <ellipse cx="5.6" cy="1.4" rx="0.42" ry="0.6"/>
+        <ellipse cx="10.6" cy="1.4" rx="0.42" ry="0.6"/>
       </g>
+      <path d="M6.55 4.6 q1 0.45 1.95 0" stroke="#B84C67" stroke-width="0.4" fill="none" stroke-linecap="round"/>
+      <path d="M4.35 -0.5 Q7.5 1.2 10.65 -0.5" stroke="#5A3131" stroke-width="0.42" fill="none" stroke-linecap="round"/>
+      <path d="M3.3 6.1 L11.8 6.1 L12.7 11.1 L2.4 11.1 Z" fill="url(#blazer-grad)"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" fill="#F7E7E2"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" stroke="#C9A45C" stroke-width="0.22" fill="#F7E7E2"/>
+      <path d="M6.65 4.7 H8.3" stroke="#D9778B" stroke-width="0.35" stroke-linecap="round"/>
+      <rect x="5.15" y="5.2" width="4.8" height="5.7" rx="0.6" fill="#2A2A33"/>
+      <path d="M5.15 5.5 Q7.55 6.5 9.95 5.5" stroke="#C9A45C" stroke-width="0.24" fill="none"/>
+      
+        <path d="M1.8 8.2 L5.4 9.5 L5.8 8.2 L2.5 6.9 Z" fill="#F2C7B5"/>
+        <path d="M11.4 8.8 L14.1 9.7 L14.8 8.6 L12.2 7.4 Z" fill="#F2C7B5"/>
+      <path d="M5.8 10.7 L5.15 14.8" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M9.25 10.7 L10 15" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M4.85 14.8 Q5.8 15.35 6.6 14.95" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      <path d="M9.55 15 Q10.65 15.55 11.55 15.1" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      
+          <g transform="translate(3.4 8.3) rotate(-9 3 3)">
+            <rect x="0" y="0" width="5.9" height="7.1" rx="0.65" fill="#F7E7E2" stroke="#C9A45C" stroke-width="0.3"/>
+            <path d="M3 0.2 V6.8" stroke="#C9A45C" stroke-width="0.28"/>
+            <path d="M1.1 2.1 H2.5 M3.5 2.1 H4.8 M1.1 3.3 H2.4 M3.6 3.3 H4.8 M1.1 4.5 H2.6 M3.4 4.5 H4.7" stroke="#D9778B" stroke-width="0.22" stroke-linecap="round"/>
+          </g>
+      
     </g>
-
-    <!-- ── Book layer (on top of body, chest level) ── -->
-    <g class="breathe">
-      <g class="book">
-        <!-- Back cover (blue) -->
-        <rect x="3" y="10" width="8" height="4" fill="#4A90D9"/>
-        <!-- Spine -->
-        <rect x="7" y="10" width="1" height="4" fill="#2E6AB0"/>
-        <!-- Page edges (top) -->
-        <rect x="4" y="9.5" width="6" height="0.5" fill="#FFFDE7"/>
-        <!-- Page edges (right side) -->
-        <rect x="10.5" y="10.5" width="0.5" height="3" fill="#FFFDE7"/>
-        <!-- Title plate -->
-        <rect x="4.5" y="10.5" width="5" height="1.5" fill="#E3F2FD" opacity="0.5"/>
-        <!-- Title text blocks -->
-        <rect x="5" y="10.8" width="3" height="0.5" fill="#2E6AB0"/>
-        <rect x="5.5" y="11.5" width="2" height="0.3" fill="#2E6AB0" opacity="0.6"/>
-        <!-- Small deco block -->
-        <rect x="6" y="12.5" width="2" height="0.5" fill="#E3F2FD" opacity="0.4"/>
-      </g>
-    </g>
-
-    <!-- ── Arms layer (on top of book) ── -->
-    <g class="breathe">
-      <g fill="#DE886D">
-        <g class="arm-l"><rect x="0" y="9" width="2" height="2"/></g>
-        <g class="arm-r"><rect x="13" y="9" width="2" height="2"/></g>
-      </g>
-    </g>
-
   </g>
+  
+  
 </svg>

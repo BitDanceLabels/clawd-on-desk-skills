@@ -1,118 +1,88 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
+    <linearGradient id="hair-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5A3131"/>
+      <stop offset="100%" stop-color="#2B1818"/>
+    </linearGradient>
+    <linearGradient id="blazer-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#373746"/>
+      <stop offset="100%" stop-color="#1D1D24"/>
+    </linearGradient>
     <style>
-      /* Slow, rhythmic deep breathing animation */
-      .breathe {
-        transform-origin: 7.5px 15px; /* Pivot at the floor to expand upwards */
-        animation: breathe-squash 4.5s infinite ease-in-out;
+      .body-float { transform-origin: 7.5px 10px; animation: bodyFloat 3.8s infinite ease-in-out; }
+      .hair-sway { transform-origin: 7.5px 4.5px; animation: hairSway 4.8s infinite ease-in-out; }
+      .sparkle-pulse { animation: sparklePulse 1.8s infinite ease-in-out; }
+      .alert-pop { animation: alertPop 0.9s infinite ease-in-out; }
+      .sleep-breathe { transform-origin: 7.5px 10px; animation: sleepBreathe 4.6s infinite ease-in-out; }
+      .mini-hover { animation: miniHover 2.6s infinite ease-in-out; }
+      @keyframes bodyFloat {
+        0%,100% { transform: translate(0,0); }
+        50% { transform: translate(0,0.65px); }
       }
-
-      /* Shadow expands slightly as the body inflates */
-      .shadow-breathe {
-        transform-origin: 7.5px 15.5px;
-        animation: shadow-pulse 4.5s infinite ease-in-out;
+      @keyframes hairSway {
+        0%,100% { transform: rotate(0deg); }
+        50% { transform: rotate(-1.6deg); }
       }
-
-      /* Zzz Particle Base Styles */
-      .z-particle {
-        opacity: 0;
+      @keyframes sparklePulse {
+        0%,100% { opacity: 0.65; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.08); }
       }
-      .z1 { animation: float-1 6s infinite ease-in-out; animation-delay: 0s; }
-      .z2 { animation: float-2 6s infinite ease-in-out; animation-delay: 2s; }
-      .z3 { animation: float-3 6s infinite ease-in-out; animation-delay: 4s; }
-
-      /* Breathing Keyframes (Slow inhale, hold, exhale, pause) */
-      @keyframes breathe-squash {
-        0%, 80%, 100% { transform: scale(1, 1); }
-        30%, 40% { transform: scale(1.02, 1.25); } /* Chest expands/inflates */
+      @keyframes alertPop {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.7px); }
       }
-
-      @keyframes shadow-pulse {
-        0%, 80%, 100% { transform: scaleX(1); opacity: 0.4; }
-        30%, 40% { transform: scaleX(1.05); opacity: 0.5; }
+      @keyframes sleepBreathe {
+        0%,100% { transform: translate(0,0) scale(1,1); }
+        50% { transform: translate(0,0.8px) scale(1.02,0.98); }
       }
-
-      /* Swaying and fading floating Z keyframes (Adjusted for lowered head) */
-      @keyframes float-1 {
-        0%   { transform: translate(5px, 8px) scale(0.4); opacity: 0; }
-        10%  { opacity: 1; }
-        30%  { transform: translate(9px, 4px) scale(0.6); }
-        50%  { transform: translate(4px, 0px) scale(0.8); }
-        70%  { transform: translate(8px, -4px) scale(1.0); }
-        90%  { opacity: 0.8; }
-        100% { transform: translate(6px, -8px) scale(1.1); opacity: 0; }
-      }
-
-      @keyframes float-2 {
-        0%   { transform: translate(8px, 9px) scale(0.3); opacity: 0; }
-        10%  { opacity: 1; }
-        30%  { transform: translate(5px, 5px) scale(0.5); }
-        50%  { transform: translate(9px, 1px) scale(0.7); }
-        70%  { transform: translate(6px, -3px) scale(0.9); }
-        90%  { opacity: 0.8; }
-        100% { transform: translate(8px, -7px) scale(1.0); opacity: 0; }
-      }
-
-      @keyframes float-3 {
-        0%   { transform: translate(6px, 7px) scale(0.5); opacity: 0; }
-        10%  { opacity: 1; }
-        30%  { transform: translate(9px, 3px) scale(0.7); }
-        50%  { transform: translate(4px, -1px) scale(0.9); }
-        70%  { transform: translate(8px, -5px) scale(1.1); }
-        90%  { opacity: 0.8; }
-        100% { transform: translate(5px, -9px) scale(1.2); opacity: 0; }
+      @keyframes miniHover {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.8px); }
       }
     </style>
-
-    <!-- Pixel Art "Z" Definitions -->
-    <g id="pixel-z">
-      <rect x="0" y="0" width="4" height="1" />
-      <rect x="2" y="1" width="1" height="1" />
-      <rect x="1" y="2" width="1" height="1" />
-      <rect x="0" y="3" width="4" height="1" />
-    </g>
-    
-    <g id="pixel-z-small">
-      <rect x="0" y="0" width="3" height="1" />
-      <rect x="1" y="1" width="1" height="1" />
-      <rect x="0" y="2" width="3" height="1" />
-    </g>
   </defs>
-
-  <!-- Ground Shadow (Widened for the splooted posture) -->
-  <rect id="ground-shadow" class="shadow-breathe" x="-1" y="15" width="17" height="1" fill="#000000" />
-
-  <!-- Floating Zzz Bubbles -->
-  <g class="zzz-particles">
-    <use href="#pixel-z" class="z-particle z1" fill="#90A4AE" />
-    <use href="#pixel-z-small" class="z-particle z2" fill="#B0BEC5" />
-    <use href="#pixel-z" class="z-particle z3" fill="#CFD8DC" />
+  
+  <g transform="translate(-4 -9)">
+    <ellipse cx="8" cy="5" rx="7" ry="5" fill="#FFF4F1" opacity="0.96"/>
+    <path d="M12 8 L14 11 L10 9 Z" fill="#FFF4F1" opacity="0.96"/>
+    <text x="5.2" y="6.2" font-size="3.2" fill="#B84C67" font-family="Georgia, serif">Zz</text>
   </g>
-
-  <!-- Splooted / Melted Sleeping Pose -->
-  <g class="breathe">
-    <!-- Legs pointing up from behind (Relaxed Sploot) -->
-    <g fill="#DE886D">
-      <rect id="outer-left-leg-up" x="3" y="9" width="1" height="1"/>
-      <rect id="inner-left-leg-up" x="5" y="9" width="1" height="1"/>
-      <rect id="inner-right-leg-up" x="9" y="9" width="1" height="1"/>
-      <rect id="outer-right-leg-up" x="11" y="9" width="1" height="1"/>
-    </g>
-
-    <!-- Squashed Body Resting on the Floor -->
-    <g fill="#DE886D">
-      <!-- Main flattened torso -->
-      <rect id="torso-sploot" x="1" y="10" width="13" height="5"/>
+  <g transform="translate(0 0) scale(1 1)">
+    <ellipse cx="7.6" cy="15.1" rx="4.5" ry="1.05" fill="#24171F" opacity="0.28"/>
+  </g>
+  <g >
+    <g transform="translate(0 2.1) rotate(10 7.5 9.5)" class="sleep-breathe">
+      <g class="hair-sway">
+        <path d="M2.2 1.9 Q3.8 -2.4 7.5 -2.4 Q11.7 -2.4 13 2.1 L13 7.8 Q12.3 10.8 10.6 12.2 L9.6 12.2 L10 5.5 Q7.8 7.2 5.1 7.4 L4.7 12.2 L3.5 12.2 Q1.7 10.7 2.2 7.1 Z" fill="url(#hair-grad)"/>
+        <path d="M2.9 0.3 Q7.2 -4.1 12.4 1.3 Q11.4 0.8 10.5 1.2 Q7.6 -1.6 4.4 1.7 Q3.4 1.2 2.9 0.3 Z" fill="#5A3131" opacity="0.88"/>
+      </g>
+      <ellipse cx="7.6" cy="2.6" rx="3.9" ry="4.45" fill="#F2C7B5"/>
+      <ellipse cx="5.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      <ellipse cx="10.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
       
-      <!-- Arms spread flat on the ground -->
-      <rect id="left-arm-sploot" x="-1" y="13" width="2" height="2"/>
-      <rect id="right-arm-sploot" x="14" y="13" width="2" height="2"/>
-    </g>
-    
-    <!-- Ultra-Thin Shut Eyes (Dashes) -->
-    <g fill="#000000">
-      <rect id="left-eye-shut" x="3.5" y="12.5" width="2" height="0.4"/>
-      <rect id="right-eye-shut" x="9.5" y="12.5" width="2" height="0.4"/>
+      <g stroke="#1C1115" stroke-width="0.45" fill="none">
+        <path d="M4.8 1.95 q0.8 -0.7 1.6 0"/>
+        <path d="M9.7 1.95 q0.8 -0.7 1.6 0"/>
+      </g>
+      <path d="M6.55 4.6 q1 0.45 1.95 0" stroke="#B84C67" stroke-width="0.4" fill="none" stroke-linecap="round"/>
+      <path d="M4.35 -0.5 Q7.5 1.2 10.65 -0.5" stroke="#5A3131" stroke-width="0.42" fill="none" stroke-linecap="round"/>
+      <path d="M3.3 6.1 L11.8 6.1 L12.7 11.1 L2.4 11.1 Z" fill="url(#blazer-grad)"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" fill="#F7E7E2"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" stroke="#C9A45C" stroke-width="0.22" fill="#F7E7E2"/>
+      <path d="M6.65 4.7 H8.3" stroke="#D9778B" stroke-width="0.35" stroke-linecap="round"/>
+      <rect x="5.15" y="5.2" width="4.8" height="5.7" rx="0.6" fill="#2A2A33"/>
+      <path d="M5.15 5.5 Q7.55 6.5 9.95 5.5" stroke="#C9A45C" stroke-width="0.24" fill="none"/>
+      
+        <path d="M1.7 8.2 L4.5 9.4 L5.3 8.4 L2.4 7.2 Z" fill="#F2C7B5"/>
+        <path d="M11.7 8.2 L14.4 8.8 L14.6 7.6 L12.1 7.2 Z" fill="#F2C7B5"/>
+      <path d="M5.8 10.7 L5.15 14.8" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M9.25 10.7 L10 15" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M4.85 14.8 Q5.8 15.35 6.6 14.95" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      <path d="M9.55 15 Q10.65 15.55 11.55 15.1" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      
+      
     </g>
   </g>
+  
+  
 </svg>

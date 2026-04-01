@@ -1,273 +1,88 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
+    <linearGradient id="hair-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5A3131"/>
+      <stop offset="100%" stop-color="#2B1818"/>
+    </linearGradient>
+    <linearGradient id="blazer-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#373746"/>
+      <stop offset="100%" stop-color="#1D1D24"/>
+    </linearGradient>
     <style>
-      /* ===== Body (KEEP) ===== */
-      .body-bounce {
-        transform-origin: 7.5px 15px;
-        animation: body-bounce 0.35s infinite ease-in-out;
+      .body-float { transform-origin: 7.5px 10px; animation: bodyFloat 3.8s infinite ease-in-out; }
+      .hair-sway { transform-origin: 7.5px 4.5px; animation: hairSway 4.8s infinite ease-in-out; }
+      .sparkle-pulse { animation: sparklePulse 1.8s infinite ease-in-out; }
+      .alert-pop { animation: alertPop 0.9s infinite ease-in-out; }
+      .sleep-breathe { transform-origin: 7.5px 10px; animation: sleepBreathe 4.6s infinite ease-in-out; }
+      .mini-hover { animation: miniHover 2.6s infinite ease-in-out; }
+      @keyframes bodyFloat {
+        0%,100% { transform: translate(0,0); }
+        50% { transform: translate(0,0.65px); }
       }
-      .breathe {
-        transform-origin: 7.5px 13px;
-        animation: breathe 3.2s infinite ease-in-out;
+      @keyframes hairSway {
+        0%,100% { transform: rotate(0deg); }
+        50% { transform: rotate(-1.6deg); }
       }
-
-      /* ===== Arms (KEEP) ===== */
-      .arm-l-type {
-        transform-origin: 2px 10px;
-        animation: type-l 0.15s infinite ease-in-out;
+      @keyframes sparklePulse {
+        0%,100% { opacity: 0.65; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.08); }
       }
-      .arm-r-type {
-        transform-origin: 13px 10px;
-        animation: type-r 0.12s infinite ease-in-out;
+      @keyframes alertPop {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.7px); }
       }
-
-      /* ===== Eyes ===== */
-      .eyes-code {
-        transform-origin: 7.5px 9px;
-        animation: eye-code 10s infinite ease-in-out;
+      @keyframes sleepBreathe {
+        0%,100% { transform: translate(0,0) scale(1,1); }
+        50% { transform: translate(0,0.8px) scale(1.02,0.98); }
       }
-
-      /* ===== Code lines: each line grows, holds, then slides up + fades ===== */
-      .code-line {
-        transform-box: fill-box;
-        transform-origin: left center;
-      }
-      .cl1 { animation: cl1 6s infinite; }
-      .cl2 { animation: cl2 6s infinite; }
-      .cl3 { animation: cl3 6s infinite; }
-      .cl4 { animation: cl4 6s infinite; }
-
-      /* Key press flashes — different periods so they look random */
-      .key-flash { opacity: 0; }
-      .kf1 { animation: kflash 0.6s infinite; }
-      .kf2 { animation: kflash 0.8s infinite; animation-delay: -0.25s; }
-      .kf3 { animation: kflash 0.5s infinite; animation-delay: -0.1s; }
-      .kf4 { animation: kflash 0.7s infinite; animation-delay: -0.45s; }
-      .kf5 { animation: kflash 0.55s infinite; animation-delay: -0.3s; }
-      .kf6 { animation: kflash 0.9s infinite; animation-delay: -0.5s; }
-
-      /* Data particles (float up behind screen) */
-      .data-bit { opacity: 0; animation: float-data 1.5s infinite linear; }
-      .d1 { animation-delay: 0s; }
-      .d2 { animation-delay: -0.4s; }
-      .d3 { animation-delay: -0.8s; }
-      .d4 { animation-delay: -1.2s; }
-
-      /* Shadow */
-      .shadow-anim {
-        transform-origin: 7.5px 15.5px;
-        animation: shadow-bob 0.4s infinite ease-in-out;
-      }
-
-      /* ==================== Keyframes ==================== */
-
-      @keyframes body-bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(0.8px); }
-      }
-      @keyframes breathe {
-        0%, 100% { transform: scale(1, 1) translate(0, 0); }
-        50% { transform: scale(1.02, 0.98) translate(0, 0.5px); }
-      }
-      @keyframes shadow-bob {
-        0%, 100% { transform: scaleX(1.02); opacity: 0.5; }
-        50% { transform: scaleX(1.05); opacity: 0.55; }
-      }
-
-      @keyframes type-l {
-        0%   { transform: rotate(-5deg); }
-        25%  { transform: rotate(-38deg); }
-        50%  { transform: rotate(-10deg); }
-        75%  { transform: rotate(-30deg); }
-        100% { transform: rotate(-5deg); }
-      }
-      @keyframes type-r {
-        0%   { transform: rotate(5deg); }
-        25%  { transform: rotate(38deg); }
-        50%  { transform: rotate(10deg); }
-        75%  { transform: rotate(30deg); }
-        100% { transform: rotate(5deg); }
-      }
-
-      /* Eyes: long keyboard squint → 2 consecutive scans → keyboard */
-      @keyframes eye-code {
-        0%   { transform: translate(0, 1px) scaleY(0.6); }
-        14%  { transform: translate(0, 1px) scaleY(0.6); }
-        15%  { transform: translate(0, 1px) scaleY(0.1); }
-        16%  { transform: translate(0, 1px) scaleY(0.6); }
-        36%  { transform: translate(0, 1px) scaleY(0.6); }
-        37%  { transform: translate(0, 1px) scaleY(0.1); }
-        38%  { transform: translate(0, 1px) scaleY(0.6); }
-        54%  { transform: translate(0, 1px) scaleY(0.6); }
-        55%  { transform: translate(0, 1px) scaleY(0.1); }
-        57%  { transform: translate(-1px, -0.5px) scaleY(1); }
-        62%  { transform: translate(1.5px, -0.5px) scaleY(1); }
-        64%  { transform: translate(-0.5px, -0.3px) scaleY(1); }
-        69%  { transform: translate(1.5px, -0.5px) scaleY(1); }
-        71%  { transform: translate(1px, -0.3px) scaleY(0.1); }
-        73%  { transform: translate(0, 1px) scaleY(0.6); }
-        89%  { transform: translate(0, 1px) scaleY(0.6); }
-        90%  { transform: translate(0, 1px) scaleY(0.1); }
-        91%  { transform: translate(0, 1px) scaleY(0.6); }
-        100% { transform: translate(0, 1px) scaleY(0.6); }
-      }
-
-      /* Code lines: grow from left → hold → slide up + fade out
-         Each line staggers by ~15%. Slide-up gives "scroll" feel.
-         At 95-100% all invisible → brief blank → cycle restarts */
-      @keyframes cl1 {
-        0%        { transform: scaleX(0); opacity: 0; }
-        3%        { transform: scaleX(0); opacity: 1; }
-        13%       { transform: scaleX(1); opacity: 1; }
-        13%, 78%  { transform: scaleX(1) translateY(0); opacity: 1; }
-        88%       { transform: scaleX(1) translateY(-3px); opacity: 0; }
-        89%, 100% { transform: scaleX(0) translateY(0); opacity: 0; }
-      }
-      @keyframes cl2 {
-        0%, 14%   { transform: scaleX(0); opacity: 0; }
-        15%       { transform: scaleX(0); opacity: 1; }
-        27%       { transform: scaleX(1); opacity: 1; }
-        27%, 82%  { transform: scaleX(1) translateY(0); opacity: 1; }
-        91%       { transform: scaleX(1) translateY(-3px); opacity: 0; }
-        92%, 100% { transform: scaleX(0) translateY(0); opacity: 0; }
-      }
-      @keyframes cl3 {
-        0%, 29%   { transform: scaleX(0); opacity: 0; }
-        30%       { transform: scaleX(0); opacity: 1; }
-        42%       { transform: scaleX(1); opacity: 1; }
-        42%, 85%  { transform: scaleX(1) translateY(0); opacity: 1; }
-        93%       { transform: scaleX(1) translateY(-3px); opacity: 0; }
-        94%, 100% { transform: scaleX(0) translateY(0); opacity: 0; }
-      }
-      @keyframes cl4 {
-        0%, 44%   { transform: scaleX(0); opacity: 0; }
-        45%       { transform: scaleX(0); opacity: 1; }
-        57%       { transform: scaleX(1); opacity: 1; }
-        57%, 88%  { transform: scaleX(1) translateY(0); opacity: 1; }
-        95%       { transform: scaleX(1) translateY(-3px); opacity: 0; }
-        96%, 100% { transform: scaleX(0) translateY(0); opacity: 0; }
-      }
-
-      /* Key flash: brief bright pulse, mostly off */
-      @keyframes kflash {
-        0%, 70%, 100% { opacity: 0; }
-        35% { opacity: 0.8; }
-      }
-
-      @keyframes float-data {
-        0%   { transform: translateY(0) scale(0.5); opacity: 0; }
-        10%  { opacity: 0.8; }
-        100% { transform: translateY(-17px) scale(1); opacity: 0; }
+      @keyframes miniHover {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.8px); }
       }
     </style>
-    <g id="pixel-packet">
-      <rect x="0" y="0" width="1.5" height="1.5"/>
-    </g>
   </defs>
-
-  <!-- Ground Shadow -->
-  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000" opacity="0.5"/>
-
-  <!-- Data particles (behind screen, float up and disappear behind it) -->
-  <g fill="#40C4FF">
-    <use href="#pixel-packet" class="data-bit d1" x="3" y="7"/>
-    <use href="#pixel-packet" class="data-bit d2" x="7" y="8"/>
-    <use href="#pixel-packet" class="data-bit d3" x="11" y="7"/>
-    <use href="#pixel-packet" class="data-bit d4" x="5" y="8"/>
+  
+  <g transform="translate(0 0) scale(1 1)">
+    <ellipse cx="7.6" cy="15.1" rx="4.5" ry="1.05" fill="#24171F" opacity="0.28"/>
   </g>
-
-  <!-- Mini Screen -->
-  <g id="screen">
-    <rect x="-0.5" y="-6" width="13.5" height="10.5" fill="#1E1E2E" rx="0.3"/>
-    <rect x="-0.5" y="-6" width="13.5" height="1.2" fill="#2D2D3D" rx="0.3"/>
-    <rect x="0.3" y="-5.6" width="0.5" height="0.4" fill="#FF5F56"/>
-    <rect x="1.2" y="-5.6" width="0.5" height="0.4" fill="#FFBD2E"/>
-    <rect x="2.1" y="-5.6" width="0.5" height="0.4" fill="#27C93F"/>
-
-    <!-- Code lines (indented, varying lengths = code structure) -->
-    <rect class="code-line cl1" x="0.5" y="-3.5" width="5"   height="0.7" fill="#4CAF50" opacity="0.8"/>
-    <rect class="code-line cl2" x="2"   y="-1.8" width="8"   height="0.7" fill="#4CAF50" opacity="0.8"/>
-    <rect class="code-line cl3" x="2"   y="-0.1" width="4.5" height="0.7" fill="#40C4FF" opacity="0.7"/>
-    <rect class="code-line cl4" x="0.5" y="1.6"  width="2"   height="0.7" fill="#FFC107" opacity="0.7"/>
-
-  </g>
-
-  <!-- Layer 1: Body -->
-  <g class="body-bounce">
-    <g class="breathe">
-      <g fill="#DE886D">
-        <rect x="3" y="13" width="1" height="2"/>
-        <rect x="5" y="13" width="1" height="2"/>
-        <rect x="9" y="13" width="1" height="2"/>
-        <rect x="11" y="13" width="1" height="2"/>
-        <rect x="2" y="6" width="11" height="7"/>
+  <g >
+    <g transform="translate(0 0) rotate(0 7.5 9.5)" class="body-float">
+      <g class="hair-sway">
+        <path d="M2.2 1.9 Q3.8 -2.4 7.5 -2.4 Q11.7 -2.4 13 2.1 L13 7.8 Q12.3 10.8 10.6 12.2 L9.6 12.2 L10 5.5 Q7.8 7.2 5.1 7.4 L4.7 12.2 L3.5 12.2 Q1.7 10.7 2.2 7.1 Z" fill="url(#hair-grad)"/>
+        <path d="M2.9 0.3 Q7.2 -4.1 12.4 1.3 Q11.4 0.8 10.5 1.2 Q7.6 -1.6 4.4 1.7 Q3.4 1.2 2.9 0.3 Z" fill="#5A3131" opacity="0.88"/>
       </g>
-      <g class="eyes-code" fill="#000">
-        <rect x="4" y="8" width="1" height="2"/>
-        <rect x="10" y="8" width="1" height="2"/>
+      <ellipse cx="7.6" cy="2.6" rx="3.9" ry="4.45" fill="#F2C7B5"/>
+      <ellipse cx="5.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      <ellipse cx="10.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      
+      <g fill="#1C1115">
+        <ellipse cx="5.6" cy="1.4" rx="0.42" ry="0.6"/>
+        <ellipse cx="10.6" cy="1.4" rx="0.42" ry="0.6"/>
       </g>
+      <path d="M6.55 4.6 q1 0.45 1.95 0" stroke="#B84C67" stroke-width="0.4" fill="none" stroke-linecap="round"/>
+      <path d="M4.35 -0.5 Q7.5 1.2 10.65 -0.5" stroke="#5A3131" stroke-width="0.42" fill="none" stroke-linecap="round"/>
+      <path d="M3.3 6.1 L11.8 6.1 L12.7 11.1 L2.4 11.1 Z" fill="url(#blazer-grad)"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" fill="#F7E7E2"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" stroke="#C9A45C" stroke-width="0.22" fill="#F7E7E2"/>
+      <path d="M6.65 4.7 H8.3" stroke="#D9778B" stroke-width="0.35" stroke-linecap="round"/>
+      <rect x="5.15" y="5.2" width="4.8" height="5.7" rx="0.6" fill="#2A2A33"/>
+      <path d="M5.15 5.5 Q7.55 6.5 9.95 5.5" stroke="#C9A45C" stroke-width="0.24" fill="none"/>
+      
+        <path d="M1.5 8.2 L4.8 8.6 L5.6 7.4 L2.8 7 Z" fill="#F2C7B5"/>
+        <path d="M12.4 8.6 L15.4 8.1 L14.2 7 L11.7 7.5 Z" fill="#F2C7B5"/>
+      <path d="M5.8 10.7 L5.15 14.8" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M9.25 10.7 L10 15" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M4.85 14.8 Q5.8 15.35 6.6 14.95" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      <path d="M9.55 15 Q10.65 15.55 11.55 15.1" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      
+          <g transform="translate(0 9.4)">
+            <rect x="1.8" y="0" width="11.6" height="3.3" rx="0.8" fill="#D9B76D"/>
+            <rect x="2.4" y="0.5" width="10.4" height="2.1" rx="0.4" fill="#3B2631"/>
+            <rect x="6.1" y="2.6" width="2.8" height="1" rx="0.4" fill="#A96C80"/>
+          </g>
+      
     </g>
   </g>
-
-  <!-- Layer 2: Keyboard -->
-  <g id="keyboard" transform="translate(-0.5, 11.8)">
-    <rect x="0" y="0" width="16" height="3.2" fill="#455A64" rx="0.3"/>
-    <g fill="#78909C">
-      <rect x="0.5" y="0.4" width="1" height="0.7"/>
-      <rect x="1.8" y="0.4" width="1" height="0.7"/>
-      <rect x="3.5" y="0.4" width="6" height="0.7" rx="0.2"/>
-      <rect x="10.2" y="0.4" width="1" height="0.7"/>
-      <rect x="11.5" y="0.4" width="1" height="0.7"/>
-      <rect x="12.8" y="0.4" width="1" height="0.7"/>
-      <rect x="14.1" y="0.4" width="1.3" height="0.7"/>
-    </g>
-    <g fill="#78909C">
-      <rect x="0.8" y="1.3" width="0.9" height="0.7"/>
-      <rect x="2.0" y="1.3" width="0.9" height="0.7"/>
-      <rect x="3.2" y="1.3" width="0.9" height="0.7"/>
-      <rect x="4.4" y="1.3" width="0.9" height="0.7"/>
-      <rect x="5.6" y="1.3" width="0.9" height="0.7"/>
-      <rect x="6.8" y="1.3" width="0.9" height="0.7"/>
-      <rect x="8.0" y="1.3" width="0.9" height="0.7"/>
-      <rect x="9.2" y="1.3" width="0.9" height="0.7"/>
-      <rect x="10.4" y="1.3" width="0.9" height="0.7"/>
-      <rect x="11.6" y="1.3" width="0.9" height="0.7"/>
-      <rect x="12.8" y="1.3" width="0.9" height="0.7"/>
-      <rect x="14.0" y="1.3" width="0.9" height="0.7"/>
-    </g>
-    <g fill="#78909C">
-      <rect x="0.5" y="2.2" width="0.9" height="0.7"/>
-      <rect x="1.7" y="2.2" width="0.9" height="0.7"/>
-      <rect x="2.9" y="2.2" width="0.9" height="0.7"/>
-      <rect x="4.1" y="2.2" width="0.9" height="0.7"/>
-      <rect x="5.3" y="2.2" width="0.9" height="0.7"/>
-      <rect x="6.5" y="2.2" width="0.9" height="0.7"/>
-      <rect x="7.7" y="2.2" width="0.9" height="0.7"/>
-      <rect x="8.9" y="2.2" width="0.9" height="0.7"/>
-      <rect x="10.1" y="2.2" width="0.9" height="0.7"/>
-      <rect x="11.3" y="2.2" width="0.9" height="0.7"/>
-      <rect x="12.5" y="2.2" width="0.9" height="0.7"/>
-      <rect x="13.7" y="2.2" width="0.9" height="0.7"/>
-      <rect x="14.9" y="2.2" width="0.6" height="0.7"/>
-    </g>
-    <!-- Key press highlights (overlay on top of keys) -->
-    <g fill="#B0BEC5">
-      <rect class="key-flash kf1" x="4.4" y="1.3" width="0.9" height="0.7"/>
-      <rect class="key-flash kf2" x="9.2" y="1.3" width="0.9" height="0.7"/>
-      <rect class="key-flash kf3" x="2.9" y="2.2" width="0.9" height="0.7"/>
-      <rect class="key-flash kf4" x="7.7" y="2.2" width="0.9" height="0.7"/>
-      <rect class="key-flash kf5" x="11.6" y="1.3" width="0.9" height="0.7"/>
-      <rect class="key-flash kf6" x="3.5" y="0.4" width="6" height="0.7" rx="0.2"/>
-    </g>
-  </g>
-
-  <!-- Layer 3: Arms -->
-  <g class="body-bounce">
-    <g class="breathe">
-      <g fill="#DE886D">
-        <g class="arm-l-type"><rect x="0" y="9" width="2" height="2"/></g>
-        <g class="arm-r-type"><rect x="13" y="9" width="2" height="2"/></g>
-      </g>
-    </g>
-  </g>
+  
+  
 </svg>

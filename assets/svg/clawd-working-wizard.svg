@@ -1,98 +1,88 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
+    <linearGradient id="hair-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5A3131"/>
+      <stop offset="100%" stop-color="#2B1818"/>
+    </linearGradient>
+    <linearGradient id="blazer-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#373746"/>
+      <stop offset="100%" stop-color="#1D1D24"/>
+    </linearGradient>
     <style>
-      .body-magic {
-        transform-origin: 7.5px 15px;
-        animation: float-body 3s infinite ease-in-out;
+      .body-float { transform-origin: 7.5px 10px; animation: bodyFloat 3.8s infinite ease-in-out; }
+      .hair-sway { transform-origin: 7.5px 4.5px; animation: hairSway 4.8s infinite ease-in-out; }
+      .sparkle-pulse { animation: sparklePulse 1.8s infinite ease-in-out; }
+      .alert-pop { animation: alertPop 0.9s infinite ease-in-out; }
+      .sleep-breathe { transform-origin: 7.5px 10px; animation: sleepBreathe 4.6s infinite ease-in-out; }
+      .mini-hover { animation: miniHover 2.6s infinite ease-in-out; }
+      @keyframes bodyFloat {
+        0%,100% { transform: translate(0,0); }
+        50% { transform: translate(0,0.65px); }
       }
-      .arm-wand {
-        transform-origin: 14px 10px;
-        animation: wave-wand 3s infinite ease-in-out;
+      @keyframes hairSway {
+        0%,100% { transform: rotate(0deg); }
+        50% { transform: rotate(-1.6deg); }
       }
-      .arm-l-magic {
-        transform-origin: 1px 10px;
-        animation: wave-magic 3s infinite ease-in-out;
+      @keyframes sparklePulse {
+        0%,100% { opacity: 0.65; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.08); }
       }
-      .eyes-magic {
-        animation: blink-magic 3s infinite;
+      @keyframes alertPop {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.7px); }
       }
-      .magic-star {
-        opacity: 0;
-        animation: sparkle-magic 2s infinite ease-out;
+      @keyframes sleepBreathe {
+        0%,100% { transform: translate(0,0) scale(1,1); }
+        50% { transform: translate(0,0.8px) scale(1.02,0.98); }
       }
-      .s1 { animation-delay: 0s; fill: #FFD700; }
-      .s2 { animation-delay: 0.5s; fill: #40C4FF; }
-      .s3 { animation-delay: 1s; fill: #B388FF; }
-      .s4 { animation-delay: 1.5s; fill: #FF8A80; }
-
-      @keyframes float-body {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-2px); }
-      }
-      @keyframes wave-wand {
-        0%, 100% { transform: rotate(-20deg); }
-        50% { transform: rotate(-120deg); }
-      }
-      @keyframes wave-magic {
-        0%, 100% { transform: rotate(20deg); }
-        50% { transform: rotate(120deg); }
-      }
-      @keyframes blink-magic {
-        0%, 40% { transform: scaleY(0.1); }
-        45%, 95% { transform: scaleY(1); }
-        100% { transform: scaleY(0.1); }
-      }
-      @keyframes sparkle-magic {
-        0% { transform: translate(14px, 4px) scale(0) rotate(0deg); opacity: 0; }
-        20% { opacity: 1; }
-        100% { transform: translate(14px, -15px) scale(1.5) rotate(180deg); opacity: 0; }
+      @keyframes miniHover {
+        0%,100% { transform: translateY(0); }
+        50% { transform: translateY(-0.8px); }
       }
     </style>
-    <g id="star">
-      <polygon points="0,-2 0.5,-0.5 2,0 0.5,0.5 0,2 -0.5,0.5 -2,0 -0.5,-0.5"/>
-    </g>
   </defs>
-
-  <rect id="ground-shadow" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.4"/>
-
-  <!-- Magic Stars -->
-  <g>
-    <use href="#star" class="magic-star s1"/>
-    <use href="#star" class="magic-star s2" transform="translate(-10, 0)"/>
-    <use href="#star" class="magic-star s3" transform="translate(5, -5)"/>
-    <use href="#star" class="magic-star s4" transform="translate(-5, -10)"/>
+  
+  <g transform="translate(-4 -9)">
+    <ellipse cx="8" cy="5" rx="7" ry="5" fill="#FFF4F1" opacity="0.96"/>
+    <path d="M12 8 L14 11 L10 9 Z" fill="#FFF4F1" opacity="0.96"/>
+    <path d="M7.8 1.7 L8.8 3.9 L11.3 4.2 L9.4 5.8 L10 8.1 L7.8 6.9 L5.6 8.1 L6.2 5.8 L4.3 4.2 L6.8 3.9 Z" fill="#C9A45C"/>
   </g>
-
-  <g class="body-magic">
-    <g id="legs" fill="#DE886D">
-      <rect x="3" y="13" width="1" height="2"/>
-      <rect x="5" y="13" width="1" height="2"/>
-      <rect x="9" y="13" width="1" height="2"/>
-      <rect x="11" y="13" width="1" height="2"/>
-    </g>
-
-    <g id="body-color-group" fill="#DE886D">
-      <rect x="2" y="6" width="11" height="7"/>
-      <g class="arm-l-magic"><rect x="0" y="9" width="2" height="2"/></g>
-    </g>
-
-    <g fill="#000000" class="eyes-magic" transform-origin="7.5px 9px">
-      <rect x="4" y="8" width="1" height="2"/>
-      <rect x="10" y="8" width="1" height="2"/>
-    </g>
-
-    <!-- Wizard Hat -->
-    <g transform="translate(7.5, 6)">
-      <polygon points="-4,0 4,0 0,-6" fill="#673AB7"/>
-      <rect x="-5" y="0" width="10" height="1" fill="#512DA8"/>
-      <polygon points="0,-3 0.5,-2.5 1.5,-2.5 0.75,-1.75 1,-0.5 0,-1.25 -1,-0.5 -0.75,-1.75 -1.5,-2.5 -0.5,-2.5" fill="#FFC107"/>
-    </g>
-
-    <!-- Wand arm (on top of hat and eyes) -->
-    <g class="arm-wand" fill="#DE886D">
-      <rect x="13" y="9" width="2" height="2"/>
-      <rect x="13.5" y="4" width="1" height="6" fill="#8D6E63"/>
-      <rect x="13.5" y="4" width="1" height="1" fill="#FFD700"/>
+  <g transform="translate(0 0) scale(1 1)">
+    <ellipse cx="7.6" cy="15.1" rx="4.5" ry="1.05" fill="#24171F" opacity="0.28"/>
+  </g>
+  <g >
+    <g transform="translate(0 0) rotate(0 7.5 9.5)" class="body-float">
+      <g class="hair-sway">
+        <path d="M2.2 1.9 Q3.8 -2.4 7.5 -2.4 Q11.7 -2.4 13 2.1 L13 7.8 Q12.3 10.8 10.6 12.2 L9.6 12.2 L10 5.5 Q7.8 7.2 5.1 7.4 L4.7 12.2 L3.5 12.2 Q1.7 10.7 2.2 7.1 Z" fill="url(#hair-grad)"/>
+        <path d="M2.9 0.3 Q7.2 -4.1 12.4 1.3 Q11.4 0.8 10.5 1.2 Q7.6 -1.6 4.4 1.7 Q3.4 1.2 2.9 0.3 Z" fill="#5A3131" opacity="0.88"/>
+      </g>
+      <ellipse cx="7.6" cy="2.6" rx="3.9" ry="4.45" fill="#F2C7B5"/>
+      <ellipse cx="5.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      <ellipse cx="10.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
+      
+      <g fill="#1C1115">
+        <ellipse cx="5.6" cy="1.4" rx="0.42" ry="0.6"/>
+        <ellipse cx="10.6" cy="1.4" rx="0.42" ry="0.6"/>
+      </g>
+      <path d="M6.55 4.6 q1 0.45 1.95 0" stroke="#B84C67" stroke-width="0.4" fill="none" stroke-linecap="round"/>
+      <path d="M4.35 -0.5 Q7.5 1.2 10.65 -0.5" stroke="#5A3131" stroke-width="0.42" fill="none" stroke-linecap="round"/>
+      <path d="M3.3 6.1 L11.8 6.1 L12.7 11.1 L2.4 11.1 Z" fill="url(#blazer-grad)"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" fill="#F7E7E2"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" stroke="#C9A45C" stroke-width="0.22" fill="#F7E7E2"/>
+      <path d="M6.65 4.7 H8.3" stroke="#D9778B" stroke-width="0.35" stroke-linecap="round"/>
+      <rect x="5.15" y="5.2" width="4.8" height="5.7" rx="0.6" fill="#2A2A33"/>
+      <path d="M5.15 5.5 Q7.55 6.5 9.95 5.5" stroke="#C9A45C" stroke-width="0.24" fill="none"/>
+      
+        <path d="M1.4 7.8 L4.4 8.9 L5.4 7.4 L2.4 6.3 Z" fill="#F2C7B5"/>
+        <path d="M12 8.7 L14.7 7.9 L14.1 6.3 L11.6 7.1 Z" fill="#F2C7B5"/>
+      <path d="M5.8 10.7 L5.15 14.8" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M9.25 10.7 L10 15" stroke="#F2C7B5" stroke-width="1.05" stroke-linecap="round"/>
+      <path d="M4.85 14.8 Q5.8 15.35 6.6 14.95" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      <path d="M9.55 15 Q10.65 15.55 11.55 15.1" stroke="#8A2D47" stroke-width="0.82" stroke-linecap="round"/>
+      
+      
     </g>
   </g>
+  
+  
 </svg>

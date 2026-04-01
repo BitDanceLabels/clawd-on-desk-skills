@@ -103,6 +103,8 @@ npm install
 npm start
 ```
 
+Environment sample: copy `.env.example` only if you need to document/export hook-related variables such as `CLAWD_REMOTE`. Clawd itself does not auto-load `.env`.
+
 ### Agent Setup
 
 **Claude Code** — works out of the box. Hooks are auto-registered on launch. Versioned hooks (`PreCompact`, `PostCompact`, `StopFailure`) are registered only when Clawd can positively detect a compatible Claude Code version; if detection fails (common for packaged macOS launches), Clawd falls back to core hooks and removes stale incompatible versioned hooks automatically.
