@@ -59,6 +59,7 @@ function savePrefs() {
     miniMode: _mini.getMiniMode(), miniEdge: _mini.getMiniEdge(), preMiniX: _mini.getPreMiniX(), preMiniY: _mini.getPreMiniY(), lang,
     showTray, showDock,
     autoStartWithClaude, bubbleFollowPet, hideBubbles, showSessionId,
+    ghostMode, assistantMode24x7,
   };
   try { fs.writeFileSync(PREFS_PATH, JSON.stringify(data)); } catch {}
 }
@@ -94,6 +95,8 @@ let autoStartWithClaude = false;
 let bubbleFollowPet = false;
 let hideBubbles = false;
 let showSessionId = false;
+let ghostMode = true;
+let assistantMode24x7 = false;
 let petHidden = false;
 const DEFAULT_TOGGLE_SHORTCUT = "CommandOrControl+Shift+Alt+C";
 
@@ -148,6 +151,55 @@ function sendToRenderer(channel, ...args) {
 }
 function sendToHitWin(channel, ...args) {
   if (hitWin && !hitWin.isDestroyed()) hitWin.webContents.send(channel, ...args);
+}
+
+function sendAppearance() {
+  sendToRenderer("appearance-change", {
+    theme: ghostMode ? "matrix-glam" : "solid",
+    ghostMode,
+  });
+}
+
+function setGhostMode(enabled) {
+  ghostMode = !!enabled;
+  sendAppearance();
+  savePrefs();
+}
+
+function setAssistantMode24x7(enabled) {
+  assistantMode24x7 = !!enabled;
+  if (assistantMode24x7) {
+    autoStartWithClaude = true;
+    hideBubbles = false;
+    bubbleFollowPet = false;
+    try {
+      const { registerHooks } = require("../hooks/install.js");
+      registerHooks({ silent: true, autoStart: true, port: getHookServerPort() });
+    } catch (err) {
+      console.warn("Clawd: failed to enable 24/7 hook startup:", err.message);
+    }
+    try {
+      app.setLoginItemSettings({ openAtLogin: true });
+    } catch (err) {
+      console.warn("Clawd: failed to enable login startup:", err.message);
+    }
+  } else {
+    autoStartWithClaude = false;
+    try {
+      const { unregisterAutoStart } = require("../hooks/install.js");
+      unregisterAutoStart();
+    } catch (err) {
+      console.warn("Clawd: failed to disable 24/7 hook startup:", err.message);
+    }
+    try {
+      app.setLoginItemSettings({ openAtLogin: false });
+    } catch (err) {
+      console.warn("Clawd: failed to disable login startup:", err.message);
+    }
+  }
+  buildTrayMenu();
+  buildContextMenu();
+  savePrefs();
 }
 
 // Sync input window position to match render window's hitbox.
@@ -420,6 +472,10 @@ const _menuCtx = {
   set hideBubbles(v) { hideBubbles = v; },
   get showSessionId() { return showSessionId; },
   set showSessionId(v) { showSessionId = v; },
+  get ghostMode() { return ghostMode; },
+  setGhostMode: (v) => setGhostMode(v),
+  get assistantMode24x7() { return assistantMode24x7; },
+  setAssistantMode24x7: (v) => setAssistantMode24x7(v),
   get pendingPermissions() { return pendingPermissions; },
   repositionBubbles: () => repositionBubbles(),
   get petHidden() { return petHidden; },
@@ -478,6 +534,8 @@ function createWindow() {
   if (prefs && typeof prefs.bubbleFollowPet === "boolean") bubbleFollowPet = prefs.bubbleFollowPet;
   if (prefs && typeof prefs.hideBubbles === "boolean") hideBubbles = prefs.hideBubbles;
   if (prefs && typeof prefs.showSessionId === "boolean") showSessionId = prefs.showSessionId;
+  if (prefs && typeof prefs.ghostMode === "boolean") ghostMode = prefs.ghostMode;
+  if (prefs && typeof prefs.assistantMode24x7 === "boolean") assistantMode24x7 = prefs.assistantMode24x7;
   // macOS: apply dock visibility (default hidden)
   if (isMac) {
     applyDockVisibility();
@@ -698,6 +756,7 @@ function createWindow() {
   // If hooks arrived during startup, respect them instead of forcing idle
   // Also handles crash recovery (render-process-gone → reload)
   win.webContents.on("did-finish-load", () => {
+    sendAppearance();
     if (_mini.getMiniMode()) {
       sendToRenderer("mini-mode-change", true, _mini.getMiniEdge());
     sendToHitWin("hit-state-sync", { miniMode: true });
@@ -912,6 +971,9 @@ if (!gotTheLock) {
 
     // Auto-register Claude Code hooks on every launch (dedup-safe)
     syncClawdHooks();
+    if (assistantMode24x7) {
+      setAssistantMode24x7(true);
+    }
 
     // Start Codex CLI JSONL log monitor
     try {

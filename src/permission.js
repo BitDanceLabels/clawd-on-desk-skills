@@ -13,6 +13,7 @@ const isLinux = process.platform === "linux";
 const isWin = process.platform === "win32";
 const WIN_TOPMOST_LEVEL = "pop-up-menu";
 const LINUX_WINDOW_TYPE = "toolbar";
+const BUBBLE_WIDTH = 320;
 
 module.exports = function initPermission(ctx) {
 
@@ -25,7 +26,7 @@ const PASSTHROUGH_TOOLS = new Set([
 
 // Fallback height before renderer reports actual measurement
 function estimateBubbleHeight(sugCount) {
-  return 200 + (sugCount || 0) * 37;
+  return 186 + (sugCount || 0) * 34;
 }
 
 function repositionBubbles() {
@@ -33,7 +34,7 @@ function repositionBubbles() {
   if (!ctx.win || ctx.win.isDestroyed()) return;
   const margin = 8;
   const gap = 6;
-  const bw = 340;
+  const bw = BUBBLE_WIDTH;
   const petBounds = ctx.win.getBounds();
   const cx = petBounds.x + petBounds.width / 2;
   const cy = petBounds.y + petBounds.height / 2;
@@ -107,7 +108,7 @@ function showPermissionBubble(permEntry) {
   const sugCount = (permEntry.suggestions || []).length;
   const bh = estimateBubbleHeight(sugCount);
   // Temporary position — repositionBubbles() will finalize after renderer reports real height
-  const pos = { x: 0, y: 0, width: 340, height: bh };
+  const pos = { x: 0, y: 0, width: BUBBLE_WIDTH, height: bh };
 
   const bub = new BrowserWindow({
     width: pos.width,

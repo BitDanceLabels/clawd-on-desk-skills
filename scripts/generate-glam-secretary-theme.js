@@ -5,25 +5,27 @@ const path = require("path");
 const SVG_DIR = path.join(__dirname, "..", "assets", "svg");
 
 const palette = {
-  hair: "#2B1818",
-  hairHi: "#5A3131",
+  hair: "#1F1020",
+  hairHi: "#4A1F45",
   skin: "#F2C7B5",
   blush: "#E8A59B",
-  blazer: "#1D1D24",
-  blazerHi: "#373746",
-  blouse: "#F7E7E2",
-  skirt: "#2A2A33",
+  blazer: "#101A23",
+  blazerHi: "#183343",
+  blouse: "#F8EFFA",
+  skirt: "#141F2B",
   gold: "#C9A45C",
-  rose: "#D9778B",
-  roseDeep: "#B84C67",
-  wine: "#7A243F",
+  rose: "#F07AA4",
+  roseDeep: "#E04787",
+  wine: "#A63E71",
   heel: "#8A2D47",
   line: "#3E2430",
   shadow: "#24171F",
-  sparkle: "#FFE8B0",
+  sparkle: "#B2FFF0",
   alert: "#FF587A",
-  bubble: "#FFF4F1",
+  bubble: "#DFFFF9",
   eye: "#1C1115",
+  cyan: "#74FFF0",
+  cyanDeep: "#1ED7C8",
 };
 
 const files = fs
@@ -50,6 +52,17 @@ function sparkles() {
     <rect x="-1.9" y="2.9" width="3" height="1.2"/>
     <rect x="16.8" y="3.3" width="1" height="2.6"/>
     <rect x="16" y="4.1" width="2.6" height="1"/>
+  </g>`;
+}
+
+function matrixAura(mini) {
+  const y = mini ? 8.9 : 10.2;
+  const width = mini ? 10.4 : 12.2;
+  return `
+  <g opacity="${mini ? 0.18 : 0.14}">
+    <path d="M${7.6 - width / 2} ${y} H${7.6 + width / 2}" stroke="${palette.cyan}" stroke-width="0.28" stroke-linecap="round"/>
+    <path d="M${7.6 - width / 2 + 1.1} ${y + 0.8} H${7.6 + width / 2 - 1.4}" stroke="${palette.rose}" stroke-width="0.2" stroke-linecap="round"/>
+    <path d="M${7.6 - width / 2 + 2.3} ${y + 1.5} H${7.6 + width / 2 - 2.1}" stroke="${palette.cyanDeep}" stroke-width="0.18" stroke-linecap="round"/>
   </g>`;
 }
 
@@ -179,6 +192,18 @@ function figure({
       <stop offset="0%" stop-color="${palette.blazerHi}"/>
       <stop offset="100%" stop-color="${palette.blazer}"/>
     </linearGradient>
+    <linearGradient id="blouse-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${palette.blouse}" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="${palette.cyan}" stop-opacity="0.45"/>
+    </linearGradient>
+    <linearGradient id="skirt-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${palette.skirt}" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="${palette.blazerHi}" stop-opacity="0.78"/>
+    </linearGradient>
+    <filter id="glam-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="${mini ? 0.32 : 0.46}" flood-color="${palette.cyan}" flood-opacity="0.22"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="${mini ? 0.22 : 0.32}" flood-color="${palette.rose}" flood-opacity="0.18"/>
+    </filter>
     <style>
       .body-float { transform-origin: 7.5px 10px; animation: bodyFloat 3.8s infinite ease-in-out; }
       .hair-sway { transform-origin: 7.5px 4.5px; animation: hairSway 4.8s infinite ease-in-out; }
@@ -213,11 +238,12 @@ function figure({
     </style>
   </defs>
   ${bubbleMarkup}
+  ${matrixAura(mini)}
   <g${shadowId} transform="translate(0 0) scale(${shadowScale} 1)">
     <ellipse cx="7.6" cy="${mini ? 13.1 : 15.1}" rx="${shadowWidth / 2}" ry="${mini ? 0.95 : 1.05}" fill="${palette.shadow}" opacity="${mini ? 0.34 : 0.28}"/>
   </g>
   <g ${miniScale}>
-    <g${bodyGroupId} transform="${bodyTransform}" class="${pose === "sleep" ? "sleep-breathe" : mini ? "mini-hover" : "body-float"}">
+    <g${bodyGroupId} transform="${bodyTransform}" class="${pose === "sleep" ? "sleep-breathe" : mini ? "mini-hover" : "body-float"}" filter="url(#glam-glow)">
       <g class="hair-sway">
         <path d="M2.2 ${hairTailY} Q3.8 -2.4 7.5 -2.4 Q11.7 -2.4 13 2.1 L13 7.8 Q12.3 10.8 10.6 12.2 L9.6 12.2 L10 5.5 Q7.8 7.2 5.1 7.4 L4.7 12.2 L3.5 12.2 Q1.7 10.7 2.2 7.1 Z" fill="url(#hair-grad)"/>
         <path d="M2.9 0.3 Q7.2 -4.1 12.4 1.3 Q11.4 0.8 10.5 1.2 Q7.6 -1.6 4.4 1.7 Q3.4 1.2 2.9 0.3 Z" fill="${palette.hairHi}" opacity="0.88"/>
@@ -228,12 +254,12 @@ function figure({
       ${eyeMarkup}
       ${mouthMarkup}
       <path d="M4.35 -0.5 Q7.5 1.2 10.65 -0.5" stroke="${palette.hairHi}" stroke-width="0.42" fill="none" stroke-linecap="round"/>
-      <path d="M3.3 6.1 L11.8 6.1 L12.7 ${mini ? 10.5 : 11.1} L2.4 ${mini ? 10.5 : 11.1} Z" fill="url(#blazer-grad)"/>
-      <path d="M5.55 ${chestY} L7.45 7.2 L9.4 ${chestY}" fill="${palette.blouse}"/>
-      <path d="M5.55 ${chestY} L7.45 7.2 L9.4 ${chestY}" stroke="${palette.gold}" stroke-width="0.22" fill="${palette.blouse}"/>
-      <path d="M6.65 4.7 H8.3" stroke="${palette.rose}" stroke-width="0.35" stroke-linecap="round"/>
-      <rect x="5.15" y="${skirtY}" width="4.8" height="${mini ? 5 : 5.7}" rx="0.6" fill="${palette.skirt}"/>
-      <path d="M5.15 ${skirtY + 0.3} Q7.55 ${skirtY + 1.3} 9.95 ${skirtY + 0.3}" stroke="${palette.gold}" stroke-width="0.24" fill="none"/>
+      <path d="M3.3 6.1 L11.8 6.1 L12.7 ${mini ? 10.5 : 11.1} L2.4 ${mini ? 10.5 : 11.1} Z" fill="url(#blazer-grad)" fill-opacity="0.84"/>
+      <path d="M5.55 ${chestY} L7.45 7.2 L9.4 ${chestY}" fill="url(#blouse-grad)" fill-opacity="0.82"/>
+      <path d="M5.55 ${chestY} L7.45 7.2 L9.4 ${chestY}" stroke="${palette.gold}" stroke-width="0.22" fill="url(#blouse-grad)" fill-opacity="0.78"/>
+      <path d="M6.65 4.7 H8.3" stroke="${palette.cyan}" stroke-width="0.35" stroke-linecap="round" opacity="0.75"/>
+      <rect x="5.15" y="${skirtY}" width="4.8" height="${mini ? 5 : 5.7}" rx="0.6" fill="url(#skirt-grad)" fill-opacity="0.84"/>
+      <path d="M5.15 ${skirtY + 0.3} Q7.55 ${skirtY + 1.3} 9.95 ${skirtY + 0.3}" stroke="${palette.cyan}" stroke-width="0.24" fill="none" opacity="0.72"/>
       ${armPose}
       <path d="M5.8 ${legY} L5.15 ${mini ? 13.1 : 14.8}" stroke="${palette.skin}" stroke-width="1.05" stroke-linecap="round"/>
       <path d="M9.25 ${legY} L10 ${mini ? 13.3 : 15}" stroke="${palette.skin}" stroke-width="1.05" stroke-linecap="round"/>

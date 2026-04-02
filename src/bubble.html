@@ -9,58 +9,30 @@
 /* ── Theme variables ── */
 :root {
   --ease-spring: var(--ease-spring);
-  --card-bg: #ffffff;
-  --card-border: rgba(0, 0, 0, 0.08);
-  --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
-  --card-inset: none;
-  --text-primary: #18181b;
-  --header-color: #374151;
-  --cmd-bg: #f4f4f5;
-  --cmd-border: rgba(0, 0, 0, 0.06);
-  --cmd-color: #374151;
-  --cmd-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
-  --scroll-thumb: rgba(0, 0, 0, 0.15);
-  --scroll-thumb-hover: rgba(0, 0, 0, 0.25);
-  --deny-bg: #ffffff;
-  --deny-color: #52525b;
-  --deny-border: #d1d5db;
-  --deny-hover-bg: #f9fafb;
-  --deny-hover-border: #9ca3af;
-  --sug-bg: #ffffff;
-  --sug-color: #71717a;
-  --sug-border: #e5e7eb;
-  --sug-hover-bg: #f9fafb;
-  --sug-hover-border: #d1d5db;
-  --sug-hover-color: #374151;
-  --sug-arrow: #9ca3af;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --card-bg: #18181b;
-    --card-border: rgba(255, 255, 255, 0.1);
-    --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    --card-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    --text-primary: #f4f4f5;
-    --header-color: #e4e4e7;
-    --cmd-bg: #09090b;
-    --cmd-border: rgba(255, 255, 255, 0.06);
-    --cmd-color: #a1a1aa;
-    --cmd-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-    --scroll-thumb: rgba(255, 255, 255, 0.1);
-    --scroll-thumb-hover: rgba(255, 255, 255, 0.2);
-    --deny-bg: rgba(255, 255, 255, 0.05);
-    --deny-color: #e4e4e7;
-    --deny-border: rgba(255, 255, 255, 0.1);
-    --deny-hover-bg: rgba(255, 255, 255, 0.1);
-    --deny-hover-border: rgba(255, 255, 255, 0.15);
-    --sug-bg: rgba(255, 255, 255, 0.03);
-    --sug-color: #a1a1aa;
-    --sug-border: rgba(255, 255, 255, 0.06);
-    --sug-hover-bg: rgba(255, 255, 255, 0.08);
-    --sug-hover-border: rgba(255, 255, 255, 0.15);
-    --sug-hover-color: #e4e4e7;
-    --sug-arrow: #d4d4d8;
-  }
+  --card-bg: linear-gradient(180deg, rgba(9, 27, 35, 0.88), rgba(14, 18, 30, 0.84));
+  --card-border: rgba(108, 255, 198, 0.26);
+  --card-shadow: 0 16px 40px rgba(0, 0, 0, 0.34), 0 0 24px rgba(48, 224, 177, 0.16);
+  --card-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --text-primary: #effff9;
+  --header-color: #bbfff0;
+  --cmd-bg: rgba(3, 15, 22, 0.72);
+  --cmd-border: rgba(111, 255, 213, 0.15);
+  --cmd-color: #c9fff3;
+  --cmd-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --scroll-thumb: rgba(126, 255, 211, 0.26);
+  --scroll-thumb-hover: rgba(126, 255, 211, 0.38);
+  --deny-bg: rgba(255, 255, 255, 0.05);
+  --deny-color: #d8fff4;
+  --deny-border: rgba(158, 255, 221, 0.14);
+  --deny-hover-bg: rgba(255, 255, 255, 0.08);
+  --deny-hover-border: rgba(158, 255, 221, 0.24);
+  --sug-bg: rgba(255, 255, 255, 0.03);
+  --sug-color: #b9fff0;
+  --sug-border: rgba(158, 255, 221, 0.1);
+  --sug-hover-bg: rgba(115, 255, 214, 0.1);
+  --sug-hover-border: rgba(158, 255, 221, 0.22);
+  --sug-hover-color: #f5fffd;
+  --sug-arrow: #96ffe7;
 }
 
 html, body {
@@ -85,6 +57,8 @@ body { padding: 6px; }
   gap: 8px;
   box-shadow: var(--card-shadow), var(--card-inset, none);
   color: var(--text-primary);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
   opacity: 0;
   transform: translateX(60px);
   transition: opacity 0.35s var(--ease-spring), transform 0.4s var(--ease-spring);
@@ -138,7 +112,7 @@ body { padding: 6px; }
 
 /* ── Command block ── */
 .command-block {
-  padding: 12px;
+  padding: 10px 12px;
   background: var(--cmd-bg);
   border: 1px solid var(--cmd-border);
   border-radius: 10px;
@@ -146,7 +120,7 @@ body { padding: 6px; }
   font-size: 12px;
   color: var(--cmd-color);
   line-height: 1.5;
-  max-height: 80px;
+  max-height: 68px;
   overflow-y: auto;
   word-break: break-all;
   box-shadow: var(--cmd-shadow);
@@ -177,12 +151,12 @@ body { padding: 6px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-allow {
-  background: #d97757;
+  background: linear-gradient(135deg, #17d9a5, #ff6cab);
   color: #fff;
   border: 1px solid transparent;
 }
 .btn-allow:hover:not(:disabled) {
-  background: #c4684a;
+  filter: brightness(1.06);
 }
 
 .btn-deny {

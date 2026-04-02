@@ -85,6 +85,8 @@ const i18n = {
     download: "Download",
     bubbleFollow: "Bubble Follow Pet",
     hideBubbles: "Hide Bubbles",
+    ghostMode: "Ghost Matrix Mode",
+    assistantMode24x7: "24/7 Assistant Mode",
     showSessionId: "Show Session ID",
     sessions: "Sessions",
     noSessions: "No active sessions",
@@ -133,6 +135,8 @@ const i18n = {
     download: "下载",
     bubbleFollow: "气泡跟随宠物",
     hideBubbles: "隐藏气泡",
+    ghostMode: "幽灵矩阵模式",
+    assistantMode24x7: "24/7 助手模式",
     showSessionId: "显示会话编号",
     sessions: "会话",
     noSessions: "无活跃会话",
@@ -244,6 +248,26 @@ module.exports = function initMenu(ctx) {
           buildContextMenu();
           buildTrayMenu();
           ctx.savePrefs();
+        },
+      },
+      {
+        label: t("ghostMode"),
+        type: "checkbox",
+        checked: ctx.ghostMode,
+        click: (menuItem) => {
+          ctx.setGhostMode(menuItem.checked);
+          buildContextMenu();
+          buildTrayMenu();
+        },
+      },
+      {
+        label: t("assistantMode24x7"),
+        type: "checkbox",
+        checked: ctx.assistantMode24x7,
+        click: (menuItem) => {
+          ctx.setAssistantMode24x7(menuItem.checked);
+          buildContextMenu();
+          buildTrayMenu();
         },
       },
       {
@@ -448,6 +472,26 @@ module.exports = function initMenu(ctx) {
           buildContextMenu();
           buildTrayMenu();
           ctx.savePrefs();
+        },
+      },
+      {
+        label: t("ghostMode"),
+        type: "checkbox",
+        checked: ctx.ghostMode,
+        click: (menuItem) => {
+          ctx.setGhostMode(menuItem.checked);
+          buildContextMenu();
+          buildTrayMenu();
+        },
+      },
+      {
+        label: t("assistantMode24x7"),
+        type: "checkbox",
+        checked: ctx.assistantMode24x7,
+        click: (menuItem) => {
+          ctx.setAssistantMode24x7(menuItem.checked);
+          buildContextMenu();
+          buildTrayMenu();
         },
       },
       { type: "separator" },

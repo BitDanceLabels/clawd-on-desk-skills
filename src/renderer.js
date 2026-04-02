@@ -14,6 +14,7 @@ let dndEnabled = false;
 let miniLeftFlip = false;
 
 window.electronAPI.onDndChange((enabled) => { dndEnabled = enabled; });
+window.electronAPI.onAppearanceChange((appearance) => applyAppearance(appearance || {}));
 
 window.electronAPI.onMiniModeChange((enabled, edge) => {
   miniLeftFlip = enabled && edge === "left";
@@ -64,6 +65,12 @@ function getObjectSvgName(objectEl) {
 }
 
 const SVG_IDLE_FOLLOW = "clawd-idle-follow.svg";
+
+function applyAppearance(appearance) {
+  const matrix = appearance.theme !== "solid";
+  document.body.classList.toggle("matrix-glam", matrix);
+  document.body.classList.toggle("solid-pet", !matrix);
+}
 
 function shouldTrackEyes(state, svg) {
   return (state === "idle" && svg === SVG_IDLE_FOLLOW) || state === "mini-idle";

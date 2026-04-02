@@ -1,13 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <linearGradient id="hair-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#5A3131"/>
-      <stop offset="100%" stop-color="#2B1818"/>
+      <stop offset="0%" stop-color="#4A1F45"/>
+      <stop offset="100%" stop-color="#1F1020"/>
     </linearGradient>
     <linearGradient id="blazer-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#373746"/>
-      <stop offset="100%" stop-color="#1D1D24"/>
+      <stop offset="0%" stop-color="#183343"/>
+      <stop offset="100%" stop-color="#101A23"/>
     </linearGradient>
+    <linearGradient id="blouse-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F8EFFA" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#74FFF0" stop-opacity="0.45"/>
+    </linearGradient>
+    <linearGradient id="skirt-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#141F2B" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#183343" stop-opacity="0.78"/>
+    </linearGradient>
+    <filter id="glam-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="0.46" flood-color="#74FFF0" flood-opacity="0.22"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="0.32" flood-color="#F07AA4" flood-opacity="0.18"/>
+    </filter>
     <style>
       .body-float { transform-origin: 7.5px 10px; animation: bodyFloat 3.8s infinite ease-in-out; }
       .hair-sway { transform-origin: 7.5px 4.5px; animation: hairSway 4.8s infinite ease-in-out; }
@@ -42,14 +54,20 @@
     </style>
   </defs>
   
+  
+  <g opacity="0.14">
+    <path d="M1.5 10.2 H13.7" stroke="#74FFF0" stroke-width="0.28" stroke-linecap="round"/>
+    <path d="M2.6 11 H12.299999999999999" stroke="#F07AA4" stroke-width="0.2" stroke-linecap="round"/>
+    <path d="M3.8 11.7 H11.6" stroke="#1ED7C8" stroke-width="0.18" stroke-linecap="round"/>
+  </g>
   <g transform="translate(0 0) scale(1 1)">
     <ellipse cx="7.6" cy="15.1" rx="4.5" ry="1.05" fill="#24171F" opacity="0.28"/>
   </g>
   <g >
-    <g transform="translate(0 0) rotate(0 7.5 9.5)" class="body-float">
+    <g transform="translate(0 0) rotate(0 7.5 9.5)" class="body-float" filter="url(#glam-glow)">
       <g class="hair-sway">
         <path d="M2.2 1.9 Q3.8 -2.4 7.5 -2.4 Q11.7 -2.4 13 2.1 L13 7.8 Q12.3 10.8 10.6 12.2 L9.6 12.2 L10 5.5 Q7.8 7.2 5.1 7.4 L4.7 12.2 L3.5 12.2 Q1.7 10.7 2.2 7.1 Z" fill="url(#hair-grad)"/>
-        <path d="M2.9 0.3 Q7.2 -4.1 12.4 1.3 Q11.4 0.8 10.5 1.2 Q7.6 -1.6 4.4 1.7 Q3.4 1.2 2.9 0.3 Z" fill="#5A3131" opacity="0.88"/>
+        <path d="M2.9 0.3 Q7.2 -4.1 12.4 1.3 Q11.4 0.8 10.5 1.2 Q7.6 -1.6 4.4 1.7 Q3.4 1.2 2.9 0.3 Z" fill="#4A1F45" opacity="0.88"/>
       </g>
       <ellipse cx="7.6" cy="2.6" rx="3.9" ry="4.45" fill="#F2C7B5"/>
       <ellipse cx="5.1" cy="3.2" rx="1.05" ry="0.55" fill="#E8A59B" opacity="0.45"/>
@@ -59,14 +77,14 @@
         <ellipse cx="5.6" cy="1.4" rx="0.42" ry="0.6"/>
         <ellipse cx="10.6" cy="1.4" rx="0.42" ry="0.6"/>
       </g>
-      <path d="M6.2 4.45 q1.2 1 2.6 0" stroke="#B84C67" stroke-width="0.45" fill="none" stroke-linecap="round"/>
-      <path d="M4.35 -0.5 Q7.5 1.2 10.65 -0.5" stroke="#5A3131" stroke-width="0.42" fill="none" stroke-linecap="round"/>
-      <path d="M3.3 6.1 L11.8 6.1 L12.7 11.1 L2.4 11.1 Z" fill="url(#blazer-grad)"/>
-      <path d="M5.55 4 L7.45 7.2 L9.4 4" fill="#F7E7E2"/>
-      <path d="M5.55 4 L7.45 7.2 L9.4 4" stroke="#C9A45C" stroke-width="0.22" fill="#F7E7E2"/>
-      <path d="M6.65 4.7 H8.3" stroke="#D9778B" stroke-width="0.35" stroke-linecap="round"/>
-      <rect x="5.15" y="5.2" width="4.8" height="5.7" rx="0.6" fill="#2A2A33"/>
-      <path d="M5.15 5.5 Q7.55 6.5 9.95 5.5" stroke="#C9A45C" stroke-width="0.24" fill="none"/>
+      <path d="M6.2 4.45 q1.2 1 2.6 0" stroke="#E04787" stroke-width="0.45" fill="none" stroke-linecap="round"/>
+      <path d="M4.35 -0.5 Q7.5 1.2 10.65 -0.5" stroke="#4A1F45" stroke-width="0.42" fill="none" stroke-linecap="round"/>
+      <path d="M3.3 6.1 L11.8 6.1 L12.7 11.1 L2.4 11.1 Z" fill="url(#blazer-grad)" fill-opacity="0.84"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" fill="url(#blouse-grad)" fill-opacity="0.82"/>
+      <path d="M5.55 4 L7.45 7.2 L9.4 4" stroke="#C9A45C" stroke-width="0.22" fill="url(#blouse-grad)" fill-opacity="0.78"/>
+      <path d="M6.65 4.7 H8.3" stroke="#74FFF0" stroke-width="0.35" stroke-linecap="round" opacity="0.75"/>
+      <rect x="5.15" y="5.2" width="4.8" height="5.7" rx="0.6" fill="url(#skirt-grad)" fill-opacity="0.84"/>
+      <path d="M5.15 5.5 Q7.55 6.5 9.95 5.5" stroke="#74FFF0" stroke-width="0.24" fill="none" opacity="0.72"/>
       
         <path d="M1.4 7.8 L4.4 8.9 L5.4 7.4 L2.4 6.3 Z" fill="#F2C7B5"/>
         <path d="M12 8.7 L14.7 7.9 L14.1 6.3 L11.6 7.1 Z" fill="#F2C7B5"/>
