@@ -17,7 +17,7 @@ const BUBBLE_WIDTH = 320;
 
 module.exports = function initPermission(ctx) {
 
-// Each entry: { res, abortHandler, suggestions, sessionId, bubble, hideTimer, toolName, toolInput, resolvedSuggestion, createdAt, measuredHeight }
+// Each entry: { res, abortHandler, suggestions, sessionId, bubble, hideTimer, toolName, toolInput, resolvedSuggestion, createdAt, measuredHeight, manualPosition }
 const pendingPermissions = [];
 // Pure-metadata tools auto-allowed without showing a bubble (zero side effects)
 const PASSTHROUGH_TOOLS = new Set([
@@ -99,9 +99,23 @@ function repositionBubbles() {
     const y = yBottom - bh;
     yBottom = y - gap;
     if (perm.bubble && !perm.bubble.isDestroyed()) {
-      perm.bubble.setBounds({ x, y, width: bw, height: bh });
+      if (perm.manualPosition) {
+        perm.bubble.setBounds({ x: perm.manualPosition.x, y: perm.manualPosition.y, width: bw, height: bh });
+      } else {
+        perm.bubble.setBounds({ x, y, width: bw, height: bh });
+      }
     }
   }
+}
+
+function clampBubblePosition(x, y, width, height) {
+  if (!ctx.win || ctx.win.isDestroyed()) return { x, y };
+  const petBounds = ctx.win.getBounds();
+  const wa = ctx.getNearestWorkArea(petBounds.x + petBounds.width / 2, petBounds.y + petBounds.height / 2);
+  return {
+    x: Math.max(wa.x + 4, Math.min(x, wa.x + wa.width - width - 4)),
+    y: Math.max(wa.y + 4, Math.min(y, wa.y + wa.height - height - 4)),
+  };
 }
 
 function showPermissionBubble(permEntry) {
@@ -256,6 +270,16 @@ function handleBubbleHeight(event, height) {
   }
 }
 
+function handleMoveBubble(event, dx, dy) {
+  const senderWin = BrowserWindow.fromWebContents(event.sender);
+  const perm = pendingPermissions.find(p => p.bubble === senderWin);
+  if (!perm || !perm.bubble || perm.bubble.isDestroyed()) return;
+  const bounds = perm.bubble.getBounds();
+  const next = clampBubblePosition(bounds.x + Math.round(dx), bounds.y + Math.round(dy), bounds.width, bounds.height);
+  perm.manualPosition = { x: next.x, y: next.y };
+  perm.bubble.setBounds({ ...bounds, x: next.x, y: next.y });
+}
+
 function handleDecide(event, behavior) {
   // Identify which permission this bubble belongs to via sender webContents
   const senderWin = BrowserWindow.fromWebContents(event.sender);
@@ -362,7 +386,7 @@ return {
   showPermissionBubble, resolvePermissionEntry,
   sendPermissionResponse, repositionBubbles, permLog,
   pendingPermissions, PASSTHROUGH_TOOLS,
-  handleBubbleHeight, handleDecide, cleanup,
+  handleBubbleHeight, handleMoveBubble, handleDecide, cleanup,
   showCodexNotifyBubble, clearCodexNotifyBubbles,
 };
 

@@ -80,7 +80,10 @@ body { padding: 6px; }
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0;
+  cursor: grab;
+  padding-bottom: 2px;
 }
+.header.dragging { cursor: grabbing; }
 .header-title {
   font-size: 13px;
   font-weight: 600;
@@ -245,7 +248,11 @@ const btnAllow = document.getElementById("btnAllow");
 const btnDeny = document.getElementById("btnDeny");
 const suggestionsContainer = document.getElementById("suggestions");
 const headerTitle = document.querySelector(".header-title");
+const header = document.querySelector(".header");
 let elicitationMode = false;
+let dragActive = false;
+let dragX = 0;
+let dragY = 0;
 
 function formatDetail(name, input) {
   if (!input || typeof input !== "object") return "";
@@ -417,6 +424,36 @@ btnDeny.addEventListener("click", () => {
 
 window.bubbleAPI.onPermissionShow(show);
 window.bubbleAPI.onPermissionHide(hide);
+
+header.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
+  dragActive = true;
+  dragX = event.clientX;
+  dragY = event.clientY;
+  header.classList.add("dragging");
+  header.setPointerCapture(event.pointerId);
+});
+
+header.addEventListener("pointermove", (event) => {
+  if (!dragActive) return;
+  const dx = event.clientX - dragX;
+  const dy = event.clientY - dragY;
+  dragX = event.clientX;
+  dragY = event.clientY;
+  window.bubbleAPI.moveBy(dx, dy);
+});
+
+function endDrag(event) {
+  if (!dragActive) return;
+  dragActive = false;
+  header.classList.remove("dragging");
+  if (event && header.hasPointerCapture(event.pointerId)) {
+    header.releasePointerCapture(event.pointerId);
+  }
+}
+
+header.addEventListener("pointerup", endDrag);
+header.addEventListener("pointercancel", endDrag);
 </script>
 </body>
 </html>

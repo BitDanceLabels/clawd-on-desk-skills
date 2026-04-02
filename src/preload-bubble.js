@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld("bubbleAPI", {
   decide: (behavior) => ipcRenderer.send("permission-decide", behavior),
   onPermissionHide: (cb) => ipcRenderer.on("permission-hide", () => cb()),
   reportHeight: (h) => ipcRenderer.send("bubble-height", h),
+  moveBy: (dx, dy) => ipcRenderer.send("move-bubble-by", dx, dy),
 });

@@ -746,6 +746,7 @@ function createWindow() {
   });
 
   ipcMain.on("bubble-height", (event, height) => _perm.handleBubbleHeight(event, height));
+  ipcMain.on("move-bubble-by", (event, dx, dy) => _perm.handleMoveBubble(event, dx, dy));
   ipcMain.on("permission-decide", (event, behavior) => _perm.handleDecide(event, behavior));
 
   initFocusHelper();
