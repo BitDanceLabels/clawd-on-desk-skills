@@ -102,6 +102,10 @@ const i18n = {
     showPet: "Show Clawd",
     hidePet: "Hide Clawd",
     toggleShortcut: "Toggle Shortcut: {shortcut}",
+    rabbitMode: "Rabbit Mode 🐰",
+    rabbitInterval: "Rabbit Interval",
+    rabbitMinutes: "{n} min",
+    rabbitShowNow: "Show Rabbit Now",
     quit: "Quit",
   },
   zh: {
@@ -152,6 +156,10 @@ const i18n = {
     showPet: "显示 Clawd",
     hidePet: "隐藏 Clawd",
     toggleShortcut: "切换快捷键: {shortcut}",
+    rabbitMode: "兔兔模式 🐰",
+    rabbitInterval: "兔兔间隔",
+    rabbitMinutes: "{n} 分钟",
+    rabbitShowNow: "立即出现",
     quit: "退出",
   },
 };
@@ -160,6 +168,45 @@ module.exports = function initMenu(ctx) {
   // ── Translation helper ──
   function t(key) {
     return (i18n[ctx.lang] || i18n.en)[key] || key;
+  }
+
+  // ── Rabbit Mode menu item (shared by tray + context menu) ──
+  function buildRabbitMenuItem() {
+    const enabled = ctx.getRabbitEnabled ? ctx.getRabbitEnabled() : false;
+    const current = ctx.getRabbitIntervalMin ? ctx.getRabbitIntervalMin() : 60;
+    const intervals = ctx.rabbitAllowedIntervals || [30, 60, 90, 120];
+    return {
+      label: t("rabbitMode"),
+      submenu: [
+        {
+          label: t("rabbitMode"),
+          type: "checkbox",
+          checked: enabled,
+          click: (menuItem) => {
+            ctx.setRabbitEnabled(menuItem.checked);
+            rebuildAllMenus();
+          },
+        },
+        { type: "separator" },
+        {
+          label: t("rabbitInterval"),
+          submenu: intervals.map((m) => ({
+            label: t("rabbitMinutes").replace("{n}", m),
+            type: "radio",
+            checked: current === m,
+            click: () => {
+              ctx.setRabbitIntervalMin(m);
+              rebuildAllMenus();
+            },
+          })),
+        },
+        { type: "separator" },
+        {
+          label: t("rabbitShowNow"),
+          click: () => { try { ctx.rabbitShowNow && ctx.rabbitShowNow(); } catch {} },
+        },
+      ],
+    };
   }
 
   // ── System tray ──
@@ -270,6 +317,7 @@ module.exports = function initMenu(ctx) {
           buildTrayMenu();
         },
       },
+      buildRabbitMenuItem(),
       {
         label: t("showSessionId"),
         type: "checkbox",
@@ -494,6 +542,7 @@ module.exports = function initMenu(ctx) {
           buildTrayMenu();
         },
       },
+      buildRabbitMenuItem(),
       { type: "separator" },
       {
         label: `${t("sessions")} (${ctx.sessions.size})`,

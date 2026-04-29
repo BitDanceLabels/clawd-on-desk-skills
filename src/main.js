@@ -60,6 +60,8 @@ function savePrefs() {
     showTray, showDock,
     autoStartWithClaude, bubbleFollowPet, hideBubbles, showSessionId,
     ghostMode, assistantMode24x7,
+    rabbitEnabled: _rabbit ? _rabbit.getEnabled() : rabbitEnabled,
+    rabbitIntervalMin: _rabbit ? _rabbit.getIntervalMin() : rabbitIntervalMin,
   };
   try { fs.writeFileSync(PREFS_PATH, JSON.stringify(data)); } catch {}
 }
@@ -98,6 +100,8 @@ let showSessionId = false;
 let ghostMode = true;
 let assistantMode24x7 = false;
 let petHidden = false;
+let rabbitEnabled = false;
+let rabbitIntervalMin = 60;
 const DEFAULT_TOGGLE_SHORTCUT = "CommandOrControl+Shift+Alt+C";
 
 function togglePetVisibility() {
@@ -506,6 +510,12 @@ const _menuCtx = {
   clampToScreen,
   getNearestWorkArea,
   reapplyMacVisibility,
+  getRabbitEnabled: () => _rabbit.getEnabled(),
+  getRabbitIntervalMin: () => _rabbit.getIntervalMin(),
+  setRabbitEnabled: (v) => _rabbit.setEnabled(v),
+  setRabbitIntervalMin: (v) => _rabbit.setIntervalMin(v),
+  get rabbitAllowedIntervals() { return _rabbit.ALLOWED_INTERVALS; },
+  rabbitShowNow: () => _rabbit.showNow(),
 };
 const _menu = require("./menu")(_menuCtx);
 const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
@@ -520,6 +530,16 @@ const _updaterCtx = {
 };
 const _updater = require("./updater")(_updaterCtx);
 const { setupAutoUpdater, checkForUpdates, getUpdateMenuItem, getUpdateMenuLabel } = _updater;
+
+// ── Rabbit periodic popup — delegated to src/rabbit.js ──
+const _rabbitCtx = {
+  isDoNotDisturb: () => doNotDisturb,
+  getLang: () => lang,
+  savePrefs,
+  initialEnabled: rabbitEnabled,
+  initialIntervalMin: rabbitIntervalMin,
+};
+const _rabbit = require("./rabbit")(_rabbitCtx);
 
 function createWindow() {
   const prefs = loadPrefs();
@@ -536,6 +556,10 @@ function createWindow() {
   if (prefs && typeof prefs.showSessionId === "boolean") showSessionId = prefs.showSessionId;
   if (prefs && typeof prefs.ghostMode === "boolean") ghostMode = prefs.ghostMode;
   if (prefs && typeof prefs.assistantMode24x7 === "boolean") assistantMode24x7 = prefs.assistantMode24x7;
+  if (prefs && typeof prefs.rabbitEnabled === "boolean") rabbitEnabled = prefs.rabbitEnabled;
+  if (prefs && typeof prefs.rabbitIntervalMin === "number") rabbitIntervalMin = prefs.rabbitIntervalMin;
+  // Apply persisted rabbit prefs without triggering savePrefs recursion
+  _rabbit.configure({ enabled: rabbitEnabled, intervalMin: rabbitIntervalMin });
   // macOS: apply dock visibility (default hidden)
   if (isMac) {
     applyDockVisibility();
@@ -1006,6 +1030,9 @@ if (!gotTheLock) {
     // Auto-updater: setup event handlers + silent check after 5s
     setupAutoUpdater();
     setTimeout(() => checkForUpdates(false), 5000);
+
+    // Start rabbit popup scheduler (runs only if user enabled it via menu)
+    _rabbit.start();
   });
 
   app.on("before-quit", () => {
@@ -1018,6 +1045,7 @@ if (!gotTheLock) {
     _state.cleanup();
     _tick.cleanup();
     _mini.cleanup();
+    _rabbit.cleanup();
     if (_codexMonitor) _codexMonitor.stop();
     stopTopmostWatchdog();
     if (hwndRecoveryTimer) { clearTimeout(hwndRecoveryTimer); hwndRecoveryTimer = null; }
