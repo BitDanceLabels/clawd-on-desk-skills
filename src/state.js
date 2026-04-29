@@ -83,6 +83,43 @@ const STATE_PRIORITY = {
 
 const ONESHOT_STATES = new Set(["attention", "error", "sweeping", "notification", "carrying"]);
 
+// ── Character skin remap ──
+// Maps canonical Clawd SVG filenames to per-skin equivalents. Missing entries
+// fall back to the Clawd asset, so a skin only needs to ship the variants it
+// wants to override. Hit-box logic still uses the canonical name internally;
+// only the file sent to the renderer is rewritten.
+const SKIN_REMAP = {
+  bunny: {
+    "clawd-idle-follow.svg": "bunny-idle.svg",
+    "clawd-idle-look.svg": "bunny-idle.svg",
+    "clawd-idle-living.svg": "bunny-idle.svg",
+    "clawd-idle-reading.svg": "bunny-working.svg",
+    "clawd-working-typing.svg": "bunny-working.svg",
+    "clawd-working-thinking.svg": "bunny-working.svg",
+    "clawd-working-juggling.svg": "bunny-working.svg",
+    "clawd-working-debugger.svg": "bunny-working.svg",
+    "clawd-working-building.svg": "bunny-working.svg",
+    "clawd-working-conducting.svg": "bunny-working.svg",
+    "clawd-working-carrying.svg": "bunny-working.svg",
+    "clawd-working-sweeping.svg": "bunny-working.svg",
+    "clawd-idle-yawn.svg": "bunny-sleeping.svg",
+    "clawd-idle-doze.svg": "bunny-sleeping.svg",
+    "clawd-collapse-sleep.svg": "bunny-sleeping.svg",
+    "clawd-sleeping.svg": "bunny-sleeping.svg",
+    "clawd-wake.svg": "bunny-idle.svg",
+    "clawd-happy.svg": "bunny-attention.svg",
+    "clawd-notification.svg": "bunny-attention.svg",
+    "clawd-error.svg": "bunny-error.svg",
+  },
+};
+
+function remapSvgForSkin(svg, skin) {
+  if (!skin || skin === "clawd") return svg;
+  const map = SKIN_REMAP[skin];
+  if (!map) return svg;
+  return map[svg] || svg;
+}
+
 // Session display hints (e.g. Cursor tool_name → svg); basename only, allowlisted
 const DISPLAY_HINT_SVGS = new Set([
   "clawd-working-typing.svg",
@@ -226,9 +263,10 @@ function applyState(state, svgOverride) {
     currentHitBox = HIT_BOXES.default;
   }
 
-  ctx.sendToRenderer("state-change", state, svg);
+  const renderSvg = remapSvgForSkin(svg, ctx.getCharacterSkin && ctx.getCharacterSkin());
+  ctx.sendToRenderer("state-change", state, renderSvg);
   ctx.syncHitWin();
-  ctx.sendToHitWin("hit-state-sync", { currentSvg: svg });
+  ctx.sendToHitWin("hit-state-sync", { currentSvg: renderSvg });
   ctx.sendToHitWin("hit-cancel-reaction");
 
   if (state !== "idle" && state !== "mini-idle") {
@@ -684,6 +722,15 @@ function getCurrentSvg() { return currentSvg; }
 function getCurrentHitBox() { return currentHitBox; }
 function getStartupRecoveryActive() { return startupRecoveryActive; }
 
+// Re-emit current state through the skin remap so the renderer picks up the
+// new character without waiting for the next state transition.
+function repaintCurrentSkin() {
+  if (!currentSvg) return;
+  const renderSvg = remapSvgForSkin(currentSvg, ctx.getCharacterSkin && ctx.getCharacterSkin());
+  ctx.sendToRenderer("state-change", currentState, renderSvg);
+  ctx.sendToHitWin("hit-state-sync", { currentSvg: renderSvg });
+}
+
 function cleanup() {
   if (pendingTimer) clearTimeout(pendingTimer);
   if (autoReturnTimer) clearTimeout(autoReturnTimer);
@@ -700,8 +747,9 @@ return {
   getSvgOverride, cleanStaleSessions, startStartupRecovery,
   detectRunningAgentProcesses, buildSessionSubmenu,
   getCurrentState, getCurrentSvg, getCurrentHitBox, getStartupRecoveryActive,
+  repaintCurrentSkin,
   sessions, STATE_SVGS, STATE_PRIORITY, ONESHOT_STATES, SLEEP_SEQUENCE,
-  HIT_BOXES, WIDE_SVGS,
+  HIT_BOXES, WIDE_SVGS, SKIN_REMAP,
   cleanup,
 };
 

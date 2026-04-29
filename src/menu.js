@@ -106,6 +106,9 @@ const i18n = {
     rabbitInterval: "Rabbit Interval",
     rabbitMinutes: "{n} min",
     rabbitShowNow: "Show Rabbit Now",
+    character: "Character",
+    characterClawd: "Clawd (Default)",
+    characterBunny: "Bunny 🐰",
     quit: "Quit",
   },
   zh: {
@@ -160,6 +163,9 @@ const i18n = {
     rabbitInterval: "兔兔间隔",
     rabbitMinutes: "{n} 分钟",
     rabbitShowNow: "立即出现",
+    character: "角色",
+    characterClawd: "Clawd（默认）",
+    characterBunny: "小兔 🐰",
     quit: "退出",
   },
 };
@@ -168,6 +174,27 @@ module.exports = function initMenu(ctx) {
   // ── Translation helper ──
   function t(key) {
     return (i18n[ctx.lang] || i18n.en)[key] || key;
+  }
+
+  // ── Character skin menu item (shared by tray + context menu) ──
+  function buildCharacterMenuItem() {
+    const current = ctx.getCharacterSkin ? ctx.getCharacterSkin() : "clawd";
+    const skins = [
+      { id: "clawd", labelKey: "characterClawd" },
+      { id: "bunny", labelKey: "characterBunny" },
+    ];
+    return {
+      label: t("character"),
+      submenu: skins.map((s) => ({
+        label: t(s.labelKey),
+        type: "radio",
+        checked: current === s.id,
+        click: () => {
+          ctx.setCharacterSkin(s.id);
+          rebuildAllMenus();
+        },
+      })),
+    };
   }
 
   // ── Rabbit Mode menu item (shared by tray + context menu) ──
@@ -270,6 +297,8 @@ module.exports = function initMenu(ctx) {
   function buildTrayMenu() {
     if (!ctx.tray) return;
     const items = [
+      buildCharacterMenuItem(),
+      { type: "separator" },
       {
         label: ctx.doNotDisturb ? t("wake") : t("sleep"),
         click: () => ctx.doNotDisturb ? ctx.disableDoNotDisturb() : ctx.enableDoNotDisturb(),
@@ -492,6 +521,8 @@ module.exports = function initMenu(ctx) {
 
   function buildContextMenu() {
     const template = [
+      buildCharacterMenuItem(),
+      { type: "separator" },
       {
         label: t("size"),
         submenu: [

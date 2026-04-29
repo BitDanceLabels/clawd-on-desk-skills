@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45" width="45" height="45">
+  <defs>
+    <radialGradient id="bs-body" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="70%" stop-color="#f7f1ec"/>
+      <stop offset="100%" stop-color="#e6dcd2"/>
+    </radialGradient>
+    <radialGradient id="bs-ear" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffd1dc"/>
+      <stop offset="100%" stop-color="#f4a8b8"/>
+    </radialGradient>
+    <symbol id="pixel-z" viewBox="0 0 4 4">
+      <rect x="0" y="0" width="4" height="0.6" fill="#7da3d4"/>
+      <rect x="2.6" y="0.6" width="0.6" height="0.7" fill="#7da3d4"/>
+      <rect x="1.7" y="1.3" width="0.7" height="0.7" fill="#7da3d4"/>
+      <rect x="0.8" y="2.0" width="0.7" height="0.7" fill="#7da3d4"/>
+      <rect x="0" y="2.7" width="4" height="0.7" fill="#7da3d4"/>
+    </symbol>
+    <symbol id="pixel-z-small" viewBox="0 0 3 3">
+      <rect x="0" y="0" width="3" height="0.5" fill="#7da3d4"/>
+      <rect x="1.6" y="0.5" width="0.5" height="0.6" fill="#7da3d4"/>
+      <rect x="0.8" y="1.1" width="0.6" height="0.6" fill="#7da3d4"/>
+      <rect x="0" y="1.7" width="3" height="0.5" fill="#7da3d4"/>
+    </symbol>
+  </defs>
+
+  <ellipse cx="22.5" cy="40" rx="11" ry="1.5" fill="#000" opacity="0.18"/>
+
+  <!-- curled body -->
+  <ellipse cx="22.5" cy="34" rx="13" ry="6.5" fill="url(#bs-body)" stroke="#3a2a25" stroke-width="0.6">
+    <animateTransform attributeName="transform" type="translate"
+      values="0,0; 0,-0.4; 0,0" dur="2.8s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- ears laid back -->
+  <g transform="translate(15 30) rotate(-65)">
+    <ellipse cx="0" cy="0" rx="2.4" ry="6.5" fill="url(#bs-body)" stroke="#3a2a25" stroke-width="0.6"/>
+    <ellipse cx="0" cy="0.5" rx="1" ry="4.5" fill="url(#bs-ear)"/>
+  </g>
+  <g transform="translate(13 32) rotate(-80)">
+    <ellipse cx="0" cy="0" rx="2.4" ry="6.5" fill="url(#bs-body)" stroke="#3a2a25" stroke-width="0.6"/>
+    <ellipse cx="0" cy="0.5" rx="1" ry="4.5" fill="url(#bs-ear)"/>
+  </g>
+
+  <!-- head resting on paws -->
+  <circle cx="32" cy="32" r="6.5" fill="url(#bs-body)" stroke="#3a2a25" stroke-width="0.6"/>
+  <!-- closed eyes (sleepy curves) -->
+  <path d="M28.5,30.5 q1.5,1.2 3,0" fill="none" stroke="#3a2a25" stroke-width="0.55" stroke-linecap="round"/>
+  <path d="M33,30.5 q1.5,1.2 3,0" fill="none" stroke="#3a2a25" stroke-width="0.55" stroke-linecap="round"/>
+  <!-- nose -->
+  <path d="M30.7,33 Q32,32.2 33.3,33 Q32,34 30.7,33 Z" fill="#ff8aa6" stroke="#3a2a25" stroke-width="0.3"/>
+  <!-- mouth (sleepy smile) -->
+  <path d="M31.5,34 q0.5,0.6 1,0" fill="none" stroke="#3a2a25" stroke-width="0.4" stroke-linecap="round"/>
+  <!-- cheek blush -->
+  <ellipse cx="27.8" cy="33" rx="1.5" ry="1" fill="#ffb3c1" opacity="0.6"/>
+  <ellipse cx="36.2" cy="33" rx="1.5" ry="1" fill="#ffb3c1" opacity="0.6"/>
+
+  <!-- floating Zzz -->
+  <g>
+    <use xlink:href="#pixel-z" x="36" y="14" width="4" height="4">
+      <animate attributeName="y" values="14;9;14" dur="2.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;0" dur="2.2s" repeatCount="indefinite"/>
+    </use>
+    <use xlink:href="#pixel-z-small" x="40" y="18" width="3" height="3">
+      <animate attributeName="y" values="18;13;18" dur="2.2s" begin="0.7s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;0" dur="2.2s" begin="0.7s" repeatCount="indefinite"/>
+    </use>
+  </g>
+</svg>

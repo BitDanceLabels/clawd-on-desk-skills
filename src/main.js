@@ -62,6 +62,7 @@ function savePrefs() {
     ghostMode, assistantMode24x7,
     rabbitEnabled: _rabbit ? _rabbit.getEnabled() : rabbitEnabled,
     rabbitIntervalMin: _rabbit ? _rabbit.getIntervalMin() : rabbitIntervalMin,
+    characterSkin,
   };
   try { fs.writeFileSync(PREFS_PATH, JSON.stringify(data)); } catch {}
 }
@@ -102,6 +103,7 @@ let assistantMode24x7 = false;
 let petHidden = false;
 let rabbitEnabled = false;
 let rabbitIntervalMin = 60;
+let characterSkin = "clawd";  // "clawd" | "bunny" — switches the pet character
 const DEFAULT_TOGGLE_SHORTCUT = "CommandOrControl+Shift+Alt+C";
 
 function togglePetVisibility() {
@@ -299,6 +301,7 @@ const _stateCtx = {
   sendToRenderer,
   sendToHitWin,
   syncHitWin,
+  getCharacterSkin: () => characterSkin,
   t: (key) => t(key),
   focusTerminalWindow: (...args) => focusTerminalWindow(...args),
   resolvePermissionEntry: (...args) => resolvePermissionEntry(...args),
@@ -311,7 +314,15 @@ const _state = require("./state")(_stateCtx);
 const { setState, applyState, updateSession, resolveDisplayState, getSvgOverride,
         enableDoNotDisturb, disableDoNotDisturb, startStaleCleanup, stopStaleCleanup,
         startWakePoll, stopWakePoll, detectRunningAgentProcesses, buildSessionSubmenu,
+        repaintCurrentSkin,
         startStartupRecovery: _startStartupRecovery } = _state;
+
+function setCharacterSkin(skinId) {
+  if (typeof skinId !== "string" || skinId === characterSkin) return;
+  characterSkin = skinId;
+  repaintCurrentSkin();
+  savePrefs();
+}
 const sessions = _state.sessions;
 const STATE_SVGS = _state.STATE_SVGS;
 const STATE_PRIORITY = _state.STATE_PRIORITY;
@@ -516,6 +527,8 @@ const _menuCtx = {
   setRabbitIntervalMin: (v) => _rabbit.setIntervalMin(v),
   get rabbitAllowedIntervals() { return _rabbit.ALLOWED_INTERVALS; },
   rabbitShowNow: () => _rabbit.showNow(),
+  getCharacterSkin: () => characterSkin,
+  setCharacterSkin,
 };
 const _menu = require("./menu")(_menuCtx);
 const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
@@ -558,6 +571,7 @@ function createWindow() {
   if (prefs && typeof prefs.assistantMode24x7 === "boolean") assistantMode24x7 = prefs.assistantMode24x7;
   if (prefs && typeof prefs.rabbitEnabled === "boolean") rabbitEnabled = prefs.rabbitEnabled;
   if (prefs && typeof prefs.rabbitIntervalMin === "number") rabbitIntervalMin = prefs.rabbitIntervalMin;
+  if (prefs && typeof prefs.characterSkin === "string") characterSkin = prefs.characterSkin;
   // Apply persisted rabbit prefs without triggering savePrefs recursion
   _rabbit.configure({ enabled: rabbitEnabled, intervalMin: rabbitIntervalMin });
   // macOS: apply dock visibility (default hidden)
