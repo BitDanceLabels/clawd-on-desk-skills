@@ -16,6 +16,14 @@ let miniLeftFlip = false;
 window.electronAPI.onDndChange((enabled) => { dndEnabled = enabled; });
 window.electronAPI.onAppearanceChange((appearance) => applyAppearance(appearance || {}));
 
+// Skin (SVG / Live2D / VRM) switching driven by main → skin-manager.
+if (window.electronAPI.onSkinChange) {
+  window.electronAPI.onSkinChange(async (skin) => {
+    if (!window.ClawdSkinManager) return;
+    await window.ClawdSkinManager.setSkin(skin);
+  });
+}
+
 window.electronAPI.onMiniModeChange((enabled, edge) => {
   miniLeftFlip = enabled && edge === "left";
   container.classList.toggle("mini-left", miniLeftFlip);
@@ -201,6 +209,13 @@ currentIdleSvg = currentDisplayedSvg;
 window.electronAPI.onStateChange((state, svg) => {
   // Main process state change → cancel any active click reaction
   cancelReaction();
+
+  // Live2D / VRM skins handle state via their own renderers.
+  // SVG path continues below.
+  if (window.ClawdSkinManager) {
+    window.ClawdSkinManager.dispatchState(state, svg);
+    if (!window.ClawdSkinManager.isSvgActive()) return;
+  }
 
   if (pendingNext) {
     pendingNext.remove();

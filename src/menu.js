@@ -109,6 +109,11 @@ const i18n = {
     character: "Character",
     characterClawd: "Clawd (Default)",
     characterBunny: "Bunny 🐰",
+    characterLive2D: "Live2D Characters",
+    characterVRM: "VRM 3D Characters",
+    characterAddLive2D: "Add Live2D Folder…",
+    characterAddVRM: "Add VRM Folder…",
+    characterEmpty: "(none yet — drop files in folder)",
     quit: "Quit",
   },
   zh: {
@@ -166,6 +171,11 @@ const i18n = {
     character: "角色",
     characterClawd: "Clawd（默认）",
     characterBunny: "小兔 🐰",
+    characterLive2D: "Live2D 角色",
+    characterVRM: "VRM 3D 角色",
+    characterAddLive2D: "添加 Live2D 文件夹…",
+    characterAddVRM: "添加 VRM 文件夹…",
+    characterEmpty: "（暂无 — 请将文件放入文件夹）",
     quit: "退出",
   },
 };
@@ -179,21 +189,55 @@ module.exports = function initMenu(ctx) {
   // ── Character skin menu item (shared by tray + context menu) ──
   function buildCharacterMenuItem() {
     const current = ctx.getCharacterSkin ? ctx.getCharacterSkin() : "clawd";
-    const skins = [
+    const builtinSkins = [
       { id: "clawd", labelKey: "characterClawd" },
       { id: "bunny", labelKey: "characterBunny" },
     ];
+
+    const lists = ctx.listAvailableSkins ? ctx.listAvailableSkins() : { live2d: [], vrm: [] };
+
+    const builtinItems = builtinSkins.map((s) => ({
+      label: t(s.labelKey),
+      type: "radio",
+      checked: current === s.id,
+      click: () => { ctx.setCharacterSkin(s.id); rebuildAllMenus(); },
+    }));
+
+    const live2dItems = lists.live2d.length
+      ? lists.live2d.map((s) => ({
+          label: s.name,
+          type: "radio",
+          checked: current === s.id,
+          click: () => { ctx.setCharacterSkin(s.id); rebuildAllMenus(); },
+        }))
+      : [{ label: t("characterEmpty"), enabled: false }];
+
+    const vrmItems = lists.vrm.length
+      ? lists.vrm.map((s) => ({
+          label: s.name,
+          type: "radio",
+          checked: current === s.id,
+          click: () => { ctx.setCharacterSkin(s.id); rebuildAllMenus(); },
+        }))
+      : [{ label: t("characterEmpty"), enabled: false }];
+
     return {
       label: t("character"),
-      submenu: skins.map((s) => ({
-        label: t(s.labelKey),
-        type: "radio",
-        checked: current === s.id,
-        click: () => {
-          ctx.setCharacterSkin(s.id);
-          rebuildAllMenus();
+      submenu: [
+        ...builtinItems,
+        { type: "separator" },
+        { label: t("characterLive2D"), submenu: live2dItems },
+        { label: t("characterVRM"), submenu: vrmItems },
+        { type: "separator" },
+        {
+          label: t("characterAddLive2D"),
+          click: () => { try { ctx.openSkinAssetsFolder && ctx.openSkinAssetsFolder("live2d"); } catch {} },
         },
-      })),
+        {
+          label: t("characterAddVRM"),
+          click: () => { try { ctx.openSkinAssetsFolder && ctx.openSkinAssetsFolder("vrm"); } catch {} },
+        },
+      ],
     };
   }
 

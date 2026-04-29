@@ -317,11 +317,27 @@ const { setState, applyState, updateSession, resolveDisplayState, getSvgOverride
         repaintCurrentSkin,
         startStartupRecovery: _startStartupRecovery } = _state;
 
+const _skinScanner = require("./skin-scanner");
+
 function setCharacterSkin(skinId) {
   if (typeof skinId !== "string" || skinId === characterSkin) return;
   characterSkin = skinId;
-  repaintCurrentSkin();
+  // Resolve skin descriptor and notify renderer (Live2D/VRM use IPC, SVG repaints state)
+  const descriptor = _skinScanner.findById(skinId) || { id: "clawd", type: "svg" };
+  sendToRenderer("skin-change", descriptor);
+  if (descriptor.type === "svg") {
+    repaintCurrentSkin();
+  }
   savePrefs();
+}
+
+function listAvailableSkins() {
+  const builtin = [
+    { id: "clawd", type: "svg", name: "Clawd" },
+    { id: "bunny", type: "svg", name: "Bunny" },
+  ];
+  const scanned = _skinScanner.scanAll();
+  return { builtin, live2d: scanned.live2d, vrm: scanned.vrm };
 }
 const sessions = _state.sessions;
 const STATE_SVGS = _state.STATE_SVGS;
@@ -529,6 +545,16 @@ const _menuCtx = {
   rabbitShowNow: () => _rabbit.showNow(),
   getCharacterSkin: () => characterSkin,
   setCharacterSkin,
+  listAvailableSkins: () => listAvailableSkins(),
+  openSkinAssetsFolder: (kind) => {
+    const { shell } = require("electron");
+    const root = _skinScanner.getAssetRoot();
+    const target = kind === "vrm"
+      ? path.join(root, "vrm")
+      : path.join(root, "live2d");
+    try { fs.mkdirSync(target, { recursive: true }); } catch {}
+    shell.openPath(target);
+  },
 };
 const _menu = require("./menu")(_menuCtx);
 const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
@@ -796,6 +822,9 @@ function createWindow() {
   // Also handles crash recovery (render-process-gone → reload)
   win.webContents.on("did-finish-load", () => {
     sendAppearance();
+    // Restore Live2D / VRM skin if user had one selected last session
+    const restored = _skinScanner.findById(characterSkin) || { id: "clawd", type: "svg" };
+    sendToRenderer("skin-change", restored);
     if (_mini.getMiniMode()) {
       sendToRenderer("mini-mode-change", true, _mini.getMiniEdge());
     sendToHitWin("hit-state-sync", { miniMode: true });

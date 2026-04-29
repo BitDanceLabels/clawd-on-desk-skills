@@ -15,4 +15,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Render window → main (cursor polling control during reactions)
   pauseCursorPolling: () => ipcRenderer.send("pause-cursor-polling"),
   resumeFromReaction: () => ipcRenderer.send("resume-from-reaction"),
+  // Live2D / VRM skin switching
+  onSkinChange: (cb) => ipcRenderer.on("skin-change", (_, skin) => cb(skin)),
 });
