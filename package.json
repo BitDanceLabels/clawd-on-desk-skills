@@ -1,6 +1,6 @@
 {
   "name": "clawd-on-desk",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "A desktop pet that reacts to your Claude Code sessions in real-time.",
   "main": "src/main.js",
   "scripts": {
@@ -11,6 +11,8 @@
     "build:linux": "npm run build:renderer && electron-builder --linux",
     "build:all": "npm run build:renderer && electron-builder --win --mac --linux",
     "setup:live2d": "node scripts/setup-live2d.js",
+    "setup:demo-models": "node scripts/setup-demo-models.js",
+    "setup:all": "node scripts/setup-live2d.js --yes && node scripts/setup-demo-models.js --yes",
     "test": "node --test test/*.test.js",
     "install:gemini-hooks": "node hooks/gemini-install.js",
     "install:cursor-hooks": "node hooks/cursor-install.js"
