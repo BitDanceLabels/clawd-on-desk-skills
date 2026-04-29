@@ -154,6 +154,13 @@ function unregisterToggleShortcut() {
 
 function sendToRenderer(channel, ...args) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
+  if (channel === "state-change" && _clawdbot) {
+    try {
+      const sid = _state ? _state.getActiveSessionId?.() : null;
+      const sessionData = sid && sessions ? sessions.get(sid) : null;
+      _clawdbot.onStateChange(args[0], sessionData ? { id: sid, ...sessionData } : null);
+    } catch {}
+  }
 }
 function sendToHitWin(channel, ...args) {
   if (hitWin && !hitWin.isDestroyed()) hitWin.webContents.send(channel, ...args);
@@ -411,6 +418,34 @@ const _serverCtx = {
 const _server = require("./server")(_serverCtx);
 const { startHttpServer, getHookServerPort, syncClawdHooks } = _server;
 
+// ── Bumbee gateway / clawdbot / skills / intelligent-layer integration ──
+let _clawdbot = null;
+let _gateway = null;
+let _skills = null;
+let _smart = null;
+
+function showExternalNotification({ sessionId, title, message, level, timeoutMs }) {
+  // Reuse Codex notify bubble pattern (no Allow/Deny, auto-expire)
+  try {
+    if (typeof showCodexNotifyBubble === "function") {
+      showCodexNotifyBubble({
+        sessionId: sessionId || "external",
+        command: `${title}\n${message}`.slice(0, 500),
+        timeoutMs: timeoutMs || 8000,
+      });
+    }
+  } catch (e) {
+    console.warn("Clawd: failed to show external notification:", e.message);
+  }
+}
+
+// Expose to server context
+_serverCtx.showExternalNotification = showExternalNotification;
+Object.defineProperty(_serverCtx, "gateway", { get: () => _gateway, configurable: true });
+Object.defineProperty(_serverCtx, "clawdbot", { get: () => _clawdbot, configurable: true });
+Object.defineProperty(_serverCtx, "skills", { get: () => _skills, configurable: true });
+Object.defineProperty(_serverCtx, "smart", { get: () => _smart, configurable: true });
+
 // ── alwaysOnTop recovery (Windows DWM / Shell can strip TOPMOST flag) ──
 // The "always-on-top-changed" event only fires from Electron's own SetAlwaysOnTop
 // path — it does NOT fire when Explorer/Start menu/Gallery silently reorder windows.
@@ -555,6 +590,11 @@ const _menuCtx = {
     try { fs.mkdirSync(target, { recursive: true }); } catch {}
     shell.openPath(target);
   },
+  // Bumbee integration accessors for menu
+  getGateway: () => _gateway,
+  getClawdbot: () => _clawdbot,
+  getSkills: () => _skills,
+  getSmart: () => _smart,
 };
 const _menu = require("./menu")(_menuCtx);
 const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
@@ -1082,6 +1122,32 @@ if (!gotTheLock) {
 
     // Start rabbit popup scheduler (runs only if user enabled it via menu)
     _rabbit.start();
+
+    // ── Bumbee integration: skills loader + clawdbot bridge + gateway register + smart layer ──
+    try {
+      _clawdbot = require("./clawdbot-bridge")({});
+      _clawdbot.start();
+    } catch (e) {
+      console.warn("Clawd: clawdbot bridge init failed:", e.message);
+    }
+    try {
+      _skills = require("./skills-loader")({ clawdbot: _clawdbot });
+      _skills.start();
+    } catch (e) {
+      console.warn("Clawd: skills loader init failed:", e.message);
+    }
+    try {
+      _smart = require("./intelligent-layer")({});
+    } catch (e) {
+      console.warn("Clawd: intelligent layer init failed:", e.message);
+    }
+    try {
+      _gateway = require("./gateway-client")({ upstreamPort: getHookServerPort() });
+      // Defer 2s to ensure local HTTP server is listening before announcing to gateway
+      setTimeout(() => _gateway.start(), 2000);
+    } catch (e) {
+      console.warn("Clawd: gateway client init failed:", e.message);
+    }
   });
 
   app.on("before-quit", () => {
@@ -1096,6 +1162,8 @@ if (!gotTheLock) {
     _mini.cleanup();
     _rabbit.cleanup();
     if (_codexMonitor) _codexMonitor.stop();
+    if (_gateway) { try { _gateway.cleanup(); } catch {} }
+    if (_clawdbot) { try { _clawdbot.cleanup(); } catch {} }
     stopTopmostWatchdog();
     if (hwndRecoveryTimer) { clearTimeout(hwndRecoveryTimer); hwndRecoveryTimer = null; }
     _focus.cleanup();

@@ -114,6 +114,20 @@ const i18n = {
     characterAddLive2D: "Add Live2D Folder…",
     characterAddVRM: "Add VRM Folder…",
     characterEmpty: "(none yet — drop files in folder)",
+    bumbee: "Bumbee Hub",
+    bumbeeStatus: "Connection Status…",
+    bumbeeReloadSkills: "Reload Skills ({n})",
+    bumbeeOpenSkillsFolder: "Open Skills Folder",
+    bumbeeRegister: "Re-register with Gateway",
+    bumbeeSmartHint: "Smart endpoints: POST /chat, POST /skills/trigger",
+    bumbeeStatusTitle: "Bumbee integrations",
+    bumbeeStatusGw: "Gateway: {url} — {state}",
+    bumbeeStatusBot: "Clawdbot: {url} — {state}",
+    bumbeeStatusSkills: "Skills: {n} loaded",
+    bumbeeStatusSmart: "Smart layer: {state} ({endpoint})",
+    bumbeeStateOk: "connected",
+    bumbeeStateOff: "offline",
+    bumbeeStateDisabled: "disabled",
     quit: "Quit",
   },
   zh: {
@@ -173,6 +187,20 @@ const i18n = {
     characterBunny: "小兔 🐰",
     characterLive2D: "Live2D 角色",
     characterVRM: "VRM 3D 角色",
+    bumbee: "Bumbee 集成",
+    bumbeeStatus: "连接状态…",
+    bumbeeReloadSkills: "重载技能 ({n})",
+    bumbeeOpenSkillsFolder: "打开技能目录",
+    bumbeeRegister: "重新注册到网关",
+    bumbeeSmartHint: "智能接口: POST /chat, POST /skills/trigger",
+    bumbeeStatusTitle: "Bumbee 集成状态",
+    bumbeeStatusGw: "网关: {url} — {state}",
+    bumbeeStatusBot: "Clawdbot: {url} — {state}",
+    bumbeeStatusSkills: "技能: 已加载 {n}",
+    bumbeeStatusSmart: "智能层: {state} ({endpoint})",
+    bumbeeStateOk: "已连接",
+    bumbeeStateOff: "离线",
+    bumbeeStateDisabled: "已禁用",
     characterAddLive2D: "添加 Live2D 文件夹…",
     characterAddVRM: "添加 VRM 文件夹…",
     characterEmpty: "（暂无 — 请将文件放入文件夹）",
@@ -338,6 +366,109 @@ module.exports = function initMenu(ctx) {
     ctx.savePrefs();
   }
 
+  function buildBumbeeMenuItem() {
+    const gw = ctx.getGateway && ctx.getGateway();
+    const bot = ctx.getClawdbot && ctx.getClawdbot();
+    const skills = ctx.getSkills && ctx.getSkills();
+    const smart = ctx.getSmart && ctx.getSmart();
+
+    const stateLabel = (entry) => {
+      if (!entry) return t("bumbeeStateOff");
+      const s = entry.status();
+      if (!s.enabled) return t("bumbeeStateDisabled");
+      if (s.registered === true || s.connected === true) return t("bumbeeStateOk");
+      return t("bumbeeStateOff");
+    };
+
+    const submenu = [
+      {
+        label: t("bumbeeStatus"),
+        click: () => {
+          const { dialog } = require("electron");
+          const lines = [];
+          if (gw) {
+            const s = gw.status();
+            lines.push(t("bumbeeStatusGw").replace("{url}", s.baseUrl).replace("{state}",
+              s.enabled ? (s.registered ? t("bumbeeStateOk") : t("bumbeeStateOff")) : t("bumbeeStateDisabled")));
+          }
+          if (bot) {
+            const s = bot.status();
+            lines.push(t("bumbeeStatusBot").replace("{url}", s.baseUrl).replace("{state}",
+              s.enabled ? (s.connected ? t("bumbeeStateOk") : t("bumbeeStateOff")) : t("bumbeeStateDisabled")));
+          }
+          if (skills) {
+            const s = skills.status();
+            lines.push(t("bumbeeStatusSkills").replace("{n}", s.count));
+          }
+          if (smart) {
+            const s = smart.status();
+            lines.push(t("bumbeeStatusSmart")
+              .replace("{state}", s.enabled ? t("bumbeeStateOk") : t("bumbeeStateDisabled"))
+              .replace("{endpoint}", s.chatEndpoint));
+          }
+          lines.push("");
+          lines.push(t("bumbeeSmartHint"));
+          dialog.showMessageBox({
+            type: "info",
+            title: t("bumbeeStatusTitle"),
+            message: t("bumbeeStatusTitle"),
+            detail: lines.join("\n"),
+            buttons: ["OK"],
+          });
+        },
+      },
+      { type: "separator" },
+      {
+        label: t("bumbeeReloadSkills").replace("{n}", skills ? skills.count() : 0),
+        enabled: !!skills,
+        click: () => {
+          if (skills) {
+            const r = skills.reload();
+            buildContextMenu();
+            buildTrayMenu();
+            try {
+              const { dialog } = require("electron");
+              dialog.showMessageBox({
+                type: "info",
+                title: t("bumbee"),
+                message: t("bumbeeStatusSkills").replace("{n}", r.count),
+                buttons: ["OK"],
+              });
+            } catch {}
+          }
+        },
+      },
+      {
+        label: t("bumbeeOpenSkillsFolder"),
+        enabled: !!skills,
+        click: () => {
+          if (skills) {
+            const { shell } = require("electron");
+            shell.openPath(skills.status().dir);
+          }
+        },
+      },
+      { type: "separator" },
+      {
+        label: t("bumbeeRegister"),
+        enabled: !!gw,
+        click: () => {
+          if (gw) gw.register().then(() => { buildContextMenu(); buildTrayMenu(); });
+        },
+      },
+    ];
+
+    const stateBadges = [
+      gw ? `gw:${stateLabel(gw)}` : null,
+      bot ? `bot:${stateLabel(bot)}` : null,
+    ].filter(Boolean).join(" • ");
+
+    return {
+      label: stateBadges ? `${t("bumbee")} (${stateBadges})` : t("bumbee"),
+      submenu,
+    };
+  }
+
   function buildTrayMenu() {
     if (!ctx.tray) return;
     const items = [
@@ -391,6 +522,7 @@ module.exports = function initMenu(ctx) {
         },
       },
       buildRabbitMenuItem(),
+      buildBumbeeMenuItem(),
       {
         label: t("showSessionId"),
         type: "checkbox",
@@ -618,6 +750,7 @@ module.exports = function initMenu(ctx) {
         },
       },
       buildRabbitMenuItem(),
+      buildBumbeeMenuItem(),
       { type: "separator" },
       {
         label: `${t("sessions")} (${ctx.sessions.size})`,

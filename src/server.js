@@ -1,10 +1,41 @@
-// src/server.js — HTTP server + routes (/state, /permission, /health)
+// src/server.js — HTTP server + routes (/state, /permission, /health, /notification, /sessions, /skills, /skills/trigger, /chat)
 // Extracted from main.js L1337-1528
 
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+
+const APP_VERSION = (() => {
+  try { return require("../package.json").version || "0.0.0"; } catch { return "0.0.0"; }
+})();
+
+function readJson(req, limit, cb) {
+  let body = "";
+  let size = 0;
+  let tooLarge = false;
+  req.on("data", (chunk) => {
+    if (tooLarge) return;
+    size += chunk.length;
+    if (size > limit) { tooLarge = true; return; }
+    body += chunk;
+  });
+  req.on("end", () => {
+    if (tooLarge) return cb(new Error("payload too large"));
+    if (!body) return cb(null, {});
+    try { cb(null, JSON.parse(body)); }
+    catch { cb(new Error("bad json")); }
+  });
+}
+
+function jsonResponse(res, status, payload) {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+  });
+  res.end(body);
+}
 const {
   CLAWD_SERVER_HEADER,
   CLAWD_SERVER_ID,
@@ -291,6 +322,85 @@ function startHttpServer() {
         } catch {
           res.writeHead(400);
           res.end("bad json");
+        }
+      });
+    } else if (req.method === "GET" && req.url === "/health") {
+      const sessionList = ctx.sessions ? Array.from(ctx.sessions.keys()) : [];
+      jsonResponse(res, 200, {
+        ok: true,
+        app: CLAWD_SERVER_ID,
+        version: APP_VERSION,
+        port: getHookServerPort(),
+        sessions: sessionList.length,
+        gateway: ctx.gateway ? ctx.gateway.status() : { registered: false },
+        clawdbot: ctx.clawdbot ? ctx.clawdbot.status() : { connected: false },
+        skills: ctx.skills ? ctx.skills.count() : 0,
+      });
+    } else if (req.method === "POST" && req.url === "/notification") {
+      readJson(req, 64 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        const title = typeof data.title === "string" ? data.title.slice(0, 200) : "Notification";
+        const message = typeof data.message === "string" ? data.message.slice(0, 2000) : "";
+        const level = ["info", "success", "warning", "error"].includes(data.level) ? data.level : "info";
+        const sessionId = typeof data.session_id === "string" ? data.session_id : "external";
+        const timeoutMs = Number.isFinite(data.timeout_ms) ? Math.min(60000, Math.max(1000, data.timeout_ms)) : 8000;
+        const targetState = level === "error" ? "error" : "notification";
+        try {
+          ctx.updateSession(sessionId, targetState, "Notification", null, "", null, null, null, "external", null, false, null);
+          if (typeof ctx.showExternalNotification === "function") {
+            ctx.showExternalNotification({ sessionId, title, message, level, timeoutMs });
+          }
+          jsonResponse(res, 200, { ok: true });
+        } catch (e) {
+          jsonResponse(res, 500, { ok: false, error: e.message });
+        }
+      });
+    } else if (req.method === "GET" && req.url === "/sessions") {
+      const out = [];
+      if (ctx.sessions) {
+        for (const [id, s] of ctx.sessions.entries()) {
+          out.push({
+            id,
+            state: s.state || "idle",
+            agent_id: s.agentId || s.agent_id || "claude-code",
+            cwd: s.cwd || "",
+            event: s.event || s.lastEvent || null,
+            updated_at: s.updatedAt || s.lastUpdate || null,
+            host: s.host || null,
+            headless: !!s.headless,
+          });
+        }
+      }
+      jsonResponse(res, 200, { ok: true, count: out.length, sessions: out });
+    } else if (req.method === "GET" && req.url === "/skills") {
+      if (!ctx.skills) return jsonResponse(res, 200, { ok: true, count: 0, skills: [] });
+      const list = ctx.skills.list();
+      jsonResponse(res, 200, { ok: true, count: list.length, skills: list });
+    } else if (req.method === "POST" && req.url === "/skills/trigger") {
+      readJson(req, 64 * 1024, async (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.skills) return jsonResponse(res, 503, { ok: false, error: "skills loader not available" });
+        const skill = typeof data.skill === "string" ? data.skill : null;
+        if (!skill) return jsonResponse(res, 400, { ok: false, error: "missing skill name" });
+        try {
+          const result = await ctx.skills.trigger(skill, data.args || {});
+          jsonResponse(res, 200, { ok: true, skill, result });
+        } catch (e) {
+          jsonResponse(res, 500, { ok: false, error: e.message });
+        }
+      });
+    } else if (req.method === "POST" && req.url === "/chat") {
+      readJson(req, 128 * 1024, async (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.smart) return jsonResponse(res, 503, { ok: false, error: "intelligent layer not available" });
+        const mode = typeof data.mode === "string" ? data.mode : "general";
+        const query = typeof data.query === "string" ? data.query.trim() : "";
+        if (!query) return jsonResponse(res, 400, { ok: false, error: "missing query" });
+        try {
+          const result = await ctx.smart.chat({ mode, query, context: data.context || null });
+          jsonResponse(res, 200, { ok: true, mode, ...result });
+        } catch (e) {
+          jsonResponse(res, 500, { ok: false, error: e.message });
         }
       });
     } else {
