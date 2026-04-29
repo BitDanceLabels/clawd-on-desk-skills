@@ -5,6 +5,8 @@
   "main": "src/main.js",
   "scripts": {
     "start": "node launch.js",
+    "dev": "cross-env CLAWD_DEVTOOLS=1 ELECTRON_ENABLE_LOGGING=1 node launch.js",
+    "dev:quiet": "cross-env CLAWD_DEVTOOLS=0 node launch.js",
     "build:renderer": "node scripts/build-renderer-bundles.js",
     "build": "npm run build:renderer && electron-builder --win",
     "build:mac": "npm run build:renderer && electron-builder --mac",
@@ -115,6 +117,7 @@
     ]
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "electron": "^41.0.2",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0"

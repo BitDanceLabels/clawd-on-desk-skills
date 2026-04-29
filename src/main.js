@@ -668,6 +668,12 @@ function createWindow() {
     win.setAlwaysOnTop(true, WIN_TOPMOST_LEVEL);
   }
   win.loadFile(path.join(__dirname, "index.html"));
+  // Dev mode: auto-open DevTools when CLAWD_DEVTOOLS=1 or running unpackaged.
+  // The Detached mode keeps DevTools in its own window so the transparent
+  // pet window stays interactive.
+  if (process.env.CLAWD_DEVTOOLS === "1" || (!app.isPackaged && process.env.CLAWD_DEVTOOLS !== "0")) {
+    try { win.webContents.openDevTools({ mode: "detach" }); } catch {}
+  }
   win.showInactive();
   // Linux WMs may reset skipTaskbar after showInactive — re-apply explicitly
   if (isLinux) win.setSkipTaskbar(true);
