@@ -12,6 +12,9 @@
 
 const http = require("http");
 const https = require("https");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const { URL } = require("url");
 
 const WIKI_HOSTS = {
@@ -104,6 +107,40 @@ async function wiktionaryDefinition(word, lang) {
   }
 }
 
+function readTokenFile(filePath) {
+  if (!filePath || typeof filePath !== "string") return "";
+  try {
+    return fs.readFileSync(filePath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function resolveChatAuthToken(config) {
+  const envToken = process.env.SMART_CHAT_AUTH_TOKEN || process.env.CLAWDBOT_GATEWAY_TOKEN || process.env.GATEWAY_API_KEY || "";
+  if (config.chatAuthToken || envToken) {
+    return {
+      token: config.chatAuthToken || envToken,
+      source: config.chatAuthToken ? "config" : "env",
+    };
+  }
+
+  const candidateFiles = [
+    config.chatAuthTokenFile,
+    process.env.SMART_CHAT_AUTH_TOKEN_FILE,
+    process.env.CLAWDBOT_GATEWAY_TOKEN_FILE,
+    process.env.GATEWAY_API_KEY_FILE,
+    path.join(os.homedir(), ".clawd-on-desk", "bumbee-gateway-token.txt"),
+    path.join(os.homedir(), ".bumbee", "bumbee-gateway-token.txt"),
+  ].filter(Boolean);
+
+  for (const file of candidateFiles) {
+    const token = readTokenFile(file);
+    if (token) return { token, source: file };
+  }
+  return { token: "", source: null };
+}
+
 module.exports = function initIntelligentLayer(opts) {
   const config = opts || {};
   const gatewayUrl = (config.gatewayUrl || process.env.GATEWAY_URL || "https://gateway.bumbee.asia").replace(/\/$/, "");
@@ -111,7 +148,8 @@ module.exports = function initIntelligentLayer(opts) {
   // Endpoint backend chat — co the override qua env.
   const chatEndpoint = config.chatEndpoint || process.env.SMART_CHAT_ENDPOINT || "/clawdbot/bumbee-desk/v1/chat/completions";
   const chatModel = config.chatModel || process.env.SMART_CHAT_MODEL || "clawdbot";
-  const chatAuthToken = config.chatAuthToken || process.env.SMART_CHAT_AUTH_TOKEN || process.env.CLAWDBOT_GATEWAY_TOKEN || process.env.GATEWAY_API_KEY || "";
+  const chatAuth = resolveChatAuthToken(config);
+  const chatAuthToken = chatAuth.token;
 
   async function gatewayChat(prompt, system, mode, context) {
     const url = `${gatewayUrl}${chatEndpoint}`;
@@ -232,7 +270,14 @@ module.exports = function initIntelligentLayer(opts) {
   }
 
   function status() {
-    return { enabled, gatewayUrl, chatEndpoint, chatModel, authenticated: !!chatAuthToken };
+    return {
+      enabled,
+      gatewayUrl,
+      chatEndpoint,
+      chatModel,
+      authenticated: !!chatAuthToken,
+      authSource: chatAuthToken ? chatAuth.source : null,
+    };
   }
 
   return { chat, status, wikiSummary, wiktionaryDefinition };

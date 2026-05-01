@@ -1333,7 +1333,9 @@ if (!gotTheLock) {
       console.warn("Clawd: skills loader init failed:", e.message);
     }
     try {
-      _smart = require("./intelligent-layer")({});
+      _smart = require("./intelligent-layer")({
+        chatAuthTokenFile: path.join(app.getPath("userData"), "bumbee-gateway-token.txt"),
+      });
     } catch (e) {
       console.warn("Clawd: intelligent layer init failed:", e.message);
     }
