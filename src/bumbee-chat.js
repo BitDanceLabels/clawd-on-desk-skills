@@ -17,6 +17,16 @@ let capturedFrame = null;
 let speakingEnabled = true;
 let recognition = null;
 let recognizing = false;
+let pendingRequest = false;
+
+function pushActivityState() {
+  window.bumbeeChat.activity({
+    typing: document.activeElement === promptInput && promptInput.value.trim().length > 0,
+    camera: !!cameraStream,
+    voice: recognizing,
+    pending: pendingRequest,
+  });
+}
 
 function addMessage(role, text) {
   const item = document.createElement("div");
@@ -28,8 +38,10 @@ function addMessage(role, text) {
 }
 
 function setBusy(busy) {
+  pendingRequest = !!busy;
   sendBtn.disabled = busy;
   sendBtn.textContent = busy ? "Sending..." : "Send";
+  pushActivityState();
 }
 
 function speak(text) {
@@ -60,7 +72,7 @@ async function sendPrompt() {
   setBusy(true);
 
   const context = {
-    source: "bumbee-chat-window",
+    source: "clawd-on-desk",
     camera: capturedFrame ? {
       captured_at: capturedFrame.capturedAt,
       image_data_url: capturedFrame.dataUrl.slice(0, 50000),
@@ -96,6 +108,7 @@ async function startCamera() {
     });
     cameraPreview.srcObject = cameraStream;
     cameraPanel.hidden = false;
+    pushActivityState();
   } catch (err) {
     addMessage("system", `Camera failed: ${err.message}`);
   }
@@ -108,6 +121,7 @@ function stopCamera() {
   cameraStream = null;
   cameraPreview.srcObject = null;
   cameraPanel.hidden = true;
+  pushActivityState();
 }
 
 function captureFrame() {
@@ -140,10 +154,12 @@ function initVoice() {
   recognition.onstart = () => {
     recognizing = true;
     voiceBtn.textContent = "Voice: On";
+    pushActivityState();
   };
   recognition.onend = () => {
     recognizing = false;
     voiceBtn.textContent = "Voice";
+    pushActivityState();
   };
   recognition.onerror = (event) => {
     addMessage("system", `Voice input error: ${event.error || "unknown"}`);
@@ -159,6 +175,7 @@ function initVoice() {
     if (finalText) {
       const prefix = promptInput.value.trim();
       promptInput.value = `${prefix}${prefix ? " " : ""}${finalText.trim()}`;
+      pushActivityState();
     } else if (interimText) {
       promptInput.placeholder = interimText.trim();
     }
@@ -172,6 +189,9 @@ promptInput.addEventListener("keydown", (event) => {
     sendPrompt();
   }
 });
+promptInput.addEventListener("input", pushActivityState);
+promptInput.addEventListener("focus", pushActivityState);
+promptInput.addEventListener("blur", pushActivityState);
 
 cameraBtn.addEventListener("click", () => {
   if (cameraStream) stopCamera();
@@ -196,6 +216,7 @@ window.addEventListener("beforeunload", () => {
   stopCamera();
   if (recognition && recognizing) recognition.stop();
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  window.bumbeeChat.activity({ typing: false, camera: false, voice: false, pending: false });
 });
 
 initVoice();

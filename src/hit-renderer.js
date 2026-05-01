@@ -134,20 +134,21 @@ let firstClickDir = null;
 function handleClick(clientX) {
   if (miniMode) {
     window.hitAPI.exitMiniMode();
+    window.hitAPI.openBumbeeChat();
     return;
   }
   if (isReacting || isDragReacting) return;
 
-  // Non-idle: focus terminal, no reaction
+  window.hitAPI.openBumbeeChat();
+
+  // Non-idle: open chat only, no reaction
   if (currentSvg !== "clawd-idle-follow.svg" && currentSvg !== "clawd-idle-living.svg") {
-    window.hitAPI.focusTerminal();
     return;
   }
 
   clickCount++;
   if (clickCount === 1) {
     firstClickDir = clientX < area.offsetWidth / 2 ? "left" : "right";
-    window.hitAPI.focusTerminal();
   }
 
   if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }

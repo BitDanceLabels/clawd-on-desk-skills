@@ -113,8 +113,23 @@ module.exports = function initIntelligentLayer(opts) {
 
   async function gatewayChat(prompt, system, mode, context) {
     const url = `${gatewayUrl}${chatEndpoint}`;
+    const contextObj = context && typeof context === "object" ? context : {};
+    const camera = contextObj.camera || null;
+    const gatewayContext = { ...contextObj };
+    delete gatewayContext.source;
+    delete gatewayContext.device_id;
+    delete gatewayContext.session_id;
+    delete gatewayContext.camera;
     const payload = chatEndpoint === "/bumbee/chat"
-      ? { message: prompt, mode: mode || "general", context: context || null }
+      ? {
+          message: prompt,
+          mode: mode || "general",
+          source: contextObj.source || "clawd-on-desk",
+          device_id: contextObj.device_id || null,
+          session_id: contextObj.session_id || null,
+          context: Object.keys(gatewayContext).length ? gatewayContext : {},
+          camera,
+        }
       : {
           messages: [
             ...(system ? [{ role: "system", content: system }] : []),
@@ -181,8 +196,9 @@ module.exports = function initIntelligentLayer(opts) {
       ? "Ban la tro ly cong viec. Tra loi tieng Viet, ngan gon, dua ra cac buoc lam viec ro rang."
       : "Ban la tro ly chung. Tra loi tieng Viet ngan gon va chinh xac.";
     const fullPrompt = context ? `${query}\n\nContext: ${typeof context === "string" ? context : JSON.stringify(context)}` : query;
+    const gatewayPrompt = chatEndpoint === "/bumbee/chat" ? query : fullPrompt;
     try {
-      const data = await gatewayChat(fullPrompt, sys, mode, context);
+      const data = await gatewayChat(gatewayPrompt, sys, mode, context);
       return {
         mode,
         answer: extractAnswer(data) || JSON.stringify(data).slice(0, 500),

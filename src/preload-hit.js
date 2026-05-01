@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("hitAPI", {
   moveWindowBy: (dx, dy) => ipcRenderer.send("move-window-by", dx, dy),
   dragEnd: () => ipcRenderer.send("drag-end"),
   showContextMenu: () => ipcRenderer.send("show-context-menu"),
+  openBumbeeChat: () => ipcRenderer.send("open-bumbee-chat"),
   focusTerminal: () => ipcRenderer.send("focus-terminal"),
   exitMiniMode: () => ipcRenderer.send("exit-mini-mode"),
   showSessionMenu: () => ipcRenderer.send("show-session-menu"),

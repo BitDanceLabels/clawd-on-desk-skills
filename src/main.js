@@ -1,6 +1,7 @@
 const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
@@ -87,6 +88,8 @@ function getObjRect(bounds) {
 let win;
 let hitWin;  // input window — small opaque rect over hitbox, receives all pointer events
 let chatWin;
+let chatAutoHideTimer = null;
+let chatActivityState = { typing: false, camera: false, voice: false, pending: false };
 let tray = null;
 let contextMenuOwner = null;
 let currentSize = "S";
@@ -106,6 +109,9 @@ let rabbitEnabled = false;
 let rabbitIntervalMin = 60;
 let characterSkin = "clawd";  // "clawd" | "bunny" — switches the pet character
 const DEFAULT_TOGGLE_SHORTCUT = "CommandOrControl+Shift+Alt+C";
+const CHAT_AUTO_HIDE_MS = Number.parseInt(process.env.BUMBEE_CHAT_AUTO_HIDE_MS || "15000", 10);
+const CHAT_DEVICE_ID = process.env.BUMBEE_DEVICE_ID || `${os.hostname()}-${process.platform}`;
+const CHAT_SESSION_ID = `desk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 function getSmartStatusPayload() {
   return {
@@ -134,11 +140,18 @@ async function sendBumbeeChat(payload) {
   const query = typeof payload?.query === "string" ? payload.query.trim() : "";
   if (!query) return { ok: false, error: "missing query" };
   const mode = typeof payload?.mode === "string" ? payload.mode : "general";
+  const baseContext = payload?.context && typeof payload.context === "object" ? payload.context : {};
+  const context = {
+    ...baseContext,
+    source: baseContext.source || "clawd-on-desk",
+    device_id: baseContext.device_id || CHAT_DEVICE_ID,
+    session_id: baseContext.session_id || CHAT_SESSION_ID,
+  };
   try {
     const result = await _smart.chat({
       mode,
       query,
-      context: payload?.context || null,
+      context,
     });
     return { ok: true, mode, ...result };
   } catch (err) {
@@ -146,21 +159,108 @@ async function sendBumbeeChat(payload) {
   }
 }
 
+function getChatBoundsNearPet(width, height) {
+  const fallbackPoint = screen.getCursorScreenPoint();
+  const petBounds = win && !win.isDestroyed() ? win.getBounds() : null;
+  const display = petBounds
+    ? screen.getDisplayNearestPoint({
+        x: Math.round(petBounds.x + petBounds.width / 2),
+        y: Math.round(petBounds.y + petBounds.height / 2),
+      })
+    : screen.getDisplayNearestPoint(fallbackPoint);
+  const { workArea } = display;
+  const margin = 16;
+  if (!petBounds) {
+    return {
+      x: Math.round(workArea.x + workArea.width - width - 28),
+      y: Math.round(workArea.y + workArea.height - height - 28),
+    };
+  }
+
+  let x = Math.round(petBounds.x + petBounds.width + margin);
+  if (x + width > workArea.x + workArea.width - margin) {
+    x = Math.round(petBounds.x - width - margin);
+  }
+  if (x < workArea.x + margin) {
+    x = Math.round(workArea.x + workArea.width - width - margin);
+  }
+
+  const anchorY = Math.round(petBounds.y + petBounds.height - height);
+  const y = Math.max(
+    workArea.y + margin,
+    Math.min(anchorY, workArea.y + workArea.height - height - margin),
+  );
+  return { x, y };
+}
+
+function positionBumbeeChat() {
+  if (!chatWin || chatWin.isDestroyed()) return;
+  const bounds = chatWin.getBounds();
+  const next = getChatBoundsNearPet(bounds.width || 440, bounds.height || 660);
+  chatWin.setBounds({ ...bounds, ...next });
+}
+
+function clearChatAutoHide() {
+  if (chatAutoHideTimer) {
+    clearTimeout(chatAutoHideTimer);
+    chatAutoHideTimer = null;
+  }
+}
+
+function isChatActivityBlockingHide() {
+  return !!(
+    chatActivityState.typing ||
+    chatActivityState.camera ||
+    chatActivityState.voice ||
+    chatActivityState.pending
+  );
+}
+
+function scheduleChatAutoHide(delayMs = CHAT_AUTO_HIDE_MS) {
+  clearChatAutoHide();
+  if (!chatWin || chatWin.isDestroyed() || !chatWin.isVisible()) return;
+  chatAutoHideTimer = setTimeout(() => {
+    chatAutoHideTimer = null;
+    if (!chatWin || chatWin.isDestroyed() || !chatWin.isVisible() || chatWin.isFocused()) return;
+    if (isChatActivityBlockingHide()) {
+      scheduleChatAutoHide(5000);
+      return;
+    }
+    chatWin.hide();
+  }, Math.max(1000, delayMs));
+}
+
+function updateBumbeeChatActivity(payload) {
+  chatActivityState = {
+    ...chatActivityState,
+    typing: !!payload?.typing,
+    camera: !!payload?.camera,
+    voice: !!payload?.voice,
+    pending: !!payload?.pending,
+  };
+  if (chatWin && !chatWin.isDestroyed() && chatWin.isVisible() && !chatWin.isFocused()) {
+    if (isChatActivityBlockingHide()) clearChatAutoHide();
+    else scheduleChatAutoHide();
+  }
+}
+
 function openBumbeeChat() {
   if (chatWin && !chatWin.isDestroyed()) {
+    clearChatAutoHide();
+    if (!chatWin.isVisible()) positionBumbeeChat();
     chatWin.show();
     chatWin.focus();
     return;
   }
 
-  const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const width = 440;
   const height = 660;
+  const bounds = getChatBoundsNearPet(width, height);
   chatWin = new BrowserWindow({
     width,
     height,
-    x: Math.round(workArea.x + workArea.width - width - 28),
-    y: Math.round(workArea.y + workArea.height - height - 28),
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 380,
     minHeight: 520,
     title: "Bumbee Chat",
@@ -178,7 +278,13 @@ function openBumbeeChat() {
   chatWin.once("ready-to-show", () => {
     if (chatWin && !chatWin.isDestroyed()) chatWin.show();
   });
-  chatWin.on("closed", () => { chatWin = null; });
+  chatWin.on("focus", clearChatAutoHide);
+  chatWin.on("blur", () => scheduleChatAutoHide());
+  chatWin.on("closed", () => {
+    clearChatAutoHide();
+    chatActivityState = { typing: false, camera: false, voice: false, pending: false };
+    chatWin = null;
+  });
 }
 
 function togglePetVisibility() {
@@ -926,6 +1032,7 @@ function createWindow() {
     }
     if (best) focusTerminalWindow(best.sourcePid, best.cwd, best.editor, best.pidChain);
   });
+  ipcMain.on("open-bumbee-chat", openBumbeeChat);
 
   ipcMain.on("show-session-menu", () => {
     popupMenuAt(Menu.buildFromTemplate(buildSessionSubmenu()));
@@ -935,6 +1042,7 @@ function createWindow() {
   ipcMain.on("move-bubble-by", (event, dx, dy) => _perm.handleMoveBubble(event, dx, dy));
   ipcMain.on("permission-decide", (event, behavior) => _perm.handleDecide(event, behavior));
   ipcMain.handle("bumbee-chat:send", (_event, payload) => sendBumbeeChat(payload));
+  ipcMain.on("bumbee-chat:activity", (_event, payload) => updateBumbeeChatActivity(payload));
   ipcMain.handle("bumbee-chat:status", () => getSmartStatusPayload());
   ipcMain.handle("bumbee-chat:sessions", () => ({ ok: true, sessions: getSessionPayload() }));
 
