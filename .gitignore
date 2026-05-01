@@ -42,5 +42,11 @@ src/bundles/
 # User-supplied custom characters (Live2D + VRM) — never commit licensed art
 assets/live2d/*/
 !assets/live2d/README.md
+!assets/live2d/runtime/
+!assets/live2d/runtime/**
+!assets/live2d/hiyori/
+!assets/live2d/hiyori/**
+!assets/live2d/haru/
+!assets/live2d/haru/**
 assets/vrm/*/
 assets/vrm/*.vrm
