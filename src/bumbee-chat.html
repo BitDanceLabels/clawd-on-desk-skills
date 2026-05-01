@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: blob: data:; style-src 'self' 'unsafe-inline'; img-src 'self' file: blob: data:; media-src 'self' blob: data:; script-src 'self'; connect-src 'self' file: blob: data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="bumbee-chat.css">
+  <title>Bumbee Chat</title>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>Bumbee</h1>
+        <p id="statusLine">Checking integrations...</p>
+      </div>
+      <select id="modeSelect" aria-label="Chat mode">
+        <option value="general">General</option>
+        <option value="work">Work</option>
+        <option value="english">English</option>
+        <option value="wiki">Wiki</option>
+      </select>
+    </header>
+
+    <section id="cameraPanel" class="camera-panel" hidden>
+      <video id="cameraPreview" playsinline autoplay muted></video>
+      <canvas id="cameraCanvas" hidden></canvas>
+      <div class="camera-actions">
+        <button id="captureBtn" type="button">Capture</button>
+        <button id="stopCameraBtn" type="button">Stop</button>
+      </div>
+    </section>
+
+    <section id="messages" class="messages" aria-live="polite"></section>
+
+    <footer class="composer">
+      <textarea id="promptInput" rows="3" placeholder="Ask Bumbee..." autocomplete="off"></textarea>
+      <div class="toolbar">
+        <button id="cameraBtn" type="button" title="Open camera">Camera</button>
+        <button id="voiceBtn" type="button" title="Voice input">Voice</button>
+        <button id="speakBtn" type="button" title="Read replies aloud">Speak: On</button>
+        <button id="sendBtn" type="button" class="primary">Send</button>
+      </div>
+    </footer>
+  </main>
+  <script src="bumbee-chat.js"></script>
+</body>
+</html>

@@ -115,6 +115,7 @@ const i18n = {
     characterAddVRM: "Add VRM Folder…",
     characterEmpty: "(none yet — drop files in folder)",
     bumbee: "Bumbee Hub",
+    bumbeeOpenChat: "Open Bumbee Chat…",
     bumbeeStatus: "Connection Status…",
     bumbeeReloadSkills: "Reload Skills ({n})",
     bumbeeOpenSkillsFolder: "Open Skills Folder",
@@ -188,6 +189,7 @@ const i18n = {
     characterLive2D: "Live2D 角色",
     characterVRM: "VRM 3D 角色",
     bumbee: "Bumbee 集成",
+    bumbeeOpenChat: "打开 Bumbee 聊天…",
     bumbeeStatus: "连接状态…",
     bumbeeReloadSkills: "重载技能 ({n})",
     bumbeeOpenSkillsFolder: "打开技能目录",
@@ -381,6 +383,14 @@ module.exports = function initMenu(ctx) {
     };
 
     const submenu = [
+      {
+        label: t("bumbeeOpenChat"),
+        enabled: typeof ctx.openBumbeeChat === "function",
+        click: () => {
+          if (ctx.openBumbeeChat) ctx.openBumbeeChat();
+        },
+      },
+      { type: "separator" },
       {
         label: t("bumbeeStatus"),
         click: () => {

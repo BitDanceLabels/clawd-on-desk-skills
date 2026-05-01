@@ -1,0 +1,174 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: #111318;
+  color: #eef2f8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100vh;
+  min-width: 360px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+p {
+  margin: 4px 0 0;
+  color: #9aa4b5;
+  font-size: 12px;
+}
+
+select {
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: #1b1f29;
+  color: #eef2f8;
+  padding: 0 10px;
+}
+
+.camera-panel {
+  padding: 12px 18px 0;
+}
+
+video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #05070a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.camera-actions,
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.camera-actions {
+  margin-top: 8px;
+}
+
+.messages {
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  max-width: 88%;
+  border-radius: 8px;
+  padding: 10px 12px;
+  line-height: 1.42;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+}
+
+.message.user {
+  align-self: flex-end;
+  background: #2f6df6;
+  color: white;
+}
+
+.message.assistant {
+  align-self: flex-start;
+  background: #1b1f29;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.message.system {
+  align-self: center;
+  max-width: 100%;
+  color: #9aa4b5;
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  font-size: 12px;
+}
+
+.composer {
+  padding: 12px 18px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(17, 19, 24, 0.96);
+}
+
+textarea {
+  width: 100%;
+  min-height: 72px;
+  max-height: 180px;
+  resize: vertical;
+  color: #eef2f8;
+  background: #0c0f14;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+textarea:focus {
+  border-color: #4f8cff;
+}
+
+.toolbar {
+  margin-top: 10px;
+}
+
+button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: #1b1f29;
+  color: #eef2f8;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #242a36;
+}
+
+button.primary {
+  margin-left: auto;
+  border-color: #2f6df6;
+  background: #2f6df6;
+  color: white;
+}
+
+button[disabled] {
+  cursor: default;
+  opacity: 0.55;
+}

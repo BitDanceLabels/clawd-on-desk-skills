@@ -44,7 +44,10 @@
       ],
       "category": "public.app-category.entertainment",
       "extendInfo": {
-        "LSUIElement": true
+        "LSUIElement": true,
+        "NSCameraUsageDescription": "Bumbee Chat uses the camera when you choose to attach a snapshot to a message.",
+        "NSMicrophoneUsageDescription": "Bumbee Chat uses the microphone when you turn on voice input.",
+        "NSSpeechRecognitionUsageDescription": "Bumbee Chat uses speech recognition when you turn on voice input."
       }
     },
     "win": {

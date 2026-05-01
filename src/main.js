@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut } = require("electron");
+const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -86,6 +86,7 @@ function getObjRect(bounds) {
 
 let win;
 let hitWin;  // input window — small opaque rect over hitbox, receives all pointer events
+let chatWin;
 let tray = null;
 let contextMenuOwner = null;
 let currentSize = "S";
@@ -105,6 +106,80 @@ let rabbitEnabled = false;
 let rabbitIntervalMin = 60;
 let characterSkin = "clawd";  // "clawd" | "bunny" — switches the pet character
 const DEFAULT_TOGGLE_SHORTCUT = "CommandOrControl+Shift+Alt+C";
+
+function getSmartStatusPayload() {
+  return {
+    smart: _smart ? _smart.status() : { enabled: false },
+    gateway: _gateway ? _gateway.status() : { enabled: false, registered: false },
+    clawdbot: _clawdbot ? _clawdbot.status() : { enabled: false, connected: false },
+    skills: _skills ? _skills.status() : { enabled: false, count: 0 },
+  };
+}
+
+function getSessionPayload() {
+  return Array.from(sessions.entries()).map(([id, s]) => ({
+    id,
+    state: s.state || "idle",
+    agent_id: s.agentId || s.agent_id || "claude-code",
+    cwd: s.cwd || "",
+    event: s.event || s.lastEvent || null,
+    updated_at: s.updatedAt || s.lastUpdate || null,
+    host: s.host || null,
+    headless: !!s.headless,
+  }));
+}
+
+async function sendBumbeeChat(payload) {
+  if (!_smart) return { ok: false, error: "Bumbee smart layer is not available yet" };
+  const query = typeof payload?.query === "string" ? payload.query.trim() : "";
+  if (!query) return { ok: false, error: "missing query" };
+  const mode = typeof payload?.mode === "string" ? payload.mode : "general";
+  try {
+    const result = await _smart.chat({
+      mode,
+      query,
+      context: payload?.context || null,
+    });
+    return { ok: true, mode, ...result };
+  } catch (err) {
+    return { ok: false, mode, error: err.message };
+  }
+}
+
+function openBumbeeChat() {
+  if (chatWin && !chatWin.isDestroyed()) {
+    chatWin.show();
+    chatWin.focus();
+    return;
+  }
+
+  const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const width = 440;
+  const height = 660;
+  chatWin = new BrowserWindow({
+    width,
+    height,
+    x: Math.round(workArea.x + workArea.width - width - 28),
+    y: Math.round(workArea.y + workArea.height - height - 28),
+    minWidth: 380,
+    minHeight: 520,
+    title: "Bumbee Chat",
+    show: false,
+    backgroundColor: "#111318",
+    webPreferences: {
+      preload: path.join(__dirname, "preload-chat.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  chatWin.loadFile(path.join(__dirname, "bumbee-chat.html"));
+  chatWin.once("ready-to-show", () => {
+    if (chatWin && !chatWin.isDestroyed()) chatWin.show();
+  });
+  chatWin.on("closed", () => { chatWin = null; });
+}
 
 function togglePetVisibility() {
   if (!win || win.isDestroyed()) return;
@@ -595,6 +670,7 @@ const _menuCtx = {
   getClawdbot: () => _clawdbot,
   getSkills: () => _skills,
   getSmart: () => _smart,
+  openBumbeeChat,
 };
 const _menu = require("./menu")(_menuCtx);
 const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
@@ -858,6 +934,9 @@ function createWindow() {
   ipcMain.on("bubble-height", (event, height) => _perm.handleBubbleHeight(event, height));
   ipcMain.on("move-bubble-by", (event, dx, dy) => _perm.handleMoveBubble(event, dx, dy));
   ipcMain.on("permission-decide", (event, behavior) => _perm.handleDecide(event, behavior));
+  ipcMain.handle("bumbee-chat:send", (_event, payload) => sendBumbeeChat(payload));
+  ipcMain.handle("bumbee-chat:status", () => getSmartStatusPayload());
+  ipcMain.handle("bumbee-chat:sessions", () => ({ ok: true, sessions: getSessionPayload() }));
 
   initFocusHelper();
   startMainTick();
@@ -1078,6 +1157,15 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     permDebugLog = path.join(app.getPath("userData"), "permission-debug.log");
     updateDebugLog = path.join(app.getPath("userData"), "update-debug.log");
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      const url = webContents.getURL() || "";
+      const isLocalAppWindow = url.startsWith("file://");
+      if (isLocalAppWindow && ["media", "microphone", "camera"].includes(permission)) {
+        callback(true);
+        return;
+      }
+      callback(false);
+    });
     createWindow();
 
     // Register global shortcut for toggling pet visibility
@@ -1168,6 +1256,7 @@ if (!gotTheLock) {
     if (hwndRecoveryTimer) { clearTimeout(hwndRecoveryTimer); hwndRecoveryTimer = null; }
     _focus.cleanup();
     if (hitWin && !hitWin.isDestroyed()) hitWin.destroy();
+    if (chatWin && !chatWin.isDestroyed()) chatWin.destroy();
   });
 
   app.on("window-all-closed", () => {
