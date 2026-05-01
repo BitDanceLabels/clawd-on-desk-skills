@@ -109,7 +109,9 @@ module.exports = function initIntelligentLayer(opts) {
   const gatewayUrl = (config.gatewayUrl || process.env.GATEWAY_URL || "https://gateway.bumbee.asia").replace(/\/$/, "");
   const enabled = config.enabled !== false && (process.env.SMART_LAYER_ENABLE !== "0");
   // Endpoint backend chat — co the override qua env.
-  const chatEndpoint = config.chatEndpoint || process.env.SMART_CHAT_ENDPOINT || "/bumbee/chat";
+  const chatEndpoint = config.chatEndpoint || process.env.SMART_CHAT_ENDPOINT || "/clawdbot/bumbee-desk/v1/chat/completions";
+  const chatModel = config.chatModel || process.env.SMART_CHAT_MODEL || "clawdbot";
+  const chatAuthToken = config.chatAuthToken || process.env.SMART_CHAT_AUTH_TOKEN || process.env.CLAWDBOT_GATEWAY_TOKEN || process.env.GATEWAY_API_KEY || "";
 
   async function gatewayChat(prompt, system, mode, context) {
     const url = `${gatewayUrl}${chatEndpoint}`;
@@ -131,13 +133,17 @@ module.exports = function initIntelligentLayer(opts) {
           camera,
         }
       : {
+          model: chatModel,
           messages: [
             ...(system ? [{ role: "system", content: system }] : []),
             { role: "user", content: prompt },
           ],
           stream: false,
         };
-    return fetch(url, { method: "POST", body: payload, timeout: 30_000, headers: { "Content-Type": "application/json" } });
+    const headers = { "Content-Type": "application/json" };
+    if (chatAuthToken) headers.Authorization = `Bearer ${chatAuthToken}`;
+    if (contextObj.session_id) headers["x-clawdbot-session-key"] = contextObj.session_id;
+    return fetch(url, { method: "POST", body: payload, timeout: 30_000, headers });
   }
 
   async function chat({ mode, query, context }) {
@@ -226,7 +232,7 @@ module.exports = function initIntelligentLayer(opts) {
   }
 
   function status() {
-    return { enabled, gatewayUrl, chatEndpoint };
+    return { enabled, gatewayUrl, chatEndpoint, chatModel, authenticated: !!chatAuthToken };
   }
 
   return { chat, status, wikiSummary, wiktionaryDefinition };
