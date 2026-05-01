@@ -44,9 +44,9 @@ async function refreshStatus() {
   try {
     const status = await window.bumbeeChat.status();
     const smart = status.smart || {};
-    const gateway = status.gateway || {};
     const skills = status.skills || {};
-    statusLine.textContent = `Smart ${smart.enabled ? "on" : "off"} | Gateway ${gateway.registered ? "connected" : "offline"} | Skills ${skills.count || 0}`;
+    const chatHost = smart.gatewayUrl ? smart.gatewayUrl.replace(/^https?:\/\//, "") : "gateway not set";
+    statusLine.textContent = `Smart ${smart.enabled ? "on" : "off"} | Chat ${chatHost}${smart.chatEndpoint || ""} | Skills ${skills.count || 0}`;
   } catch (err) {
     statusLine.textContent = `Status error: ${err.message}`;
   }

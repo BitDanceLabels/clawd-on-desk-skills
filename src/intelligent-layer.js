@@ -3,7 +3,7 @@
 // Modes:
 //   - "wiki"    : tra cuu Wikipedia REST API (vi/en) khong can key
 //   - "english" : tu vung + dich Anh-Viet, dung Wiktionary + duckduckgo instant answer
-//   - "work"    : route prompt qua Bumbee API Gateway (/v1/chat hoac /v1/llm/chat)
+//   - "work"    : route prompt qua Bumbee API Gateway (/bumbee/chat)
 //                 → forward toi Claude/Codex backend, lay tra loi
 //   - "general" : fallback giong "work"
 //
@@ -106,20 +106,22 @@ async function wiktionaryDefinition(word, lang) {
 
 module.exports = function initIntelligentLayer(opts) {
   const config = opts || {};
-  const gatewayUrl = (config.gatewayUrl || process.env.GATEWAY_URL || "http://127.0.0.1:30091").replace(/\/$/, "");
+  const gatewayUrl = (config.gatewayUrl || process.env.GATEWAY_URL || "https://gateway.bumbee.asia").replace(/\/$/, "");
   const enabled = config.enabled !== false && (process.env.SMART_LAYER_ENABLE !== "0");
-  // Endpoint backend chat — co the override qua env. Mac dinh thu vai endpoint gateway hay co
-  const chatEndpoint = config.chatEndpoint || process.env.SMART_CHAT_ENDPOINT || "/v1/llm/chat";
+  // Endpoint backend chat — co the override qua env.
+  const chatEndpoint = config.chatEndpoint || process.env.SMART_CHAT_ENDPOINT || "/bumbee/chat";
 
-  async function gatewayChat(prompt, system) {
+  async function gatewayChat(prompt, system, mode, context) {
     const url = `${gatewayUrl}${chatEndpoint}`;
-    const payload = {
-      messages: [
-        ...(system ? [{ role: "system", content: system }] : []),
-        { role: "user", content: prompt },
-      ],
-      stream: false,
-    };
+    const payload = chatEndpoint === "/bumbee/chat"
+      ? { message: prompt, mode: mode || "general", context: context || null }
+      : {
+          messages: [
+            ...(system ? [{ role: "system", content: system }] : []),
+            { role: "user", content: prompt },
+          ],
+          stream: false,
+        };
     return fetch(url, { method: "POST", body: payload, timeout: 30_000, headers: { "Content-Type": "application/json" } });
   }
 
@@ -163,7 +165,7 @@ module.exports = function initIntelligentLayer(opts) {
       // fallback gateway: dich + giai thich
       try {
         const sys = "Ban la tro ly hoc tieng Anh cho nguoi Viet. Tra loi ngan gon, kem nghia tieng Viet va 1 vi du.";
-        const data = await gatewayChat(query, sys);
+        const data = await gatewayChat(query, sys, mode, context);
         return {
           mode: "english",
           answer: extractAnswer(data) || JSON.stringify(data).slice(0, 500),
@@ -180,7 +182,7 @@ module.exports = function initIntelligentLayer(opts) {
       : "Ban la tro ly chung. Tra loi tieng Viet ngan gon va chinh xac.";
     const fullPrompt = context ? `${query}\n\nContext: ${typeof context === "string" ? context : JSON.stringify(context)}` : query;
     try {
-      const data = await gatewayChat(fullPrompt, sys);
+      const data = await gatewayChat(fullPrompt, sys, mode, context);
       return {
         mode,
         answer: extractAnswer(data) || JSON.stringify(data).slice(0, 500),
@@ -195,6 +197,7 @@ module.exports = function initIntelligentLayer(opts) {
     if (!data) return null;
     if (typeof data === "string") return data;
     // Co gang lay tu cac shape pho bien
+    if (data.reply) return data.reply;
     if (data.answer) return data.answer;
     if (data.content) return Array.isArray(data.content) ? data.content.map(c => c.text || "").join("\n") : data.content;
     if (data.choices && data.choices[0]) {
