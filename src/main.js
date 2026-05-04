@@ -113,6 +113,7 @@ const CHAT_AUTO_HIDE_MS = Number.parseInt(process.env.BUMBEE_CHAT_AUTO_HIDE_MS |
 const CHAT_DEVICE_ID = process.env.BUMBEE_DEVICE_ID || `${os.hostname()}-${process.platform}`;
 const CHAT_SESSION_ID = `desk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const CHAT_AUTH_SERVER_URL = (process.env.BUMBEE_DESK_AUTH_URL || process.env.TOKEN_ADMIN_URL || "https://gateway.bumbee.asia/bumbee-desk-token-admin").replace(/\/$/, "");
+const VOCAB_DB_PATH = path.join(app.getPath("userData"), "bumbee-english-vocab.json");
 
 function getBumbeeTokenFilePath() {
   return path.join(app.getPath("userData"), "bumbee-gateway-token.txt");
@@ -268,6 +269,231 @@ async function sendBumbeeChat(payload) {
   } catch (err) {
     return { ok: false, mode, error: err.message };
   }
+}
+
+function defaultVocabDb() {
+  return {
+    version: 1,
+    updated_at: new Date().toISOString(),
+    settings: {
+      nativeLanguage: "vi",
+      targetLanguage: "en",
+      goal: "business conversation",
+      dailyWords: 8,
+      difficulty: "medium",
+      monthlyReset: true,
+    },
+    last_reset_month: new Date().toISOString().slice(0, 7),
+    words: [],
+  };
+}
+
+function readVocabDb() {
+  try {
+    const data = JSON.parse(fs.readFileSync(VOCAB_DB_PATH, "utf8"));
+    const db = {
+      ...defaultVocabDb(),
+      ...data,
+      settings: { ...defaultVocabDb().settings, ...(data.settings || {}) },
+      words: Array.isArray(data.words) ? data.words : [],
+    };
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    if (db.settings.monthlyReset !== false && db.last_reset_month !== thisMonth) {
+      for (const item of db.words) {
+        item.score = 0;
+        item.streak = 0;
+        item.mastered = false;
+        item.next_review = new Date().toISOString();
+        item.updated_at = new Date().toISOString();
+      }
+      db.last_reset_month = thisMonth;
+      writeVocabDb(db);
+    }
+    return db;
+  } catch {
+    return defaultVocabDb();
+  }
+}
+
+function writeVocabDb(db) {
+  const next = { ...db, updated_at: new Date().toISOString() };
+  fs.mkdirSync(path.dirname(VOCAB_DB_PATH), { recursive: true });
+  fs.writeFileSync(VOCAB_DB_PATH, JSON.stringify(next, null, 2), { mode: 0o600 });
+  try { fs.chmodSync(VOCAB_DB_PATH, 0o600); } catch {}
+  return next;
+}
+
+function normalizeVocabTerm(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^[,.;:!?'"`]+|[,.;:!?'"`]+$/g, "")
+    .slice(0, 90);
+}
+
+function extractVocabTerms(input) {
+  const text = String(input || "");
+  const explicit = text
+    .split(/[\n,;|]+/)
+    .map(normalizeVocabTerm)
+    .filter((term) => term.length >= 2 && term.length <= 90);
+  if (explicit.length > 1) return Array.from(new Set(explicit)).slice(0, 60);
+
+  const matches = text.match(/[A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){0,3}/g) || [];
+  const stop = new Set(["the", "and", "for", "you", "with", "that", "this", "from", "have", "will", "are", "was", "were", "been"]);
+  return Array.from(new Set(matches
+    .map(normalizeVocabTerm)
+    .filter((term) => term.length >= 3 && !stop.has(term.toLowerCase()))))
+    .slice(0, 30);
+}
+
+function fallbackLesson(term, settings) {
+  const goal = settings.goal || "daily conversation";
+  return {
+    meaning_vi: `Từ/cụm từ cần học trong ngữ cảnh: ${goal}.`,
+    pronunciation: "",
+    examples: [
+      `I want to use "${term}" in a real conversation.`,
+      `Can you explain "${term}" with a simple example?`,
+      `Let's practice "${term}" at work.`,
+    ],
+    quiz: [
+      { type: "recall", prompt: `Nói một câu tiếng Anh có dùng "${term}".`, answer: term },
+      { type: "meaning", prompt: `"${term}" dùng trong ngữ cảnh nào?`, answer: goal },
+    ],
+  };
+}
+
+async function enrichVocabTerm(term, settings, sourceNote) {
+  const lesson = fallbackLesson(term, settings);
+  if (!_smart) return lesson;
+  try {
+    const result = await _smart.chat({
+      mode: "english",
+      query: [
+        "Create a compact vocabulary learning card as strict JSON only.",
+        `Target language: ${settings.targetLanguage || "en"}. Native language: ${settings.nativeLanguage || "vi"}.`,
+        `Learning goal: ${settings.goal || "business conversation"}. Difficulty: ${settings.difficulty || "medium"}.`,
+        `Term: ${term}`,
+        sourceNote ? `Source note: ${sourceNote.slice(0, 500)}` : "",
+        "JSON shape: {\"meaning_vi\":\"...\",\"pronunciation\":\"...\",\"examples\":[\"easy sentence\",\"work sentence\",\"hard sentence\"],\"quiz\":[{\"type\":\"recall\",\"prompt\":\"...\",\"answer\":\"...\"},{\"type\":\"fill_blank\",\"prompt\":\"...\",\"answer\":\"...\"}]}",
+      ].filter(Boolean).join("\n"),
+      context: {
+        source: "bumbee-english-vocab",
+        device_id: CHAT_DEVICE_ID,
+        session_id: CHAT_SESSION_ID,
+      },
+    });
+    const raw = String(result.answer || result.reply || "").trim();
+    const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
+    const parsed = jsonText ? JSON.parse(jsonText) : null;
+    if (!parsed || typeof parsed !== "object") return lesson;
+    return {
+      meaning_vi: String(parsed.meaning_vi || lesson.meaning_vi).slice(0, 500),
+      pronunciation: String(parsed.pronunciation || "").slice(0, 120),
+      examples: Array.isArray(parsed.examples) ? parsed.examples.slice(0, 6).map((x) => String(x).slice(0, 240)) : lesson.examples,
+      quiz: Array.isArray(parsed.quiz) ? parsed.quiz.slice(0, 6).map((q) => ({
+        type: String(q.type || "recall").slice(0, 40),
+        prompt: String(q.prompt || "").slice(0, 260),
+        answer: String(q.answer || "").slice(0, 180),
+      })).filter((q) => q.prompt) : lesson.quiz,
+    };
+  } catch {
+    return lesson;
+  }
+}
+
+async function addVocabItems(payload) {
+  const db = readVocabDb();
+  const source = String(payload?.source || "manual").slice(0, 80);
+  const sourceNote = String(payload?.text || payload?.note || "").trim();
+  const rawTerms = Array.isArray(payload?.terms) ? payload.terms : extractVocabTerms(sourceNote);
+  const terms = Array.from(new Set(rawTerms.map(normalizeVocabTerm).filter(Boolean))).slice(0, 60);
+  const existing = new Map(db.words.map((item) => [item.term.toLowerCase(), item]));
+  const created = [];
+  for (const term of terms) {
+    const key = term.toLowerCase();
+    if (existing.has(key)) {
+      const current = existing.get(key);
+      current.updated_at = new Date().toISOString();
+      current.sources = Array.from(new Set([...(current.sources || []), source])).slice(0, 8);
+      continue;
+    }
+    const lesson = await enrichVocabTerm(term, db.settings, sourceNote);
+    const item = {
+      id: `vocab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      term,
+      score: 0,
+      streak: 0,
+      mistake_count: 0,
+      review_count: 0,
+      mastered: false,
+      level: db.settings.difficulty || "medium",
+      sources: [source],
+      lesson,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_reviewed: null,
+      next_review: new Date().toISOString(),
+    };
+    db.words.unshift(item);
+    existing.set(key, item);
+    created.push(item);
+  }
+  writeVocabDb(db);
+  return { ok: true, created, total: db.words.length, db };
+}
+
+function listVocabItems() {
+  const db = readVocabDb();
+  return { ok: true, dbPath: VOCAB_DB_PATH, settings: db.settings, words: db.words };
+}
+
+function reviewVocabItem(payload) {
+  const db = readVocabDb();
+  const id = String(payload?.id || "");
+  const correct = !!payload?.correct;
+  const item = db.words.find((word) => word.id === id);
+  if (!item) return { ok: false, error: "word_not_found" };
+  item.review_count = (item.review_count || 0) + 1;
+  item.last_reviewed = new Date().toISOString();
+  item.streak = correct ? (item.streak || 0) + 1 : 0;
+  item.mistake_count = correct ? (item.mistake_count || 0) : (item.mistake_count || 0) + 1;
+  item.score = Math.max(0, Math.min(100, (item.score || 0) + (correct ? 14 : -18)));
+  item.mastered = item.score >= 85 && item.streak >= 3;
+  const delayHours = correct ? Math.min(168, 8 * Math.max(1, item.streak)) : 2;
+  item.next_review = new Date(Date.now() + delayHours * 60 * 60 * 1000).toISOString();
+  item.updated_at = new Date().toISOString();
+  writeVocabDb(db);
+  return { ok: true, item, settings: db.settings, words: db.words };
+}
+
+function resetVocabScores() {
+  const db = readVocabDb();
+  for (const item of db.words) {
+    item.score = 0;
+    item.streak = 0;
+    item.mastered = false;
+    item.next_review = new Date().toISOString();
+    item.updated_at = new Date().toISOString();
+  }
+  writeVocabDb(db);
+  return { ok: true, settings: db.settings, words: db.words };
+}
+
+function updateVocabSettings(payload) {
+  const db = readVocabDb();
+  db.settings = {
+    ...db.settings,
+    nativeLanguage: String(payload?.nativeLanguage || db.settings.nativeLanguage || "vi").slice(0, 20),
+    targetLanguage: String(payload?.targetLanguage || db.settings.targetLanguage || "en").slice(0, 20),
+    goal: String(payload?.goal || db.settings.goal || "business conversation").slice(0, 180),
+    dailyWords: Math.max(1, Math.min(60, Number.parseInt(payload?.dailyWords || db.settings.dailyWords || 8, 10))),
+    difficulty: ["easy", "medium", "hard", "expert"].includes(payload?.difficulty) ? payload.difficulty : db.settings.difficulty,
+    monthlyReset: payload?.monthlyReset === undefined ? db.settings.monthlyReset : !!payload.monthlyReset,
+  };
+  writeVocabDb(db);
+  return { ok: true, settings: db.settings, words: db.words };
 }
 
 function getChatBoundsNearPet(width, height) {
@@ -1159,6 +1385,11 @@ function createWindow() {
   ipcMain.handle("bumbee-chat:login-request", (_event, payload) => requestBumbeeLoginCode(payload));
   ipcMain.handle("bumbee-chat:login-verify", (_event, payload) => verifyBumbeeLoginCode(payload));
   ipcMain.handle("bumbee-chat:logout", () => logoutBumbeeChat());
+  ipcMain.handle("bumbee-vocab:list", () => listVocabItems());
+  ipcMain.handle("bumbee-vocab:add", (_event, payload) => addVocabItems(payload));
+  ipcMain.handle("bumbee-vocab:review", (_event, payload) => reviewVocabItem(payload));
+  ipcMain.handle("bumbee-vocab:reset", () => resetVocabScores());
+  ipcMain.handle("bumbee-vocab:settings", (_event, payload) => updateVocabSettings(payload));
 
   initFocusHelper();
   startMainTick();

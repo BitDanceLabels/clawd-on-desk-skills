@@ -10,6 +10,30 @@ const requestCodeBtn = document.getElementById("requestCodeBtn");
 const verifyCodeBtn = document.getElementById("verifyCodeBtn");
 const loginStatus = document.getElementById("loginStatus");
 const emailHint = document.getElementById("emailHint");
+const chatTabBtn = document.getElementById("chatTabBtn");
+const learnTabBtn = document.getElementById("learnTabBtn");
+const settingsTabBtn = document.getElementById("settingsTabBtn");
+const chatView = document.getElementById("chatView");
+const learnView = document.getElementById("learnView");
+const settingsView = document.getElementById("settingsView");
+const dropZone = document.getElementById("dropZone");
+const vocabInput = document.getElementById("vocabInput");
+const addVocabBtn = document.getElementById("addVocabBtn");
+const challengeBtn = document.getElementById("challengeBtn");
+const resetScoresBtn = document.getElementById("resetScoresBtn");
+const challengeCard = document.getElementById("challengeCard");
+const vocabList = document.getElementById("vocabList");
+const vocabStats = document.getElementById("vocabStats");
+const goalInput = document.getElementById("goalInput");
+const difficultyInput = document.getElementById("difficultyInput");
+const targetLanguageInput = document.getElementById("targetLanguageInput");
+const nativeLanguageInput = document.getElementById("nativeLanguageInput");
+const dailyWordsInput = document.getElementById("dailyWordsInput");
+const monthlyResetInput = document.getElementById("monthlyResetInput");
+const saveSettingsBtn = document.getElementById("saveSettingsBtn");
+
+let vocabState = { settings: {}, words: [] };
+let activeTab = "chat";
 
 const KNOWN_EMAIL_DOMAINS = [
   "gmail.com",
@@ -166,6 +190,22 @@ let recognition = null;
 let recognizing = false;
 let pendingRequest = false;
 
+function setActiveTab(tab) {
+  activeTab = tab;
+  for (const [name, btn, view] of [
+    ["chat", chatTabBtn, chatView],
+    ["learn", learnTabBtn, learnView],
+    ["settings", settingsTabBtn, settingsView],
+  ]) {
+    btn.classList.toggle("active", name === tab);
+    view.classList.toggle("active", name === tab);
+  }
+  const chatMode = tab === "chat";
+  document.querySelector(".composer").hidden = !chatMode;
+  if (tab === "learn") loadVocab();
+  if (tab === "settings") renderSettings();
+}
+
 function pushActivityState() {
   window.bumbeeChat.activity({
     typing: document.activeElement === promptInput && promptInput.value.trim().length > 0,
@@ -182,6 +222,164 @@ function addMessage(role, text) {
   messagesEl.appendChild(item);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   return item;
+}
+
+function escapeText(text) {
+  return String(text || "");
+}
+
+function renderSettings() {
+  const settings = vocabState.settings || {};
+  goalInput.value = settings.goal || "business conversation";
+  difficultyInput.value = settings.difficulty || "medium";
+  targetLanguageInput.value = settings.targetLanguage || "en";
+  nativeLanguageInput.value = settings.nativeLanguage || "vi";
+  dailyWordsInput.value = settings.dailyWords || 8;
+  monthlyResetInput.checked = settings.monthlyReset !== false;
+}
+
+function renderVocab() {
+  const words = vocabState.words || [];
+  const due = words.filter((word) => !word.mastered).length;
+  vocabStats.textContent = `${words.length} words · ${due} active`;
+  vocabList.replaceChildren();
+  if (!words.length) {
+    const empty = document.createElement("div");
+    empty.className = "message system";
+    empty.textContent = "No words yet. Add any word, note, file or image to start.";
+    vocabList.appendChild(empty);
+    return;
+  }
+  for (const word of words.slice(0, 80)) {
+    const card = document.createElement("article");
+    card.className = "vocab-card";
+    const header = document.createElement("header");
+    const title = document.createElement("h3");
+    title.textContent = word.term;
+    const score = document.createElement("span");
+    score.className = "score-pill";
+    score.textContent = `${word.score || 0}/100`;
+    header.append(title, score);
+
+    const meaning = document.createElement("p");
+    meaning.textContent = word.lesson?.meaning_vi || "No lesson yet.";
+    const examples = document.createElement("ul");
+    examples.className = "examples";
+    for (const ex of (word.lesson?.examples || []).slice(0, 3)) {
+      const li = document.createElement("li");
+      li.textContent = ex;
+      examples.appendChild(li);
+    }
+    const actions = document.createElement("div");
+    actions.className = "review-actions";
+    const good = document.createElement("button");
+    good.type = "button";
+    good.className = "good";
+    good.textContent = "I remembered";
+    good.addEventListener("click", () => markReview(word.id, true));
+    const bad = document.createElement("button");
+    bad.type = "button";
+    bad.className = "bad";
+    bad.textContent = "Review again";
+    bad.addEventListener("click", () => markReview(word.id, false));
+    actions.append(good, bad);
+    card.append(header, meaning, examples, actions);
+    vocabList.appendChild(card);
+  }
+}
+
+async function loadVocab() {
+  try {
+    const result = await window.bumbeeChat.vocabList();
+    if (result.ok) {
+      vocabState = { settings: result.settings || {}, words: result.words || [] };
+      renderVocab();
+    }
+  } catch (err) {
+    vocabStats.textContent = `Vocab error: ${err.message}`;
+  }
+}
+
+async function addVocabFromText(text, source) {
+  const clean = String(text || "").trim();
+  if (!clean) return;
+  addVocabBtn.disabled = true;
+  addVocabBtn.textContent = "Adding...";
+  try {
+    const result = await window.bumbeeChat.vocabAdd({ text: clean, source });
+    if (!result.ok) throw new Error(result.error || "Could not add words.");
+    vocabState = { settings: result.db?.settings || vocabState.settings, words: result.db?.words || vocabState.words };
+    vocabInput.value = "";
+    renderVocab();
+    showChallenge(result.created?.[0] || vocabState.words[0]);
+  } catch (err) {
+    challengeCard.hidden = false;
+    challengeCard.textContent = `Add failed: ${err.message}`;
+  } finally {
+    addVocabBtn.disabled = false;
+    addVocabBtn.textContent = "Add & AI plan";
+  }
+}
+
+function pickChallengeWord() {
+  const words = (vocabState.words || []).filter((word) => !word.mastered);
+  if (!words.length) return null;
+  return words.slice().sort((a, b) => (a.score || 0) - (b.score || 0))[0];
+}
+
+function showChallenge(word = pickChallengeWord()) {
+  if (!word) {
+    challengeCard.hidden = false;
+    challengeCard.textContent = "Add words first, then Bumbee will challenge you.";
+    return;
+  }
+  const quiz = (word.lesson?.quiz || [])[0] || { prompt: `Make one sentence with "${word.term}".`, answer: word.term };
+  challengeCard.replaceChildren();
+  challengeCard.hidden = false;
+  const title = document.createElement("h3");
+  title.textContent = `Challenge: ${word.term}`;
+  const prompt = document.createElement("p");
+  prompt.textContent = quiz.prompt || `Make one sentence with "${word.term}".`;
+  const answer = document.createElement("p");
+  answer.textContent = `Answer hint: ${quiz.answer || word.term}`;
+  answer.hidden = true;
+  const actions = document.createElement("div");
+  actions.className = "review-actions";
+  const reveal = document.createElement("button");
+  reveal.type = "button";
+  reveal.textContent = "Show hint";
+  reveal.addEventListener("click", () => { answer.hidden = false; });
+  const good = document.createElement("button");
+  good.type = "button";
+  good.className = "good";
+  good.textContent = "Correct";
+  good.addEventListener("click", () => markReview(word.id, true));
+  const bad = document.createElement("button");
+  bad.type = "button";
+  bad.className = "bad";
+  bad.textContent = "Wrong";
+  bad.addEventListener("click", () => markReview(word.id, false));
+  actions.append(reveal, good, bad);
+  challengeCard.append(title, prompt, answer, actions);
+}
+
+async function markReview(id, correct) {
+  const result = await window.bumbeeChat.vocabReview({ id, correct });
+  if (result.ok) {
+    vocabState = { settings: result.settings || vocabState.settings, words: result.words || [] };
+    renderVocab();
+    showChallenge();
+  }
+}
+
+async function readDroppedFile(file) {
+  if (!file) return "";
+  if (file.type.startsWith("image/")) {
+    return `Image source: ${file.name}. User dropped this image to extract vocabulary or describe visual context.`;
+  }
+  const maxBytes = 250000;
+  const blob = file.slice(0, maxBytes);
+  return await blob.text();
 }
 
 function setBusy(busy) {
@@ -396,6 +594,53 @@ function initVoice() {
 }
 
 sendBtn.addEventListener("click", sendPrompt);
+chatTabBtn.addEventListener("click", () => setActiveTab("chat"));
+learnTabBtn.addEventListener("click", () => setActiveTab("learn"));
+settingsTabBtn.addEventListener("click", () => setActiveTab("settings"));
+
+addVocabBtn.addEventListener("click", () => addVocabFromText(vocabInput.value, "manual"));
+challengeBtn.addEventListener("click", () => showChallenge());
+resetScoresBtn.addEventListener("click", async () => {
+  const result = await window.bumbeeChat.vocabReset();
+  if (result.ok) {
+    vocabState = { settings: result.settings || vocabState.settings, words: result.words || [] };
+    renderVocab();
+    showChallenge();
+  }
+});
+saveSettingsBtn.addEventListener("click", async () => {
+  const result = await window.bumbeeChat.vocabSettings({
+    goal: goalInput.value,
+    difficulty: difficultyInput.value,
+    targetLanguage: targetLanguageInput.value,
+    nativeLanguage: nativeLanguageInput.value,
+    dailyWords: dailyWordsInput.value,
+    monthlyReset: monthlyResetInput.checked,
+  });
+  if (result.ok) {
+    vocabState = { settings: result.settings || {}, words: result.words || [] };
+    renderSettings();
+  }
+});
+for (const eventName of ["dragenter", "dragover"]) {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.add("dragging");
+  });
+}
+for (const eventName of ["dragleave", "drop"]) {
+  dropZone.addEventListener(eventName, () => dropZone.classList.remove("dragging"));
+}
+dropZone.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  const files = Array.from(event.dataTransfer?.files || []);
+  const chunks = [];
+  for (const file of files.slice(0, 6)) {
+    chunks.push(`--- ${file.name} ---\n${await readDroppedFile(file)}`);
+  }
+  const text = chunks.join("\n\n").trim();
+  if (text) addVocabFromText(text, files.length ? "file-drop" : "drop");
+});
 promptInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
     event.preventDefault();
@@ -451,4 +696,5 @@ window.addEventListener("beforeunload", () => {
 
 initVoice();
 refreshStatus();
+loadVocab();
 addMessage("assistant", "Bumbee chat is ready. Use Camera to attach a snapshot, Voice to dictate, and Speak to hear replies.");

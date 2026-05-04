@@ -22,6 +22,12 @@
       </select>
     </header>
 
+    <nav class="tabs" aria-label="Bumbee modes">
+      <button id="chatTabBtn" type="button" class="tab active">Chat</button>
+      <button id="learnTabBtn" type="button" class="tab">Learn</button>
+      <button id="settingsTabBtn" type="button" class="tab">Settings</button>
+    </nav>
+
     <section id="loginPanel" class="login-panel" hidden>
       <div>
         <strong>Login Bumbee Gateway</strong>
@@ -46,7 +52,59 @@
       </div>
     </section>
 
-    <section id="messages" class="messages" aria-live="polite"></section>
+    <section id="chatView" class="view active">
+      <section id="messages" class="messages" aria-live="polite"></section>
+    </section>
+
+    <section id="learnView" class="view learn-view">
+      <div id="dropZone" class="drop-zone">
+        <strong>Drop words, notes, images or files</strong>
+        <span>Nhập từ/câu/idea, paste note hoặc kéo thả file vào đây. Bumbee sẽ tạo lesson và game ôn tập.</span>
+      </div>
+      <textarea id="vocabInput" rows="4" placeholder="Example: negotiate, follow up, customer retention&#10;Hoặc dán đoạn note/bài viết cần học..."></textarea>
+      <div class="toolbar compact">
+        <button id="addVocabBtn" type="button" class="primary">Add & AI plan</button>
+        <button id="challengeBtn" type="button">Challenge</button>
+        <button id="resetScoresBtn" type="button">Reset scores</button>
+      </div>
+      <div id="challengeCard" class="challenge-card" hidden></div>
+      <section>
+        <div class="section-title">
+          <strong>Learning queue</strong>
+          <span id="vocabStats">0 words</span>
+        </div>
+        <div id="vocabList" class="vocab-list"></div>
+      </section>
+    </section>
+
+    <section id="settingsView" class="view settings-view">
+      <label>Goal
+        <input id="goalInput" type="text" placeholder="business conversation, sales English, travel...">
+      </label>
+      <label>Difficulty
+        <select id="difficultyInput">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+          <option value="expert">Expert</option>
+        </select>
+      </label>
+      <label>Target language
+        <input id="targetLanguageInput" type="text" placeholder="en">
+      </label>
+      <label>Native language
+        <input id="nativeLanguageInput" type="text" placeholder="vi">
+      </label>
+      <label>Daily words
+        <input id="dailyWordsInput" type="number" min="1" max="60" step="1">
+      </label>
+      <label class="checkbox-row">
+        <input id="monthlyResetInput" type="checkbox">
+        Monthly review reset
+      </label>
+      <button id="saveSettingsBtn" type="button" class="primary">Save settings</button>
+      <p class="settings-note">Settings apply to new AI lesson cards and challenge scheduling.</p>
+    </section>
 
     <footer class="composer">
       <textarea id="promptInput" rows="3" placeholder="Ask Bumbee..." autocomplete="off"></textarea>
