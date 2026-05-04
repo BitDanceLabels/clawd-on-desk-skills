@@ -57,6 +57,14 @@
     </section>
 
     <section id="learnView" class="view learn-view">
+      <section class="game-dashboard" aria-label="Today's English mission">
+        <div>
+          <span class="eyebrow">Today's mission</span>
+          <h2>Play 5 smart challenges</h2>
+        </div>
+        <div id="gameStats" class="game-stats">0 XP · 0 streak · 0 active</div>
+      </section>
+      <div id="challengeCard" class="challenge-card game-card" hidden></div>
       <div id="dropZone" class="drop-zone">
         <strong>Drop words, notes, images or files</strong>
         <span>Nhập từ/câu/idea, paste note hoặc kéo thả file vào đây. Bumbee sẽ tạo lesson và game ôn tập.</span>
@@ -73,7 +81,6 @@
         <button id="challengeBtn" type="button">Challenge</button>
         <button id="resetScoresBtn" type="button">Reset scores</button>
       </div>
-      <div id="challengeCard" class="challenge-card" hidden></div>
       <section>
         <div class="section-title">
           <strong>Learning queue</strong>
