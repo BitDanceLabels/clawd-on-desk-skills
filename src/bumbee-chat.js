@@ -31,9 +31,17 @@ const nativeLanguageInput = document.getElementById("nativeLanguageInput");
 const dailyWordsInput = document.getElementById("dailyWordsInput");
 const monthlyResetInput = document.getElementById("monthlyResetInput");
 const saveSettingsBtn = document.getElementById("saveSettingsBtn");
+const presetButtons = Array.from(document.querySelectorAll("[data-preset]"));
 
 let vocabState = { settings: {}, words: [] };
-let activeTab = "chat";
+let activeTab = "learn";
+
+const PRESET_TEXT = {
+  ielts: "IELTS: evaluate evidence, coherent argument, significant factor, limited perspective, practical implication, long-term consequence, controversial issue, balanced conclusion",
+  work: "Work conversation: follow up, align expectations, clarify scope, make progress, handle feedback, client requirement, deadline pressure, action item",
+  social: "Social conversation: catch up, small talk, hang out, first impression, awkward silence, sense of humor, personal boundary, keep in touch",
+  funny: "Funny random: plot twist, brain freeze, accidentally professional, chaotic meeting, coffee-powered, awkward but honest, tiny victory, suspiciously productive",
+};
 
 const KNOWN_EMAIL_DOMAINS = [
   "gmail.com",
@@ -294,6 +302,8 @@ async function loadVocab() {
     if (result.ok) {
       vocabState = { settings: result.settings || {}, words: result.words || [] };
       renderVocab();
+      if (!vocabState.words.length) return;
+      if (challengeCard.hidden || !challengeCard.textContent) showChallenge();
     }
   } catch (err) {
     vocabStats.textContent = `Vocab error: ${err.message}`;
@@ -599,6 +609,12 @@ learnTabBtn.addEventListener("click", () => setActiveTab("learn"));
 settingsTabBtn.addEventListener("click", () => setActiveTab("settings"));
 
 addVocabBtn.addEventListener("click", () => addVocabFromText(vocabInput.value, "manual"));
+presetButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.preset;
+    addVocabFromText(PRESET_TEXT[key] || "", `preset-${key}`);
+  });
+});
 challengeBtn.addEventListener("click", () => showChallenge());
 resetScoresBtn.addEventListener("click", async () => {
   const result = await window.bumbeeChat.vocabReset();
@@ -696,5 +712,5 @@ window.addEventListener("beforeunload", () => {
 
 initVoice();
 refreshStatus();
-loadVocab();
+setActiveTab("learn");
 addMessage("assistant", "Bumbee chat is ready. Use Camera to attach a snapshot, Voice to dictate, and Speak to hear replies.");

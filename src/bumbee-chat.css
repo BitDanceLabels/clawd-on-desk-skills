@@ -234,6 +234,19 @@ video {
   flex-wrap: wrap;
 }
 
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.preset-row button {
+  padding: 0 8px;
+  font-size: 12px;
+  background: #202838;
+}
+
 .compact button.primary {
   margin-left: 0;
 }
@@ -439,5 +452,9 @@ button[disabled] {
 @media (max-width: 420px) {
   .login-grid {
     grid-template-columns: 1fr;
+  }
+
+  .preset-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

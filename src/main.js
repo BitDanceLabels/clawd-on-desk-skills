@@ -114,6 +114,67 @@ const CHAT_DEVICE_ID = process.env.BUMBEE_DEVICE_ID || `${os.hostname()}-${proce
 const CHAT_SESSION_ID = `desk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const CHAT_AUTH_SERVER_URL = (process.env.BUMBEE_DESK_AUTH_URL || process.env.TOKEN_ADMIN_URL || "https://gateway.bumbee.asia/bumbee-desk-token-admin").replace(/\/$/, "");
 const VOCAB_DB_PATH = path.join(app.getPath("userData"), "bumbee-english-vocab.json");
+const LEARN_ON_START = process.env.BUMBEE_LEARN_ON_START !== "0";
+
+const STARTER_VOCAB = [
+  ["coherent argument", "IELTS", "A clear argument where ideas connect logically.", "My presentation needs a coherent argument, not just random opinions."],
+  ["evaluate evidence", "IELTS", "To judge how strong or useful evidence is.", "Before we decide, we should evaluate the evidence."],
+  ["balanced conclusion", "IELTS", "A conclusion that fairly considers both sides.", "A balanced conclusion makes your essay sound mature."],
+  ["limited perspective", "IELTS", "A narrow way of looking at a problem.", "That plan has a limited perspective because it ignores customers."],
+  ["follow up", "Work", "To contact someone again after a previous conversation.", "I will follow up with the client tomorrow."],
+  ["align expectations", "Work", "To make sure everyone agrees on what should happen.", "Let's align expectations before we start the sprint."],
+  ["clarify scope", "Work", "To make the boundaries of a task or project clear.", "Can we clarify the scope before quoting the price?"],
+  ["action item", "Work", "A task someone agrees to do after a meeting.", "My action item is to send the proposal today."],
+  ["catch up", "Social", "To talk with someone after not seeing them for a while.", "Let's catch up over coffee this weekend."],
+  ["small talk", "Social", "Light conversation used to start social interaction.", "Small talk helps make meetings feel warmer."],
+  ["awkward silence", "Social", "An uncomfortable moment when nobody speaks.", "I asked a funny question to break the awkward silence."],
+  ["keep in touch", "Social", "To continue communicating with someone.", "It was great meeting you. Let's keep in touch."],
+  ["plot twist", "Funny", "An unexpected change in a story or situation.", "Plot twist: the quiet intern fixed the whole system."],
+  ["coffee-powered", "Funny", "Jokingly driven by coffee and energy.", "Our Monday meeting was completely coffee-powered."],
+  ["tiny victory", "Funny", "A small win that still feels good.", "Remembering this word is today's tiny victory."],
+  ["suspiciously productive", "Funny", "So productive that it feels surprising or funny.", "You finished all tasks before lunch. Suspiciously productive."],
+];
+
+function starterLesson(term, category, meaning, example) {
+  return {
+    meaning_vi: `${category}: ${meaning}`,
+    pronunciation: "",
+    examples: [
+      example,
+      `Can you make a natural sentence with "${term}"?`,
+      `Use "${term}" in a ${category.toLowerCase()} conversation.`,
+    ],
+    quiz: [
+      { type: "recall", prompt: `Make one natural sentence with "${term}".`, answer: example },
+      { type: "meaning", prompt: `What does "${term}" mean in this context?`, answer: meaning },
+    ],
+  };
+}
+
+function buildStarterWords() {
+  const now = new Date().toISOString();
+  return STARTER_VOCAB.map(([term, category, meaning, example], index) => ({
+    id: `starter-${index + 1}-${term.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+    term,
+    score: 0,
+    streak: 0,
+    mistake_count: 0,
+    review_count: 0,
+    mastered: false,
+    level: category === "IELTS" ? "hard" : "medium",
+    sources: [`starter-${category.toLowerCase()}`],
+    lesson: starterLesson(term, category, meaning, example),
+    created_at: now,
+    updated_at: now,
+    last_reviewed: null,
+    next_review: now,
+  }));
+}
+
+function ensureStarterVocab(db) {
+  if (db.words && db.words.length > 0) return db;
+  return { ...db, words: buildStarterWords() };
+}
 
 function getBumbeeTokenFilePath() {
   return path.join(app.getPath("userData"), "bumbee-gateway-token.txt");
@@ -309,9 +370,9 @@ function readVocabDb() {
       db.last_reset_month = thisMonth;
       writeVocabDb(db);
     }
-    return db;
+    return ensureStarterVocab(db);
   } catch {
-    return defaultVocabDb();
+    return ensureStarterVocab(defaultVocabDb());
   }
 }
 
@@ -600,7 +661,7 @@ function openBumbeeChat() {
     y: bounds.y,
     minWidth: 380,
     minHeight: 520,
-    title: "Bumbee Chat",
+    title: "Bumbee English Coach",
     show: false,
     backgroundColor: "#111318",
     webPreferences: {
@@ -1620,6 +1681,11 @@ if (!gotTheLock) {
       callback(false);
     });
     createWindow();
+    if (LEARN_ON_START) {
+      setTimeout(() => {
+        if (!app.isQuitting) openBumbeeChat();
+      }, 900);
+    }
 
     // Register global shortcut for toggling pet visibility
     registerToggleShortcut();
