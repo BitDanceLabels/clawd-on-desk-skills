@@ -135,6 +135,17 @@ const STARTER_VOCAB = [
   ["suspiciously productive", "Funny", "So productive that it feels surprising or funny.", "You finished all tasks before lunch. Suspiciously productive."],
 ];
 
+const VOCAB_DIFFICULTY_RULES = {
+  easy: { gain: 10, loss: 24, masterScore: 92, masterStreak: 5, correctHourBase: 4, wrongHours: 1 },
+  medium: { gain: 8, loss: 22, masterScore: 94, masterStreak: 6, correctHourBase: 6, wrongHours: 2 },
+  hard: { gain: 6, loss: 20, masterScore: 96, masterStreak: 8, correctHourBase: 8, wrongHours: 3 },
+  expert: { gain: 5, loss: 18, masterScore: 98, masterStreak: 10, correctHourBase: 10, wrongHours: 4 },
+};
+
+function getVocabDifficultyRules(level) {
+  return VOCAB_DIFFICULTY_RULES[level] || VOCAB_DIFFICULTY_RULES.medium;
+}
+
 function starterLesson(term, category, meaning, example) {
   return {
     meaning_vi: `${category}: ${meaning}`,
@@ -388,6 +399,7 @@ function normalizeVocabTerm(raw) {
   return String(raw || "")
     .trim()
     .replace(/\s+/g, " ")
+    .replace(/^[A-Za-z][A-Za-z ]{1,24}:\s+/, "")
     .replace(/^[,.;:!?'"`]+|[,.;:!?'"`]+$/g, "")
     .slice(0, 90);
 }
@@ -520,9 +532,11 @@ function reviewVocabItem(payload) {
   item.last_reviewed = new Date().toISOString();
   item.streak = correct ? (item.streak || 0) + 1 : 0;
   item.mistake_count = correct ? (item.mistake_count || 0) : (item.mistake_count || 0) + 1;
-  item.score = Math.max(0, Math.min(100, (item.score || 0) + (correct ? 14 : -18)));
-  item.mastered = item.score >= 85 && item.streak >= 3;
-  const delayHours = correct ? Math.min(168, 8 * Math.max(1, item.streak)) : 2;
+  if (!VOCAB_DIFFICULTY_RULES[item.level]) item.level = db.settings.difficulty || "medium";
+  const rules = getVocabDifficultyRules(item.level);
+  item.score = Math.max(0, Math.min(100, (item.score || 0) + (correct ? rules.gain : -rules.loss)));
+  item.mastered = item.score >= rules.masterScore && item.streak >= rules.masterStreak;
+  const delayHours = correct ? Math.min(168, rules.correctHourBase * Math.max(1, item.streak)) : rules.wrongHours;
   item.next_review = new Date(Date.now() + delayHours * 60 * 60 * 1000).toISOString();
   item.updated_at = new Date().toISOString();
   writeVocabDb(db);
@@ -544,15 +558,22 @@ function resetVocabScores() {
 
 function updateVocabSettings(payload) {
   const db = readVocabDb();
+  const nextDifficulty = ["easy", "medium", "hard", "expert"].includes(payload?.difficulty) ? payload.difficulty : db.settings.difficulty;
   db.settings = {
     ...db.settings,
     nativeLanguage: String(payload?.nativeLanguage || db.settings.nativeLanguage || "vi").slice(0, 20),
     targetLanguage: String(payload?.targetLanguage || db.settings.targetLanguage || "en").slice(0, 20),
     goal: String(payload?.goal || db.settings.goal || "business conversation").slice(0, 180),
     dailyWords: Math.max(1, Math.min(60, Number.parseInt(payload?.dailyWords || db.settings.dailyWords || 8, 10))),
-    difficulty: ["easy", "medium", "hard", "expert"].includes(payload?.difficulty) ? payload.difficulty : db.settings.difficulty,
+    difficulty: nextDifficulty,
     monthlyReset: payload?.monthlyReset === undefined ? db.settings.monthlyReset : !!payload.monthlyReset,
   };
+  for (const item of db.words) {
+    if (!item.mastered) {
+      item.level = nextDifficulty;
+      item.updated_at = new Date().toISOString();
+    }
+  }
   writeVocabDb(db);
   return { ok: true, settings: db.settings, words: db.words };
 }

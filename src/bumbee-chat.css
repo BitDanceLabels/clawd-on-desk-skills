@@ -356,6 +356,15 @@ video {
   line-height: 1.35;
 }
 
+.recall-clue {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: #202838;
+  color: #dbeafe;
+  line-height: 1.45;
+}
+
 .choice-grid button.correct {
   border-color: rgba(52, 211, 153, 0.75);
   background: rgba(52, 211, 153, 0.18);

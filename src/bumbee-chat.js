@@ -37,6 +37,18 @@ const presetButtons = Array.from(document.querySelectorAll("[data-preset]"));
 let vocabState = { settings: {}, words: [] };
 let activeTab = "learn";
 let currentChallengeId = null;
+let challengeHistory = [];
+
+const DIFFICULTY_META = {
+  easy: { label: "EASY", prompt: "Pick the closest meaning, then say one sentence out loud.", choiceCount: 3, mode: "meaning" },
+  medium: { label: "MEDIUM", prompt: "Pick the closest meaning, then rewrite the example in your own words.", choiceCount: 4, mode: "meaning" },
+  hard: { label: "HARD", prompt: "Read the clue, recall the term, then check yourself.", choiceCount: 0, mode: "recall" },
+  expert: { label: "EXPERT", prompt: "Create a natural work sentence before revealing the answer.", choiceCount: 0, mode: "production" },
+};
+
+function escapeRegExp(text) {
+  return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 const PRESET_TEXT = {
   ielts: "IELTS: evaluate evidence, coherent argument, significant factor, limited perspective, practical implication, long-term consequence, controversial issue, balanced conclusion",
@@ -280,7 +292,7 @@ function renderVocab() {
     title.textContent = word.term;
     const score = document.createElement("span");
     score.className = "score-pill";
-    score.textContent = `${word.score || 0}/100`;
+    score.textContent = `${word.level || vocabState.settings?.difficulty || "medium"} · ${word.score || 0}/100`;
     header.append(title, score);
 
     const meaning = document.createElement("p");
@@ -335,7 +347,7 @@ async function addVocabFromText(text, source) {
     vocabState = { settings: result.db?.settings || vocabState.settings, words: result.db?.words || vocabState.words };
     vocabInput.value = "";
     renderVocab();
-    showChallenge(result.created?.[0] || vocabState.words[0]);
+    showChallenge(result.created?.[0] || pickChallengeWord({ allowCurrent: false }));
   } catch (err) {
     challengeCard.hidden = false;
     challengeCard.textContent = `Add failed: ${err.message}`;
@@ -345,15 +357,47 @@ async function addVocabFromText(text, source) {
   }
 }
 
-function pickChallengeWord() {
+function getWordDifficulty(word) {
+  const value = word?.level || vocabState.settings?.difficulty || "medium";
+  return DIFFICULTY_META[value] ? value : "medium";
+}
+
+function getReviewTime(word) {
+  const time = Date.parse(word?.next_review || "");
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getChallengeRank(word, now = Date.now()) {
+  const due = getReviewTime(word) <= now ? 0 : 1;
+  const historyPenalty = challengeHistory.includes(word.id) ? 1 : 0;
+  return [
+    due,
+    historyPenalty,
+    word.review_count || 0,
+    -(word.mistake_count || 0),
+    word.score || 0,
+    getReviewTime(word),
+    String(word.term || ""),
+  ];
+}
+
+function compareRank(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] < b[i]) return -1;
+    if (a[i] > b[i]) return 1;
+  }
+  return 0;
+}
+
+function pickChallengeWord(options = {}) {
   const words = (vocabState.words || []).filter((word) => !word.mastered);
   if (!words.length) return null;
+  const allowCurrent = options.allowCurrent !== false;
+  const now = Date.now();
   const sorted = words.slice().sort((a, b) => {
-    const scoreDiff = (a.score || 0) - (b.score || 0);
-    if (scoreDiff) return scoreDiff;
-    return String(a.next_review || "").localeCompare(String(b.next_review || ""));
+    return compareRank(getChallengeRank(a, now), getChallengeRank(b, now));
   });
-  if (currentChallengeId && sorted.length > 1) {
+  if (!allowCurrent && currentChallengeId && sorted.length > 1) {
     return sorted.find((word) => word.id !== currentChallengeId) || sorted[0];
   }
   return sorted[0];
@@ -364,22 +408,57 @@ function getMeaning(word) {
 }
 
 function buildChoiceSet(word) {
+  const correct = getMeaning(word);
+  const seen = new Set([correct.trim().toLowerCase()]);
   const otherMeanings = (vocabState.words || [])
     .filter((item) => item.id !== word.id)
-    .map((item) => getMeaning(item))
-    .filter(Boolean);
-  const choices = [getMeaning(word), ...otherMeanings.slice(0, 5)];
-  while (choices.length < 4) {
-    choices.push([
-      "A polite phrase for keeping a conversation moving.",
-      "A useful idea for meetings, essays or daily communication.",
-      "A natural expression for describing a situation clearly.",
-    ][choices.length - 1] || word.term);
+    .map((item) => {
+      const meaning = getMeaning(item);
+      return meaning === getMeaning({}) ? `${item.term}: ${meaning}` : meaning;
+    })
+    .filter((meaning) => {
+      const key = String(meaning || "").trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  const difficulty = getWordDifficulty(word);
+  const choiceCount = DIFFICULTY_META[difficulty].choiceCount || 4;
+  const choices = [correct, ...otherMeanings.slice(0, choiceCount - 1)];
+  const fallbackChoices = [
+    `A phrase about planning or following up, not "${word.term}".`,
+    `A general communication idea that is different from "${word.term}".`,
+    `A workplace expression with a different meaning from "${word.term}".`,
+    `A casual phrase that does not match "${word.term}".`,
+  ];
+  for (const fallback of fallbackChoices) {
+    if (choices.length >= choiceCount) break;
+    const key = fallback.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      choices.push(fallback);
+    }
   }
   return choices
-    .slice(0, 4)
-    .map((text) => ({ text, correct: text === getMeaning(word) }))
+    .slice(0, choiceCount)
+    .map((text) => ({ text, correct: text === correct }))
     .sort(() => Math.random() - 0.5);
+}
+
+function rememberChallenge(id) {
+  if (!id) return;
+  challengeHistory = [id, ...challengeHistory.filter((item) => item !== id)].slice(0, 6);
+}
+
+function buildRecallCard(word, feedback) {
+  const reveal = document.createElement("button");
+  reveal.type = "button";
+  reveal.textContent = "Reveal answer";
+  reveal.addEventListener("click", () => {
+    feedback.hidden = false;
+    feedback.textContent = `${word.term}: ${getMeaning(word)}`;
+  });
+  return reveal;
 }
 
 function showChallenge(word = pickChallengeWord()) {
@@ -389,14 +468,17 @@ function showChallenge(word = pickChallengeWord()) {
     return;
   }
   currentChallengeId = word.id;
+  rememberChallenge(word.id);
   const examples = word.lesson?.examples || [];
-  const choices = buildChoiceSet(word);
+  const difficulty = getWordDifficulty(word);
+  const metaInfo = DIFFICULTY_META[difficulty] || DIFFICULTY_META.medium;
+  const choices = metaInfo.mode === "meaning" ? buildChoiceSet(word) : [];
   challengeCard.replaceChildren();
   challengeCard.hidden = false;
   const meta = document.createElement("div");
   meta.className = "game-meta";
   const level = document.createElement("span");
-  level.textContent = (word.level || "medium").toUpperCase();
+  level.textContent = metaInfo.label;
   const score = document.createElement("span");
   score.textContent = `${word.score || 0}/100 XP`;
   const streak = document.createElement("span");
@@ -407,29 +489,39 @@ function showChallenge(word = pickChallengeWord()) {
   title.textContent = word.term;
   const prompt = document.createElement("p");
   prompt.className = "game-prompt";
-  prompt.textContent = "Pick the closest meaning, then say one sentence out loud.";
+  prompt.textContent = metaInfo.prompt;
   const choicesEl = document.createElement("div");
   choicesEl.className = "choice-grid";
   const feedback = document.createElement("div");
   feedback.className = "game-feedback";
   feedback.hidden = true;
-  for (const choice of choices) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = choice.text;
-    button.addEventListener("click", () => {
-      for (const item of choicesEl.querySelectorAll("button")) item.disabled = true;
-      button.classList.add(choice.correct ? "correct" : "wrong");
-      const correctButton = Array.from(choicesEl.querySelectorAll("button"))
-        .find((item) => item.textContent === getMeaning(word));
-      if (correctButton) correctButton.classList.add("correct");
-      feedback.hidden = false;
-      feedback.textContent = choice.correct
-        ? `Good. Try this: ${examples[0] || `I can use "${word.term}" naturally today.`}`
-        : `Review it: ${getMeaning(word)}`;
-      notifyCoach(choice.correct ? "correct" : "wrong");
-    });
-    choicesEl.appendChild(button);
+  if (choices.length) {
+    for (const choice of choices) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = choice.text;
+      button.addEventListener("click", () => {
+        for (const item of choicesEl.querySelectorAll("button")) item.disabled = true;
+        button.classList.add(choice.correct ? "correct" : "wrong");
+        const correctButton = Array.from(choicesEl.querySelectorAll("button"))
+          .find((item) => item.textContent === getMeaning(word));
+        if (correctButton) correctButton.classList.add("correct");
+        feedback.hidden = false;
+        feedback.textContent = choice.correct
+          ? `Good. Try this: ${examples[0] || `I can use "${word.term}" naturally today.`}`
+          : `Review it: ${getMeaning(word)}`;
+        notifyCoach(choice.correct ? "correct" : "wrong");
+      });
+      choicesEl.appendChild(button);
+    }
+  } else {
+    const clue = document.createElement("div");
+    clue.className = "recall-clue";
+    const termPattern = new RegExp(escapeRegExp(word.term), "ig");
+    clue.textContent = difficulty === "expert"
+      ? `Meaning: ${getMeaning(word)}`
+      : `Clue: ${getMeaning(word)}${examples[0] ? ` Example: ${examples[0].replace(termPattern, "_____")}` : ""}`;
+    choicesEl.append(clue, buildRecallCard(word, feedback));
   }
 
   const examplesEl = document.createElement("ul");
@@ -463,7 +555,7 @@ function showChallenge(word = pickChallengeWord()) {
   next.textContent = "Next";
   next.addEventListener("click", () => {
     notifyCoach("next");
-    showChallenge();
+    showChallenge(pickChallengeWord({ allowCurrent: false }));
   });
   actions.append(good, bad, next);
   challengeCard.append(meta, title, prompt, choicesEl, feedback, examplesEl, actions);
@@ -474,7 +566,7 @@ async function markReview(id, correct) {
   if (result.ok) {
     vocabState = { settings: result.settings || vocabState.settings, words: result.words || [] };
     renderVocab();
-    showChallenge();
+    showChallenge(pickChallengeWord({ allowCurrent: false }));
   }
 }
 
@@ -788,6 +880,8 @@ challengeBtn.addEventListener("click", () => showChallenge());
 resetScoresBtn.addEventListener("click", async () => {
   const result = await window.bumbeeChat.vocabReset();
   if (result.ok) {
+    currentChallengeId = null;
+    challengeHistory = [];
     vocabState = { settings: result.settings || vocabState.settings, words: result.words || [] };
     renderVocab();
     showChallenge();
@@ -803,8 +897,12 @@ saveSettingsBtn.addEventListener("click", async () => {
     monthlyReset: monthlyResetInput.checked,
   });
   if (result.ok) {
+    currentChallengeId = null;
+    challengeHistory = [];
     vocabState = { settings: result.settings || {}, words: result.words || [] };
     renderSettings();
+    renderVocab();
+    showChallenge();
   }
 });
 for (const eventName of ["dragenter", "dragover"]) {
