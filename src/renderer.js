@@ -90,6 +90,10 @@ window.electronAPI.onEndDragReaction(() => endDragReaction());
 window.electronAPI.onPlayClickReaction((svg, duration) => playReaction(svg, duration));
 
 function playReaction(svgFile, durationMs) {
+  if (window.ClawdSkinManager && !window.ClawdSkinManager.isSvgActive()) {
+    if (window.ClawdSkinManager.dispatchReaction(svgFile, durationMs)) return;
+  }
+
   isReacting = true;
   detachEyeTracking();
   window.electronAPI.pauseCursorPolling();
@@ -361,4 +365,3 @@ window.electronAPI.onWakeFromDoze(() => {
     } catch (e) {}
   }
 });
-

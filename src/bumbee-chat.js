@@ -194,10 +194,13 @@ const captureBtn = document.getElementById("captureBtn");
 const stopCameraBtn = document.getElementById("stopCameraBtn");
 
 let cameraStream = null;
+let cameraStarting = false;
 let capturedFrame = null;
 let speakingEnabled = true;
 let recognition = null;
 let recognizing = false;
+let voiceWanted = false;
+let voiceRestartTimer = null;
 let pendingRequest = false;
 
 function setActiveTab(tab) {
@@ -219,8 +222,8 @@ function setActiveTab(tab) {
 function pushActivityState() {
   window.bumbeeChat.activity({
     typing: document.activeElement === promptInput && promptInput.value.trim().length > 0,
-    camera: !!cameraStream,
-    voice: recognizing,
+    camera: cameraStarting || !!cameraStream,
+    voice: voiceWanted || recognizing,
     pending: pendingRequest,
   });
 }
@@ -615,26 +618,53 @@ async function startCamera() {
     addMessage("system", "Camera is not available in this Electron runtime.");
     return;
   }
+  cameraStarting = true;
+  cameraBtn.disabled = true;
+  cameraBtn.textContent = "Camera: Opening";
+  pushActivityState();
   try {
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    const videoInputs = devices.filter((device) => device.kind === "videoinput");
+    const iphoneCamera = videoInputs.find((device) => /iphone|continuity/i.test(device.label || ""));
+    const video = iphoneCamera
+      ? { deviceId: { exact: iphoneCamera.deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      : { width: { ideal: 1280 }, height: { ideal: 720 } };
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+      video,
       audio: false,
     });
+    for (const track of cameraStream.getVideoTracks()) {
+      track.addEventListener("ended", () => {
+        addMessage("system", "Camera device ended. Reopen Camera if you still want to use it.");
+        stopCamera();
+      });
+    }
     cameraPreview.srcObject = cameraStream;
     cameraPanel.hidden = false;
+    await cameraPreview.play().catch(() => {});
+    cameraBtn.textContent = "Camera: On";
     pushActivityState();
   } catch (err) {
     addMessage("system", `Camera failed: ${err.message}`);
+    stopCamera();
+  } finally {
+    cameraStarting = false;
+    cameraBtn.disabled = false;
+    if (!cameraStream) cameraBtn.textContent = "Camera";
+    pushActivityState();
   }
 }
 
 function stopCamera() {
+  cameraStarting = false;
   if (cameraStream) {
     for (const track of cameraStream.getTracks()) track.stop();
   }
   cameraStream = null;
   cameraPreview.srcObject = null;
   cameraPanel.hidden = true;
+  cameraBtn.disabled = false;
+  cameraBtn.textContent = "Camera";
   pushActivityState();
 }
 
@@ -672,11 +702,30 @@ function initVoice() {
   };
   recognition.onend = () => {
     recognizing = false;
-    voiceBtn.textContent = "Voice";
+    if (voiceWanted) {
+      voiceBtn.textContent = "Voice: Reconnecting";
+      clearTimeout(voiceRestartTimer);
+      voiceRestartTimer = setTimeout(() => {
+        voiceRestartTimer = null;
+        if (!voiceWanted || recognizing) return;
+        try {
+          recognition.start();
+        } catch (err) {
+          addMessage("system", `Voice restart failed: ${err.message}`);
+          stopVoice();
+        }
+      }, 350);
+    } else {
+      voiceBtn.textContent = "Voice";
+    }
     pushActivityState();
   };
   recognition.onerror = (event) => {
-    addMessage("system", `Voice input error: ${event.error || "unknown"}`);
+    const error = event.error || "unknown";
+    addMessage("system", `Voice input error: ${error}`);
+    if (["not-allowed", "service-not-allowed", "audio-capture"].includes(error)) {
+      stopVoice();
+    }
   };
   recognition.onresult = (event) => {
     let finalText = "";
@@ -694,6 +743,33 @@ function initVoice() {
       promptInput.placeholder = interimText.trim();
     }
   };
+}
+
+function startVoice() {
+  if (!recognition) return;
+  voiceWanted = true;
+  voiceBtn.textContent = "Voice: Starting";
+  pushActivityState();
+  try {
+    recognition.start();
+  } catch (err) {
+    if (!/already started/i.test(err.message || "")) {
+      addMessage("system", `Voice start failed: ${err.message}`);
+      stopVoice();
+    }
+  }
+}
+
+function stopVoice() {
+  voiceWanted = false;
+  clearTimeout(voiceRestartTimer);
+  voiceRestartTimer = null;
+  if (recognition && recognizing) {
+    try { recognition.stop(); } catch {}
+  }
+  recognizing = false;
+  voiceBtn.textContent = "Voice";
+  pushActivityState();
 }
 
 sendBtn.addEventListener("click", sendPrompt);
@@ -761,6 +837,7 @@ promptInput.addEventListener("focus", pushActivityState);
 promptInput.addEventListener("blur", pushActivityState);
 
 cameraBtn.addEventListener("click", () => {
+  if (cameraStarting) return;
   if (cameraStream) stopCamera();
   else startCamera();
 });
@@ -769,8 +846,8 @@ stopCameraBtn.addEventListener("click", stopCamera);
 
 voiceBtn.addEventListener("click", () => {
   if (!recognition) return;
-  if (recognizing) recognition.stop();
-  else recognition.start();
+  if (voiceWanted || recognizing) stopVoice();
+  else startVoice();
 });
 
 speakBtn.addEventListener("click", () => {
@@ -798,7 +875,7 @@ codeInput.addEventListener("keydown", (event) => {
 
 window.addEventListener("beforeunload", () => {
   stopCamera();
-  if (recognition && recognizing) recognition.stop();
+  stopVoice();
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   window.bumbeeChat.activity({ typing: false, camera: false, voice: false, pending: false });
 });

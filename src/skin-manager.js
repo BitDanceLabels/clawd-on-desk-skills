@@ -89,5 +89,17 @@
     // SVG path is handled by renderer.js directly (existing logic).
   }
 
-  window.ClawdSkinManager = { setSkin, getActiveSkin, isSvgActive, dispatchState };
+  function dispatchReaction(svg, durationMs) {
+    if (activeSkin.type === "live2d" && window.ClawdLive2DRenderer) {
+      window.ClawdLive2DRenderer.startMotion("attention");
+      return true;
+    }
+    if (activeSkin.type === "vrm" && window.ClawdVRMRenderer?.playReaction) {
+      window.ClawdVRMRenderer.playReaction(svg, durationMs);
+      return true;
+    }
+    return false;
+  }
+
+  window.ClawdSkinManager = { setSkin, getActiveSkin, isSvgActive, dispatchState, dispatchReaction };
 })();
