@@ -28,11 +28,12 @@
         <p id="loginHint">Nhập email được cấp quyền, nhận mã xác thực rồi dùng chat.</p>
       </div>
       <div class="login-grid">
-        <input id="emailInput" type="email" placeholder="nhutpm7777@gmail.com" autocomplete="email">
+        <input id="emailInput" type="email" placeholder="ten@gmail.com" autocomplete="email" spellcheck="false">
         <button id="requestCodeBtn" type="button">Get code</button>
         <input id="codeInput" type="text" inputmode="numeric" placeholder="6-digit code" autocomplete="one-time-code">
         <button id="verifyCodeBtn" type="button" class="primary">Verify</button>
       </div>
+      <p id="emailHint" class="email-hint" hidden></p>
       <p id="loginStatus" class="login-status"></p>
     </section>
 
