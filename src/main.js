@@ -484,12 +484,14 @@ async function addVocabItems(payload) {
   const terms = Array.from(new Set(rawTerms.map(normalizeVocabTerm).filter(Boolean))).slice(0, 60);
   const existing = new Map(db.words.map((item) => [item.term.toLowerCase(), item]));
   const created = [];
+  const items = [];
   for (const term of terms) {
     const key = term.toLowerCase();
     if (existing.has(key)) {
       const current = existing.get(key);
       current.updated_at = new Date().toISOString();
       current.sources = Array.from(new Set([...(current.sources || []), source])).slice(0, 8);
+      items.push(current);
       continue;
     }
     const lesson = await enrichVocabTerm(term, db.settings, sourceNote);
@@ -512,9 +514,10 @@ async function addVocabItems(payload) {
     db.words.unshift(item);
     existing.set(key, item);
     created.push(item);
+    items.push(item);
   }
   writeVocabDb(db);
-  return { ok: true, created, total: db.words.length, db };
+  return { ok: true, created, items, total: db.words.length, db };
 }
 
 function listVocabItems() {

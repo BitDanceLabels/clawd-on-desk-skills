@@ -38,6 +38,7 @@ let vocabState = { settings: {}, words: [] };
 let activeTab = "learn";
 let currentChallengeId = null;
 let challengeHistory = [];
+let currentFocusSource = null;
 
 const DIFFICULTY_META = {
   easy: { label: "EASY", prompt: "Pick the closest meaning, then say one sentence out loud.", choiceCount: 3, mode: "meaning" },
@@ -339,6 +340,9 @@ async function loadVocab() {
 async function addVocabFromText(text, source) {
   const clean = String(text || "").trim();
   if (!clean) return;
+  currentFocusSource = source || null;
+  currentChallengeId = null;
+  challengeHistory = [];
   addVocabBtn.disabled = true;
   addVocabBtn.textContent = "Adding...";
   try {
@@ -347,7 +351,7 @@ async function addVocabFromText(text, source) {
     vocabState = { settings: result.db?.settings || vocabState.settings, words: result.db?.words || vocabState.words };
     vocabInput.value = "";
     renderVocab();
-    showChallenge(result.created?.[0] || pickChallengeWord({ allowCurrent: false }));
+    showChallenge(result.created?.[0] || result.items?.[0] || pickChallengeWord({ allowCurrent: false, source: currentFocusSource }));
   } catch (err) {
     challengeCard.hidden = false;
     challengeCard.textContent = `Add failed: ${err.message}`;
@@ -390,7 +394,12 @@ function compareRank(a, b) {
 }
 
 function pickChallengeWord(options = {}) {
-  const words = (vocabState.words || []).filter((word) => !word.mastered);
+  const source = options.source || currentFocusSource;
+  let words = (vocabState.words || []).filter((word) => !word.mastered);
+  if (source) {
+    const sourceWords = words.filter((word) => Array.isArray(word.sources) && word.sources.includes(source));
+    if (sourceWords.length) words = sourceWords;
+  }
   if (!words.length) return null;
   const allowCurrent = options.allowCurrent !== false;
   const now = Date.now();
@@ -555,7 +564,7 @@ function showChallenge(word = pickChallengeWord()) {
   next.textContent = "Next";
   next.addEventListener("click", () => {
     notifyCoach("next");
-    showChallenge(pickChallengeWord({ allowCurrent: false }));
+    showChallenge(pickChallengeWord({ allowCurrent: false, source: currentFocusSource }));
   });
   actions.append(good, bad, next);
   challengeCard.append(meta, title, prompt, choicesEl, feedback, examplesEl, actions);
@@ -566,7 +575,7 @@ async function markReview(id, correct) {
   if (result.ok) {
     vocabState = { settings: result.settings || vocabState.settings, words: result.words || [] };
     renderVocab();
-    showChallenge(pickChallengeWord({ allowCurrent: false }));
+    showChallenge(pickChallengeWord({ allowCurrent: false, source: currentFocusSource }));
   }
 }
 
@@ -873,15 +882,18 @@ addVocabBtn.addEventListener("click", () => addVocabFromText(vocabInput.value, "
 presetButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const key = button.dataset.preset;
-    addVocabFromText(PRESET_TEXT[key] || "", `preset-${key}`);
+    const source = `preset-${key}`;
+    currentFocusSource = source;
+    addVocabFromText(PRESET_TEXT[key] || "", source);
   });
 });
-challengeBtn.addEventListener("click", () => showChallenge());
+challengeBtn.addEventListener("click", () => showChallenge(pickChallengeWord({ allowCurrent: false, source: currentFocusSource })));
 resetScoresBtn.addEventListener("click", async () => {
   const result = await window.bumbeeChat.vocabReset();
   if (result.ok) {
     currentChallengeId = null;
     challengeHistory = [];
+    currentFocusSource = null;
     vocabState = { settings: result.settings || vocabState.settings, words: result.words || [] };
     renderVocab();
     showChallenge();
@@ -899,6 +911,7 @@ saveSettingsBtn.addEventListener("click", async () => {
   if (result.ok) {
     currentChallengeId = null;
     challengeHistory = [];
+    currentFocusSource = null;
     vocabState = { settings: result.settings || {}, words: result.words || [] };
     renderSettings();
     renderVocab();
