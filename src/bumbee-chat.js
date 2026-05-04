@@ -248,6 +248,12 @@ function renderSettings() {
   monthlyResetInput.checked = settings.monthlyReset !== false;
 }
 
+function notifyCoach(type, message) {
+  try {
+    window.bumbeeChat.coachEvent({ type, message });
+  } catch {}
+}
+
 function renderVocab() {
   const words = vocabState.words || [];
   const due = words.filter((word) => !word.mastered).length;
@@ -418,6 +424,7 @@ function showChallenge(word = pickChallengeWord()) {
       feedback.textContent = choice.correct
         ? `Good. Try this: ${examples[0] || `I can use "${word.term}" naturally today.`}`
         : `Review it: ${getMeaning(word)}`;
+      notifyCoach(choice.correct ? "correct" : "wrong");
     });
     choicesEl.appendChild(button);
   }
@@ -436,16 +443,25 @@ function showChallenge(word = pickChallengeWord()) {
   good.type = "button";
   good.className = "good";
   good.textContent = "I can use it";
-  good.addEventListener("click", () => markReview(word.id, true));
+  good.addEventListener("click", () => {
+    notifyCoach("correct");
+    markReview(word.id, true);
+  });
   const bad = document.createElement("button");
   bad.type = "button";
   bad.className = "bad";
   bad.textContent = "Train again";
-  bad.addEventListener("click", () => markReview(word.id, false));
+  bad.addEventListener("click", () => {
+    notifyCoach("wrong");
+    markReview(word.id, false);
+  });
   const next = document.createElement("button");
   next.type = "button";
   next.textContent = "Next";
-  next.addEventListener("click", () => showChallenge());
+  next.addEventListener("click", () => {
+    notifyCoach("next");
+    showChallenge();
+  });
   actions.append(good, bad, next);
   challengeCard.append(meta, title, prompt, choicesEl, feedback, examplesEl, actions);
 }

@@ -840,9 +840,10 @@ const _permCtx = {
     const s = sessions.get(sessionId);
     if (s && s.sourcePid) focusTerminalWindow(s.sourcePid, s.cwd, s.editor, s.pidChain);
   },
+  openBumbeeChat: () => openBumbeeChat(),
 };
 const _perm = require("./permission")(_permCtx);
-const { showPermissionBubble, resolvePermissionEntry, sendPermissionResponse, repositionBubbles, permLog, PASSTHROUGH_TOOLS, showCodexNotifyBubble, clearCodexNotifyBubbles } = _perm;
+const { showPermissionBubble, resolvePermissionEntry, sendPermissionResponse, repositionBubbles, permLog, PASSTHROUGH_TOOLS, showCodexNotifyBubble, showCoachNotifyBubble, clearCodexNotifyBubbles } = _perm;
 const pendingPermissions = _perm.pendingPermissions;
 let permDebugLog = null; // set after app.whenReady()
 let updateDebugLog = null; // set after app.whenReady()
@@ -1002,6 +1003,76 @@ let _clawdbot = null;
 let _gateway = null;
 let _skills = null;
 let _smart = null;
+let coachReminderTimer = null;
+let coachLastInteractionAt = 0;
+
+const COACH_FIRST_PROMPT_MS = 4500;
+const COACH_IDLE_PROMPT_MS = 20 * 60 * 1000;
+
+const COACH_LINES = {
+  welcome: [
+    "Em chuẩn bị sẵn vài thử thách tiếng Anh rồi. Chơi 3 câu làm nóng não nha?",
+    "Hôm nay mình giữ streak tiếng Anh nha. Bấm Play, em hỏi câu đầu liền.",
+  ],
+  prompt: [
+    "Một câu nhanh thôi. Nếu đúng em cộng XP, nếu sai em nhắc lại nhẹ nhàng.",
+    "Từ này hay gặp trong công việc đó. Anh thử chọn nghĩa đúng nha.",
+  ],
+  correct: [
+    "Đúng rồi. Giờ nói lớn một câu với từ này để não nhớ lâu hơn.",
+    "Good. Câu này dùng đi gặp khách là rất tự nhiên.",
+  ],
+  wrong: [
+    "Không sao. Từ này hơi dễ nhầm, em bắt lại bằng ví dụ dễ hơn nha.",
+    "Sai một lần là dữ liệu tốt. Em sẽ cho từ này ôn lại sớm hơn.",
+  ],
+  next: [
+    "Câu tiếp theo nha. 5 phút mỗi ngày là đủ tạo thói quen.",
+    "Tiếp tục giữ nhịp. Em chọn câu vừa sức hơn một chút.",
+  ],
+  idle: [
+    "Nghỉ hơi lâu rồi. Chơi 1 câu tiếng Anh để giữ streak không anh?",
+    "Em có một mini challenge 30 giây. Bấm Play để lấy XP nhanh.",
+  ],
+};
+
+function pickCoachLine(type) {
+  const list = COACH_LINES[type] || COACH_LINES.prompt;
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function triggerCoachInteraction(type = "prompt", payload = {}) {
+  coachLastInteractionAt = Date.now();
+  if (doNotDisturb || hideBubbles) return;
+  const message = payload.message || pickCoachLine(type);
+  const reaction = {
+    welcome: ["clawd-wake.svg", 3000],
+    prompt: ["clawd-notification.svg", 3000],
+    correct: ["clawd-happy.svg", 3200],
+    wrong: ["clawd-react-annoyed.svg", 3200],
+    next: ["clawd-idle-reading.svg", 2800],
+    idle: ["clawd-notification.svg", 3200],
+  }[type] || ["clawd-notification.svg", 3000];
+  try {
+    sendToRenderer("play-click-reaction", reaction[0], reaction[1]);
+  } catch {}
+  try {
+    showCoachNotifyBubble({ message, timeoutMs: payload.timeoutMs || 14000 });
+  } catch (e) {
+    console.warn("Clawd: failed to show Bumbee coach bubble:", e.message);
+  }
+}
+
+function scheduleCoachReminder(delayMs = COACH_IDLE_PROMPT_MS) {
+  if (coachReminderTimer) clearTimeout(coachReminderTimer);
+  coachReminderTimer = setTimeout(() => {
+    coachReminderTimer = null;
+    const idleLongEnough = Date.now() - coachLastInteractionAt >= Math.min(delayMs, COACH_IDLE_PROMPT_MS);
+    const chatActive = chatWin && !chatWin.isDestroyed() && chatWin.isVisible() && chatWin.isFocused();
+    if (LEARN_ON_START && idleLongEnough && !chatActive) triggerCoachInteraction("idle");
+    scheduleCoachReminder(COACH_IDLE_PROMPT_MS);
+  }, Math.max(3000, delayMs));
+}
 
 function showExternalNotification({ sessionId, title, message, level, timeoutMs }) {
   // Reuse Codex notify bubble pattern (no Allow/Deny, auto-expire)
@@ -1451,6 +1522,11 @@ function createWindow() {
   ipcMain.handle("bumbee-vocab:review", (_event, payload) => reviewVocabItem(payload));
   ipcMain.handle("bumbee-vocab:reset", () => resetVocabScores());
   ipcMain.handle("bumbee-vocab:settings", (_event, payload) => updateVocabSettings(payload));
+  ipcMain.on("bumbee-coach:event", (_event, payload) => {
+    const type = typeof payload?.type === "string" ? payload.type : "prompt";
+    triggerCoachInteraction(type, payload || {});
+    scheduleCoachReminder(COACH_IDLE_PROMPT_MS);
+  });
 
   initFocusHelper();
   startMainTick();
@@ -1685,6 +1761,10 @@ if (!gotTheLock) {
       setTimeout(() => {
         if (!app.isQuitting) openBumbeeChat();
       }, 900);
+      setTimeout(() => {
+        if (!isQuitting) triggerCoachInteraction("welcome");
+      }, COACH_FIRST_PROMPT_MS);
+      scheduleCoachReminder(COACH_IDLE_PROMPT_MS);
     }
 
     // Register global shortcut for toggling pet visibility
@@ -1759,6 +1839,7 @@ if (!gotTheLock) {
 
   app.on("before-quit", () => {
     isQuitting = true;
+    if (coachReminderTimer) clearTimeout(coachReminderTimer);
     savePrefs();
     unregisterToggleShortcut();
     globalShortcut.unregisterAll();

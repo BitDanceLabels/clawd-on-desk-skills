@@ -350,6 +350,22 @@ function show(data) {
     return;
   }
 
+  // Bumbee Coach mode — proactive study buddy bubble with Play button
+  if (data.toolName === "BumbeeCoach") {
+    headerTitle.textContent = "Bumbee English Coach";
+    toolPill.textContent = "PLAY";
+    toolPill.setAttribute("data-tool", "Agent");
+    toolPill.style.display = "";
+    commandBlock.textContent = (data.toolInput && data.toolInput.message) || "Ready for a quick English challenge?";
+    btnAllow.textContent = "Play now";
+    btnAllow.disabled = false;
+    btnDeny.textContent = "Later";
+    btnDeny.style.display = "";
+    suggestionsContainer.innerHTML = "";
+    revealCard();
+    return;
+  }
+
   const isPlanReview = data.toolName === "ExitPlanMode";
 
   // Header

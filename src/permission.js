@@ -286,8 +286,13 @@ function handleDecide(event, behavior) {
   const perm = pendingPermissions.find(p => p.bubble === senderWin);
   permLog(`IPC permission-decide: behavior=${behavior} matched=${!!perm}`);
   if (!perm) return;
+  if (perm.isCoachNotify) {
+    dismissNotify(perm);
+    if (behavior === "allow" && typeof ctx.openBumbeeChat === "function") ctx.openBumbeeChat();
+    return;
+  }
   if (perm.isCodexNotify) {
-    dismissCodexNotify(perm);
+    dismissNotify(perm);
     return;
   }
   // "suggestion:N" — user picked a permission suggestion
@@ -348,11 +353,31 @@ function showCodexNotifyBubble({ sessionId, command }) {
   pendingPermissions.push(permEntry);
   showPermissionBubble(permEntry);
   permEntry.autoExpireTimer = setTimeout(() => {
-    dismissCodexNotify(permEntry);
+    dismissNotify(permEntry);
   }, CODEX_NOTIFY_EXPIRE_MS);
 }
 
-function dismissCodexNotify(permEntry) {
+function showCoachNotifyBubble({ message, timeoutMs }) {
+  if (ctx.doNotDisturb) return;
+  if (pendingPermissions.some(p => p.isCoachNotify)) return;
+  const permEntry = {
+    res: null,
+    abortHandler: null, suggestions: [],
+    sessionId: "bumbee-coach", bubble: null, hideTimer: null,
+    toolName: "BumbeeCoach",
+    toolInput: { message: message || "Ready for a quick English challenge?" },
+    resolvedSuggestion: null, createdAt: Date.now(),
+    isElicitation: false, isCoachNotify: true,
+    autoExpireTimer: null,
+  };
+  pendingPermissions.push(permEntry);
+  showPermissionBubble(permEntry);
+  permEntry.autoExpireTimer = setTimeout(() => {
+    dismissNotify(permEntry);
+  }, timeoutMs || 12000);
+}
+
+function dismissNotify(permEntry) {
   const idx = pendingPermissions.indexOf(permEntry);
   if (idx === -1) return;
   pendingPermissions.splice(idx, 1);
@@ -371,7 +396,7 @@ function clearCodexNotifyBubbles(sessionId) {
   const toRemove = pendingPermissions.filter(
     p => p.isCodexNotify && p.sessionId === sessionId
   );
-  for (const perm of toRemove) dismissCodexNotify(perm);
+  for (const perm of toRemove) dismissNotify(perm);
 }
 
 function cleanup() {
@@ -387,7 +412,7 @@ return {
   sendPermissionResponse, repositionBubbles, permLog,
   pendingPermissions, PASSTHROUGH_TOOLS,
   handleBubbleHeight, handleMoveBubble, handleDecide, cleanup,
-  showCodexNotifyBubble, clearCodexNotifyBubbles,
+  showCodexNotifyBubble, showCoachNotifyBubble, clearCodexNotifyBubbles,
 };
 
 };

@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld("bumbeeChat", {
   vocabReview: (payload) => ipcRenderer.invoke("bumbee-vocab:review", payload),
   vocabReset: () => ipcRenderer.invoke("bumbee-vocab:reset"),
   vocabSettings: (payload) => ipcRenderer.invoke("bumbee-vocab:settings", payload),
+  coachEvent: (payload) => ipcRenderer.send("bumbee-coach:event", payload),
 });
