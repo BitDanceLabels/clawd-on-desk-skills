@@ -13,6 +13,7 @@ body {
 }
 
 button,
+input,
 select,
 textarea {
   font: inherit;
@@ -58,6 +59,46 @@ select {
 
 .camera-panel {
   padding: 12px 18px 0;
+}
+
+.login-panel {
+  margin: 12px 18px 0;
+  padding: 14px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 8px;
+  background: #181510;
+}
+
+.login-panel strong {
+  display: block;
+  font-size: 14px;
+}
+
+.login-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+input {
+  min-width: 0;
+  height: 36px;
+  color: #eef2f8;
+  background: #0c0f14;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0 10px;
+  outline: none;
+}
+
+input:focus {
+  border-color: #4f8cff;
+}
+
+.login-status {
+  min-height: 18px;
+  color: #fbbf24;
 }
 
 video {
@@ -171,4 +212,10 @@ button.primary {
 button[disabled] {
   cursor: default;
   opacity: 0.55;
+}
+
+@media (max-width: 420px) {
+  .login-grid {
+    grid-template-columns: 1fr;
+  }
 }

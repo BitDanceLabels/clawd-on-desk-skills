@@ -112,10 +112,121 @@ const DEFAULT_TOGGLE_SHORTCUT = "CommandOrControl+Shift+Alt+C";
 const CHAT_AUTO_HIDE_MS = Number.parseInt(process.env.BUMBEE_CHAT_AUTO_HIDE_MS || "15000", 10);
 const CHAT_DEVICE_ID = process.env.BUMBEE_DEVICE_ID || `${os.hostname()}-${process.platform}`;
 const CHAT_SESSION_ID = `desk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+const CHAT_AUTH_SERVER_URL = (process.env.BUMBEE_DESK_AUTH_URL || process.env.TOKEN_ADMIN_URL || "https://gateway.bumbee.asia/bumbee-desk-token-admin").replace(/\/$/, "");
+
+function getBumbeeTokenFilePath() {
+  return path.join(app.getPath("userData"), "bumbee-gateway-token.txt");
+}
+
+function initBumbeeSmartLayer() {
+  _smart = require("./intelligent-layer")({
+    chatAuthTokenFile: getBumbeeTokenFilePath(),
+  });
+}
+
+function reloadBumbeeSmartLayer() {
+  try {
+    initBumbeeSmartLayer();
+    return true;
+  } catch (err) {
+    console.warn("Clawd: intelligent layer reload failed:", err.message);
+    return false;
+  }
+}
+
+function requestJson(url, body) {
+  const parsed = new URL(url);
+  const lib = parsed.protocol === "https:" ? require("https") : require("http");
+  const payload = JSON.stringify(body || {});
+  return new Promise((resolve, reject) => {
+    const req = lib.request({
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === "https:" ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Content-Length": Buffer.byteLength(payload),
+        "User-Agent": "clawd-on-desk/bumbee-auth",
+      },
+      timeout: 15000,
+    }, (res) => {
+      let raw = "";
+      res.on("data", (chunk) => { raw += chunk; });
+      res.on("end", () => {
+        let data = null;
+        try { data = raw ? JSON.parse(raw) : null; } catch { data = { error: raw }; }
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(data || {});
+        } else {
+          const message = data?.error || data?.message || `HTTP ${res.statusCode}`;
+          reject(new Error(message));
+        }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function requestBumbeeLoginCode(payload) {
+  const email = typeof payload?.email === "string" ? payload.email.trim().toLowerCase() : "";
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: "Email không hợp lệ." };
+  }
+  try {
+    const result = await requestJson(`${CHAT_AUTH_SERVER_URL}/api/login/request`, {
+      email,
+      device_id: CHAT_DEVICE_ID,
+      device_name: os.hostname(),
+      source: "clawd-on-desk",
+    });
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function verifyBumbeeLoginCode(payload) {
+  const email = typeof payload?.email === "string" ? payload.email.trim().toLowerCase() : "";
+  const code = typeof payload?.code === "string" ? payload.code.trim() : "";
+  if (!email || !code) return { ok: false, error: "Thiếu email hoặc mã xác thực." };
+  try {
+    const result = await requestJson(`${CHAT_AUTH_SERVER_URL}/api/login/verify`, {
+      email,
+      code,
+      device_id: CHAT_DEVICE_ID,
+      device_name: os.hostname(),
+      source: "clawd-on-desk",
+    });
+    if (!result?.token) return { ok: false, error: "Server không trả token." };
+    const tokenPath = getBumbeeTokenFilePath();
+    fs.mkdirSync(path.dirname(tokenPath), { recursive: true });
+    fs.writeFileSync(tokenPath, String(result.token).trim(), { mode: 0o600 });
+    try { fs.chmodSync(tokenPath, 0o600); } catch {}
+    reloadBumbeeSmartLayer();
+    return { ok: true, email, tokenFile: tokenPath, expires_at: result.expires_at || null };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+function logoutBumbeeChat() {
+  try { fs.unlinkSync(getBumbeeTokenFilePath()); } catch {}
+  reloadBumbeeSmartLayer();
+  return { ok: true };
+}
 
 function getSmartStatusPayload() {
   return {
     smart: _smart ? _smart.status() : { enabled: false },
+    auth: {
+      authServerUrl: CHAT_AUTH_SERVER_URL,
+      tokenFile: getBumbeeTokenFilePath(),
+    },
     gateway: _gateway ? _gateway.status() : { enabled: false, registered: false },
     clawdbot: _clawdbot ? _clawdbot.status() : { enabled: false, connected: false },
     skills: _skills ? _skills.status() : { enabled: false, count: 0 },
@@ -1045,6 +1156,9 @@ function createWindow() {
   ipcMain.on("bumbee-chat:activity", (_event, payload) => updateBumbeeChatActivity(payload));
   ipcMain.handle("bumbee-chat:status", () => getSmartStatusPayload());
   ipcMain.handle("bumbee-chat:sessions", () => ({ ok: true, sessions: getSessionPayload() }));
+  ipcMain.handle("bumbee-chat:login-request", (_event, payload) => requestBumbeeLoginCode(payload));
+  ipcMain.handle("bumbee-chat:login-verify", (_event, payload) => verifyBumbeeLoginCode(payload));
+  ipcMain.handle("bumbee-chat:logout", () => logoutBumbeeChat());
 
   initFocusHelper();
   startMainTick();
@@ -1333,9 +1447,7 @@ if (!gotTheLock) {
       console.warn("Clawd: skills loader init failed:", e.message);
     }
     try {
-      _smart = require("./intelligent-layer")({
-        chatAuthTokenFile: path.join(app.getPath("userData"), "bumbee-gateway-token.txt"),
-      });
+      initBumbeeSmartLayer();
     } catch (e) {
       console.warn("Clawd: intelligent layer init failed:", e.message);
     }

@@ -22,6 +22,20 @@
       </select>
     </header>
 
+    <section id="loginPanel" class="login-panel" hidden>
+      <div>
+        <strong>Login Bumbee Gateway</strong>
+        <p id="loginHint">Nhập email được cấp quyền, nhận mã xác thực rồi dùng chat.</p>
+      </div>
+      <div class="login-grid">
+        <input id="emailInput" type="email" placeholder="nhutpm7777@gmail.com" autocomplete="email">
+        <button id="requestCodeBtn" type="button">Get code</button>
+        <input id="codeInput" type="text" inputmode="numeric" placeholder="6-digit code" autocomplete="one-time-code">
+        <button id="verifyCodeBtn" type="button" class="primary">Verify</button>
+      </div>
+      <p id="loginStatus" class="login-status"></p>
+    </section>
+
     <section id="cameraPanel" class="camera-panel" hidden>
       <video id="cameraPreview" playsinline autoplay muted></video>
       <canvas id="cameraCanvas" hidden></canvas>

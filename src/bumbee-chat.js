@@ -3,6 +3,12 @@ const promptInput = document.getElementById("promptInput");
 const sendBtn = document.getElementById("sendBtn");
 const modeSelect = document.getElementById("modeSelect");
 const statusLine = document.getElementById("statusLine");
+const loginPanel = document.getElementById("loginPanel");
+const emailInput = document.getElementById("emailInput");
+const codeInput = document.getElementById("codeInput");
+const requestCodeBtn = document.getElementById("requestCodeBtn");
+const verifyCodeBtn = document.getElementById("verifyCodeBtn");
+const loginStatus = document.getElementById("loginStatus");
 const cameraBtn = document.getElementById("cameraBtn");
 const voiceBtn = document.getElementById("voiceBtn");
 const speakBtn = document.getElementById("speakBtn");
@@ -58,9 +64,50 @@ async function refreshStatus() {
     const smart = status.smart || {};
     const skills = status.skills || {};
     const chatHost = smart.gatewayUrl ? smart.gatewayUrl.replace(/^https?:\/\//, "") : "gateway not set";
-    statusLine.textContent = `Smart ${smart.enabled ? "on" : "off"} | Chat ${chatHost}${smart.chatEndpoint || ""} | Skills ${skills.count || 0}`;
+    const authText = smart.authenticated ? "auth ok" : "login required";
+    statusLine.textContent = `Smart ${smart.enabled ? "on" : "off"} | ${authText} | Chat ${chatHost}${smart.chatEndpoint || ""} | Skills ${skills.count || 0}`;
+    loginPanel.hidden = !!smart.authenticated;
+    if (!smart.authenticated && !loginStatus.textContent) {
+      loginStatus.textContent = `Auth server: ${status.auth?.authServerUrl || "not set"}`;
+    }
   } catch (err) {
     statusLine.textContent = `Status error: ${err.message}`;
+  }
+}
+
+async function requestLoginCode() {
+  const email = emailInput.value.trim();
+  requestCodeBtn.disabled = true;
+  loginStatus.textContent = "Sending code...";
+  try {
+    const result = await window.bumbeeChat.loginRequest({ email });
+    if (!result.ok) throw new Error(result.error || "Could not send code.");
+    loginStatus.textContent = result.email_sent
+      ? "Code sent. Check your email."
+      : "Code created. Check admin page/server log because SMTP is not configured.";
+    codeInput.focus();
+  } catch (err) {
+    loginStatus.textContent = `Login request failed: ${err.message}`;
+  } finally {
+    requestCodeBtn.disabled = false;
+  }
+}
+
+async function verifyLoginCode() {
+  const email = emailInput.value.trim();
+  const code = codeInput.value.trim();
+  verifyCodeBtn.disabled = true;
+  loginStatus.textContent = "Verifying...";
+  try {
+    const result = await window.bumbeeChat.loginVerify({ email, code });
+    if (!result.ok) throw new Error(result.error || "Invalid code.");
+    loginStatus.textContent = "Login OK. Token saved on this device.";
+    addMessage("system", "Bumbee Gateway login OK. You can chat now.");
+    await refreshStatus();
+  } catch (err) {
+    loginStatus.textContent = `Verify failed: ${err.message}`;
+  } finally {
+    verifyCodeBtn.disabled = false;
   }
 }
 
@@ -210,6 +257,21 @@ speakBtn.addEventListener("click", () => {
   speakingEnabled = !speakingEnabled;
   speakBtn.textContent = `Speak: ${speakingEnabled ? "On" : "Off"}`;
   if (!speakingEnabled && "speechSynthesis" in window) window.speechSynthesis.cancel();
+});
+
+requestCodeBtn.addEventListener("click", requestLoginCode);
+verifyCodeBtn.addEventListener("click", verifyLoginCode);
+emailInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    requestLoginCode();
+  }
+});
+codeInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    verifyLoginCode();
+  }
 });
 
 window.addEventListener("beforeunload", () => {
