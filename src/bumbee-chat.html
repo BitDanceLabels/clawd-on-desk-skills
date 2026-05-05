@@ -60,10 +60,24 @@
       <section class="game-dashboard" aria-label="Today's English mission">
         <div>
           <span class="eyebrow">Today's mission</span>
-          <h2>Play 5 smart challenges</h2>
+          <h2 id="missionTitle">Play 5 smart challenges</h2>
         </div>
-        <div id="gameStats" class="game-stats">0 XP · 0 streak · 0 active</div>
+        <div class="game-stat-panel">
+          <div id="gameStats" class="game-stats">0 XP · 0 streak · 0 active</div>
+          <div class="level-meter" aria-label="Level progress">
+            <span id="levelMeterFill"></span>
+          </div>
+        </div>
       </section>
+      <section class="coach-stage" aria-label="Bumbee coach">
+        <div class="coach-avatar" aria-hidden="true">
+          <span class="coach-face">B</span>
+          <span class="coach-spark spark-a"></span>
+          <span class="coach-spark spark-b"></span>
+        </div>
+        <div id="coachSpeech" class="coach-speech">Pick a mode, answer fast, then say the line out loud.</div>
+      </section>
+      <div id="modeButtons" class="mode-buttons" aria-label="Game modes"></div>
       <div id="challengeCard" class="challenge-card game-card" hidden></div>
       <div id="dropZone" class="drop-zone">
         <strong>Drop words, notes, images or files</strong>
@@ -129,6 +143,7 @@
       </div>
     </footer>
   </main>
+  <script src="english-game-core.js"></script>
   <script src="bumbee-chat.js"></script>
 </body>
 </html>

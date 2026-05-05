@@ -25,6 +25,10 @@ const challengeCard = document.getElementById("challengeCard");
 const vocabList = document.getElementById("vocabList");
 const vocabStats = document.getElementById("vocabStats");
 const gameStats = document.getElementById("gameStats");
+const missionTitle = document.getElementById("missionTitle");
+const levelMeterFill = document.getElementById("levelMeterFill");
+const coachSpeech = document.getElementById("coachSpeech");
+const modeButtons = document.getElementById("modeButtons");
 const goalInput = document.getElementById("goalInput");
 const difficultyInput = document.getElementById("difficultyInput");
 const targetLanguageInput = document.getElementById("targetLanguageInput");
@@ -39,13 +43,13 @@ let activeTab = "learn";
 let currentChallengeId = null;
 let challengeHistory = [];
 let currentFocusSource = null;
+let selectedGameMode = "meaning";
+let activeRound = null;
+let roundAnswered = false;
+let roundReviewed = false;
+let localCombo = 0;
 
-const DIFFICULTY_META = {
-  easy: { label: "EASY", prompt: "Pick the closest meaning, then say one sentence out loud.", choiceCount: 3, mode: "meaning" },
-  medium: { label: "MEDIUM", prompt: "Pick the closest meaning, then rewrite the example in your own words.", choiceCount: 4, mode: "meaning" },
-  hard: { label: "HARD", prompt: "Read the clue, recall the term, then check yourself.", choiceCount: 0, mode: "recall" },
-  expert: { label: "EXPERT", prompt: "Create a natural work sentence before revealing the answer.", choiceCount: 0, mode: "production" },
-};
+const GameCore = window.EnglishGameCore;
 
 function escapeRegExp(text) {
   return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -265,18 +269,40 @@ function renderSettings() {
 }
 
 function notifyCoach(type, message) {
+  if (message) coachSpeech.textContent = message;
+  coachSpeech.dataset.tone = type || "prompt";
   try {
     window.bumbeeChat.coachEvent({ type, message });
   } catch {}
 }
 
+function renderModeButtons() {
+  modeButtons.replaceChildren();
+  for (const mode of GameCore.GAME_MODES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "mode-button";
+    button.classList.toggle("active", mode.id === selectedGameMode);
+    button.textContent = mode.label;
+    button.addEventListener("click", () => {
+      selectedGameMode = mode.id;
+      renderModeButtons();
+      notifyCoach("prompt", mode.coach);
+      showChallenge(pickChallengeWord({ allowCurrent: true, source: currentFocusSource }));
+    });
+    modeButtons.appendChild(button);
+  }
+}
+
 function renderVocab() {
   const words = vocabState.words || [];
   const due = words.filter((word) => !word.mastered).length;
-  const xp = words.reduce((sum, word) => sum + (word.score || 0), 0);
+  const player = GameCore.getPlayerLevel(words);
   const streak = words.reduce((max, word) => Math.max(max, word.streak || 0), 0);
   vocabStats.textContent = `${words.length} words · ${due} active`;
-  gameStats.textContent = `${xp} XP · ${streak} streak · ${due} active`;
+  missionTitle.textContent = `${player.title}: win 5 conversation rounds`;
+  gameStats.textContent = `Lv ${player.level} · ${player.xp} XP · ${streak} streak · ${due} active`;
+  levelMeterFill.style.width = `${player.progress}%`;
   vocabList.replaceChildren();
   if (!words.length) {
     const empty = document.createElement("div");
@@ -459,78 +485,63 @@ function rememberChallenge(id) {
   challengeHistory = [id, ...challengeHistory.filter((item) => item !== id)].slice(0, 6);
 }
 
-function buildRecallCard(word, feedback) {
-  const reveal = document.createElement("button");
-  reveal.type = "button";
-  reveal.textContent = "Reveal answer";
-  reveal.addEventListener("click", () => {
-    feedback.hidden = false;
-    feedback.textContent = `${word.term}: ${getMeaning(word)}`;
-  });
-  return reveal;
-}
-
 function showChallenge(word = pickChallengeWord()) {
   if (!word) {
     challengeCard.hidden = false;
     challengeCard.textContent = "Add words first, then Bumbee will challenge you.";
+    coachSpeech.textContent = "Drop a note or choose a preset. I will turn it into a mini game.";
     return;
   }
   currentChallengeId = word.id;
   rememberChallenge(word.id);
-  const examples = word.lesson?.examples || [];
-  const difficulty = getWordDifficulty(word);
-  const metaInfo = DIFFICULTY_META[difficulty] || DIFFICULTY_META.medium;
-  const choices = metaInfo.mode === "meaning" ? buildChoiceSet(word) : [];
+  roundAnswered = false;
+  roundReviewed = false;
+  activeRound = GameCore.buildGameRound(word, vocabState.words || [], {
+    mode: selectedGameMode,
+    index: challengeHistory.length + (word.review_count || 0),
+  });
+  const examples = GameCore.getExamples(word);
   challengeCard.replaceChildren();
   challengeCard.hidden = false;
   const meta = document.createElement("div");
   meta.className = "game-meta";
   const level = document.createElement("span");
-  level.textContent = metaInfo.label;
+  level.textContent = activeRound.mode.toUpperCase();
   const score = document.createElement("span");
   score.textContent = `${word.score || 0}/100 XP`;
   const streak = document.createElement("span");
   streak.textContent = `${word.streak || 0} streak`;
-  meta.append(level, score, streak);
+  const combo = document.createElement("span");
+  combo.textContent = `${localCombo} combo`;
+  meta.append(level, score, streak, combo);
 
   const title = document.createElement("h3");
-  title.textContent = word.term;
+  title.textContent = activeRound.title;
   const prompt = document.createElement("p");
   prompt.className = "game-prompt";
-  prompt.textContent = metaInfo.prompt;
+  prompt.textContent = activeRound.prompt;
+  const scene = document.createElement("div");
+  scene.className = "scene-card";
+  const sceneLabel = document.createElement("span");
+  sceneLabel.textContent = activeRound.scene;
+  const cue = document.createElement("strong");
+  cue.textContent = activeRound.cue;
+  scene.append(sceneLabel, cue);
+  coachSpeech.textContent = activeRound.coach;
+  coachSpeech.dataset.tone = "prompt";
+
   const choicesEl = document.createElement("div");
   choicesEl.className = "choice-grid";
   const feedback = document.createElement("div");
   feedback.className = "game-feedback";
   feedback.hidden = true;
-  if (choices.length) {
-    for (const choice of choices) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = choice.text;
-      button.addEventListener("click", () => {
-        for (const item of choicesEl.querySelectorAll("button")) item.disabled = true;
-        button.classList.add(choice.correct ? "correct" : "wrong");
-        const correctButton = Array.from(choicesEl.querySelectorAll("button"))
-          .find((item) => item.textContent === getMeaning(word));
-        if (correctButton) correctButton.classList.add("correct");
-        feedback.hidden = false;
-        feedback.textContent = choice.correct
-          ? `Good. Try this: ${examples[0] || `I can use "${word.term}" naturally today.`}`
-          : `Review it: ${getMeaning(word)}`;
-        notifyCoach(choice.correct ? "correct" : "wrong");
-      });
-      choicesEl.appendChild(button);
-    }
-  } else {
-    const clue = document.createElement("div");
-    clue.className = "recall-clue";
-    const termPattern = new RegExp(escapeRegExp(word.term), "ig");
-    clue.textContent = difficulty === "expert"
-      ? `Meaning: ${getMeaning(word)}`
-      : `Clue: ${getMeaning(word)}${examples[0] ? ` Example: ${examples[0].replace(termPattern, "_____")}` : ""}`;
-    choicesEl.append(clue, buildRecallCard(word, feedback));
+
+  for (const choice of activeRound.choices) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = choice;
+    button.addEventListener("click", () => answerRound(word, choice, choicesEl, feedback));
+    choicesEl.appendChild(button);
   }
 
   const examplesEl = document.createElement("ul");
@@ -543,12 +554,21 @@ function showChallenge(word = pickChallengeWord()) {
 
   const actions = document.createElement("div");
   actions.className = "review-actions";
+  const speakLine = document.createElement("button");
+  speakLine.type = "button";
+  speakLine.textContent = "Speak line";
+  speakLine.addEventListener("click", () => speakEnglish(activeRound.speakLine || examples[0] || word.term));
   const good = document.createElement("button");
   good.type = "button";
   good.className = "good";
-  good.textContent = "I can use it";
+  good.textContent = "I said it";
   good.addEventListener("click", () => {
-    notifyCoach("correct");
+    notifyCoach("correct", `Nice. Say it again later: ${activeRound.speakLine || word.term}`);
+    if (roundReviewed) {
+      showChallenge(pickChallengeWord({ allowCurrent: false, source: currentFocusSource }));
+      return;
+    }
+    roundReviewed = true;
     markReview(word.id, true);
   });
   const bad = document.createElement("button");
@@ -557,6 +577,11 @@ function showChallenge(word = pickChallengeWord()) {
   bad.textContent = "Train again";
   bad.addEventListener("click", () => {
     notifyCoach("wrong");
+    if (roundReviewed) {
+      showChallenge(word);
+      return;
+    }
+    roundReviewed = true;
     markReview(word.id, false);
   });
   const next = document.createElement("button");
@@ -566,16 +591,43 @@ function showChallenge(word = pickChallengeWord()) {
     notifyCoach("next");
     showChallenge(pickChallengeWord({ allowCurrent: false, source: currentFocusSource }));
   });
-  actions.append(good, bad, next);
-  challengeCard.append(meta, title, prompt, choicesEl, feedback, examplesEl, actions);
+  actions.append(speakLine, good, bad, next);
+  challengeCard.append(meta, title, prompt, scene, choicesEl, feedback, examplesEl, actions);
 }
 
-async function markReview(id, correct) {
+async function answerRound(word, choice, choicesEl, feedback) {
+  if (!activeRound || roundAnswered) return;
+  roundAnswered = true;
+  const correct = GameCore.normalizeAnswer(choice) === GameCore.normalizeAnswer(activeRound.answer);
+  for (const item of choicesEl.querySelectorAll("button")) {
+    item.disabled = true;
+    if (GameCore.normalizeAnswer(item.textContent) === GameCore.normalizeAnswer(activeRound.answer)) {
+      item.classList.add("correct");
+    }
+  }
+  const selected = Array.from(choicesEl.querySelectorAll("button"))
+    .find((item) => item.textContent === choice);
+  if (selected) selected.classList.add(correct ? "correct" : "wrong");
+  localCombo = correct ? localCombo + 1 : 0;
+  feedback.hidden = false;
+  feedback.textContent = correct
+    ? `Correct. Combo ${localCombo}. Say it: ${activeRound.speakLine || choice}`
+    : `Not this one. Best line: ${activeRound.answer}`;
+  notifyCoach(correct ? "correct" : "wrong", correct
+    ? `Good hit. Now speak it out loud: ${activeRound.speakLine || choice}`
+    : `Close. The natural line is: ${activeRound.answer}`);
+  if (!roundReviewed) {
+    roundReviewed = true;
+    await markReview(word.id, correct, { stayOnCard: true });
+  }
+}
+
+async function markReview(id, correct, options = {}) {
   const result = await window.bumbeeChat.vocabReview({ id, correct });
   if (result.ok) {
     vocabState = { settings: result.settings || vocabState.settings, words: result.words || [] };
     renderVocab();
-    showChallenge(pickChallengeWord({ allowCurrent: false, source: currentFocusSource }));
+    if (!options.stayOnCard) showChallenge(pickChallengeWord({ allowCurrent: false, source: currentFocusSource }));
   }
 }
 
@@ -601,6 +653,15 @@ function speak(text) {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text.slice(0, 900));
   utterance.lang = "vi-VN";
+  window.speechSynthesis.speak(utterance);
+}
+
+function speakEnglish(text) {
+  if (!("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(String(text || "").slice(0, 500));
+  utterance.lang = "en-US";
+  utterance.rate = 0.92;
   window.speechSynthesis.speak(utterance);
 }
 
@@ -934,6 +995,8 @@ dropZone.addEventListener("drop", async (event) => {
   for (const file of files.slice(0, 6)) {
     chunks.push(`--- ${file.name} ---\n${await readDroppedFile(file)}`);
   }
+  const droppedText = event.dataTransfer?.getData("text/plain") || "";
+  if (droppedText.trim()) chunks.push(droppedText.trim());
   const text = chunks.join("\n\n").trim();
   if (text) addVocabFromText(text, files.length ? "file-drop" : "drop");
 });
@@ -992,6 +1055,7 @@ window.addEventListener("beforeunload", () => {
 });
 
 initVoice();
+renderModeButtons();
 refreshStatus();
 setActiveTab("learn");
 addMessage("assistant", "Bumbee chat is ready. Use Camera to attach a snapshot, Voice to dictate, and Speak to hear replies.");

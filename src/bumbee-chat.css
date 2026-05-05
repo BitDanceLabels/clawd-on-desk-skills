@@ -229,14 +229,155 @@ video {
   text-transform: uppercase;
 }
 
-.game-stats {
+.game-stat-panel {
   flex: 0 0 auto;
   max-width: 45%;
+  display: grid;
+  gap: 7px;
+}
+
+.game-stats {
   color: #dbeafe;
   font-size: 12px;
   font-weight: 700;
   text-align: right;
   line-height: 1.35;
+}
+
+.level-meter {
+  width: 100%;
+  min-width: 118px;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.level-meter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #34d399, #60a5fa, #fde047);
+  transition: width 280ms ease;
+}
+
+.coach-stage {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.coach-avatar {
+  position: relative;
+  width: 74px;
+  height: 74px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(255, 255, 255, 0.32) 0 15%, transparent 16%),
+    linear-gradient(160deg, #facc15, #22c55e 52%, #2563eb);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  animation: coach-breathe 2.8s ease-in-out infinite;
+}
+
+.coach-face {
+  position: absolute;
+  inset: 18px 16px auto;
+  display: grid;
+  place-items: center;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.76);
+  color: #fef3c7;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.coach-spark {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #fef08a;
+  box-shadow: 0 0 12px #fef08a;
+}
+
+.spark-a {
+  top: 8px;
+  right: 10px;
+}
+
+.spark-b {
+  left: 10px;
+  bottom: 12px;
+  background: #bfdbfe;
+  box-shadow: 0 0 12px #bfdbfe;
+}
+
+.coach-speech {
+  position: relative;
+  min-height: 58px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
+}
+
+.coach-speech::before {
+  content: "";
+  position: absolute;
+  left: -9px;
+  bottom: 18px;
+  border: 9px solid transparent;
+  border-right-color: #f8fafc;
+  border-left: 0;
+}
+
+.coach-speech[data-tone="correct"] {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.coach-speech[data-tone="correct"]::before {
+  border-right-color: #dcfce7;
+}
+
+.coach-speech[data-tone="wrong"] {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.coach-speech[data-tone="wrong"]::before {
+  border-right-color: #fee2e2;
+}
+
+.mode-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mode-button {
+  min-height: 38px;
+  padding: 0 10px;
+  background: #202838;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mode-button.active {
+  border-color: rgba(52, 211, 153, 0.65);
+  background: rgba(52, 211, 153, 0.16);
+  color: #dcfce7;
 }
 
 .drop-zone {
@@ -315,7 +456,9 @@ video {
 .game-card {
   margin-bottom: 12px;
   border-color: rgba(79, 140, 255, 0.28);
-  background: #151a23;
+  background:
+    linear-gradient(180deg, rgba(79, 140, 255, 0.1), transparent 42%),
+    #151a23;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
 }
 
@@ -339,6 +482,28 @@ video {
   color: #cbd5e1;
 }
 
+.scene-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.09);
+}
+
+.scene-card span {
+  color: #fde68a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.scene-card strong {
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1.42;
+}
+
 .choice-grid {
   display: grid;
   gap: 8px;
@@ -354,6 +519,11 @@ video {
   color: #e5e7eb;
   text-align: left;
   line-height: 1.35;
+}
+
+.choice-grid button:hover:not([disabled]) {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.65);
 }
 
 .recall-clue {
@@ -563,6 +733,16 @@ button[disabled] {
   opacity: 0.55;
 }
 
+@keyframes coach-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.03);
+  }
+}
+
 @media (max-width: 420px) {
   .login-grid {
     grid-template-columns: 1fr;
@@ -573,9 +753,28 @@ button[disabled] {
     flex-direction: column;
   }
 
-  .game-stats {
+  .game-stat-panel {
     max-width: none;
+    width: 100%;
+  }
+
+  .game-stats {
     text-align: left;
+  }
+
+  .coach-stage {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
+  .coach-avatar {
+    width: 58px;
+    height: 58px;
+  }
+
+  .coach-face {
+    inset: 14px 12px auto;
+    height: 28px;
+    font-size: 17px;
   }
 
   .preset-row {
