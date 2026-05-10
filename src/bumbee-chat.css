@@ -23,7 +23,8 @@ textarea {
   display: grid;
   grid-template-rows: auto auto auto 1fr auto;
   height: 100vh;
-  min-width: 360px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .topbar {
@@ -90,6 +91,14 @@ select {
 
 .camera-panel {
   padding: 12px 18px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.camera-panel[hidden] {
+  display: none;
 }
 
 .login-panel {
@@ -172,8 +181,9 @@ input:focus {
 video {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
+  max-height: 260px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
   border-radius: 8px;
   background: #05070a;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -188,6 +198,12 @@ video {
 
 .camera-actions {
   margin-top: 8px;
+}
+
+.camera-panel .camera-actions {
+  margin-top: 0;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .messages {
@@ -705,6 +721,13 @@ textarea:focus {
 
 .toolbar {
   margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+#cameraDeviceSelect,
+#micDeviceSelect {
+  flex: 1 1 160px;
+  min-width: 0;
 }
 
 button {
@@ -722,7 +745,6 @@ button:hover {
 }
 
 button.primary {
-  margin-left: auto;
   border-color: #2f6df6;
   background: #2f6df6;
   color: white;
@@ -744,6 +766,30 @@ button[disabled] {
 }
 
 @media (max-width: 420px) {
+  .camera-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .camera-panel .camera-actions {
+    flex-direction: row;
+  }
+
+  video {
+    max-height: 36vh;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .toolbar > *,
+  #cameraDeviceSelect,
+  #micDeviceSelect {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
   .login-grid {
     grid-template-columns: 1fr;
   }

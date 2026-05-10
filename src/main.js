@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session } = require("electron");
+const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -28,6 +28,7 @@ const SIZES = {
   M: { width: 280, height: 280 },
   L: { width: 360, height: 360 },
 };
+const BUMBEE_VISION_URL = "https://vision.bumbee.asia/login";
 
 let lang = "en";
 
@@ -88,6 +89,7 @@ function getObjRect(bounds) {
 let win;
 let hitWin;  // input window — small opaque rect over hitbox, receives all pointer events
 let chatWin;
+let visionWin;
 let chatAutoHideTimer = null;
 let chatActivityState = { typing: false, camera: false, voice: false, pending: false };
 let tray = null;
@@ -116,23 +118,188 @@ const CHAT_AUTH_SERVER_URL = (process.env.BUMBEE_DESK_AUTH_URL || process.env.TO
 const VOCAB_DB_PATH = path.join(app.getPath("userData"), "bumbee-english-vocab.json");
 const LEARN_ON_START = process.env.BUMBEE_LEARN_ON_START !== "0";
 
+const STARTER_VOCAB_VERSION = 3;
 const STARTER_VOCAB = [
-  ["coherent argument", "IELTS", "A clear argument where ideas connect logically.", "My presentation needs a coherent argument, not just random opinions."],
-  ["evaluate evidence", "IELTS", "To judge how strong or useful evidence is.", "Before we decide, we should evaluate the evidence."],
-  ["balanced conclusion", "IELTS", "A conclusion that fairly considers both sides.", "A balanced conclusion makes your essay sound mature."],
-  ["limited perspective", "IELTS", "A narrow way of looking at a problem.", "That plan has a limited perspective because it ignores customers."],
-  ["follow up", "Work", "To contact someone again after a previous conversation.", "I will follow up with the client tomorrow."],
-  ["align expectations", "Work", "To make sure everyone agrees on what should happen.", "Let's align expectations before we start the sprint."],
-  ["clarify scope", "Work", "To make the boundaries of a task or project clear.", "Can we clarify the scope before quoting the price?"],
-  ["action item", "Work", "A task someone agrees to do after a meeting.", "My action item is to send the proposal today."],
-  ["catch up", "Social", "To talk with someone after not seeing them for a while.", "Let's catch up over coffee this weekend."],
-  ["small talk", "Social", "Light conversation used to start social interaction.", "Small talk helps make meetings feel warmer."],
-  ["awkward silence", "Social", "An uncomfortable moment when nobody speaks.", "I asked a funny question to break the awkward silence."],
-  ["keep in touch", "Social", "To continue communicating with someone.", "It was great meeting you. Let's keep in touch."],
-  ["plot twist", "Funny", "An unexpected change in a story or situation.", "Plot twist: the quiet intern fixed the whole system."],
-  ["coffee-powered", "Funny", "Jokingly driven by coffee and energy.", "Our Monday meeting was completely coffee-powered."],
-  ["tiny victory", "Funny", "A small win that still feels good.", "Remembering this word is today's tiny victory."],
-  ["suspiciously productive", "Funny", "So productive that it feels surprising or funny.", "You finished all tasks before lunch. Suspiciously productive."],
+  {
+    term: "follow up",
+    category: "Work",
+    level: "easy",
+    meaning: "To contact someone again after a previous conversation so you can update, confirm, or finish an open issue.",
+    examples: [
+      "I will follow up with the client this afternoon.",
+      "Could you follow up after the demo and confirm the next step?",
+      "Thanks for the meeting. I will follow up with a short proposal.",
+    ],
+    collocations: ["follow up with a client", "follow up after a meeting", "follow up by email"],
+  },
+  {
+    term: "clarify scope",
+    category: "Work",
+    level: "medium",
+    meaning: "To make the boundaries of the work clear before committing to time, cost, or responsibility.",
+    examples: [
+      "Before we quote the price, we need to clarify scope.",
+      "Let's clarify scope so the team knows exactly what to deliver.",
+      "The project will run smoother if we clarify scope today.",
+    ],
+    collocations: ["clarify scope before quoting", "clarify scope with the client", "clarify project scope"],
+  },
+  {
+    term: "align expectations",
+    category: "Work",
+    level: "medium",
+    meaning: "To make sure everyone shares the same understanding of goals, timing, and expected results.",
+    examples: [
+      "Let's align expectations before the team starts building.",
+      "I want to align expectations on budget, timeline, and quality.",
+      "The kickoff meeting helped us align expectations with the partner.",
+    ],
+    collocations: ["align expectations with a partner", "align expectations on timeline", "align expectations early"],
+  },
+  {
+    term: "action item",
+    category: "Work",
+    level: "easy",
+    meaning: "A specific task agreed after a meeting, usually with an owner and a deadline.",
+    examples: [
+      "My action item is to send the updated contract today.",
+      "Let's close the meeting with three clear action items.",
+      "Who owns this action item before Friday?",
+    ],
+    collocations: ["own an action item", "clear action items", "meeting action item"],
+  },
+  {
+    term: "decision maker",
+    category: "Sales",
+    level: "medium",
+    meaning: "The person who has authority to approve a purchase, contract, or budget.",
+    examples: [
+      "We should identify the decision maker before the second demo.",
+      "The decision maker wants a simple cost comparison.",
+      "Can you invite the decision maker to the proposal call?",
+    ],
+    collocations: ["identify the decision maker", "reach the decision maker", "decision maker in the deal"],
+  },
+  {
+    term: "pain point",
+    category: "Sales",
+    level: "medium",
+    meaning: "A problem that creates frustration or cost and makes a customer need a solution.",
+    examples: [
+      "Their biggest pain point is slow inventory reporting.",
+      "Start the pitch by confirming the customer's pain point.",
+      "This feature solves a real pain point for store managers.",
+    ],
+    collocations: ["customer pain point", "solve a pain point", "confirm the pain point"],
+  },
+  {
+    term: "value proposition",
+    category: "Sales",
+    level: "hard",
+    meaning: "A clear reason why a product is valuable and why someone should choose it.",
+    examples: [
+      "Our value proposition is faster deployment with lower training cost.",
+      "The value proposition must be clear in the first two minutes.",
+      "A strong value proposition connects the product to business results.",
+    ],
+    collocations: ["clear value proposition", "strong value proposition", "value proposition for partners"],
+  },
+  {
+    term: "proof of concept",
+    category: "Product",
+    level: "hard",
+    meaning: "A small test used to prove that an idea or technology can work before full investment.",
+    examples: [
+      "We will run a proof of concept with one retail branch first.",
+      "The proof of concept should validate accuracy and operating cost.",
+      "After the proof of concept, we can plan full deployment.",
+    ],
+    collocations: ["run a proof of concept", "validate a proof of concept", "proof of concept phase"],
+  },
+  {
+    term: "rollout plan",
+    category: "Operations",
+    level: "medium",
+    meaning: "A step-by-step plan for launching a product, process, or system into real operation.",
+    examples: [
+      "The rollout plan starts with training the first partner group.",
+      "We need a rollout plan before launching in all stores.",
+      "A good rollout plan reduces confusion during implementation.",
+    ],
+    collocations: ["prepare a rollout plan", "regional rollout plan", "rollout plan for partners"],
+  },
+  {
+    term: "quality assurance",
+    category: "Operations",
+    level: "hard",
+    meaning: "A checking process that makes sure a product or service meets standards before delivery.",
+    examples: [
+      "Quality assurance must happen before we send the product to customers.",
+      "The team created a quality assurance checklist for every batch.",
+      "Strong quality assurance protects the brand during scale-up.",
+    ],
+    collocations: ["quality assurance checklist", "quality assurance process", "quality assurance before launch"],
+  },
+  {
+    term: "coherent argument",
+    category: "IELTS",
+    level: "hard",
+    meaning: "A clear line of reasoning where ideas connect logically and support one position.",
+    examples: [
+      "A coherent argument is more persuasive than a list of separate ideas.",
+      "Your essay needs a coherent argument with clear evidence.",
+      "The conclusion should reinforce the coherent argument from the body paragraphs.",
+    ],
+    collocations: ["build a coherent argument", "present a coherent argument", "coherent argument in an essay"],
+  },
+  {
+    term: "evaluate evidence",
+    category: "IELTS",
+    level: "hard",
+    meaning: "To judge how reliable, relevant, and persuasive the evidence is.",
+    examples: [
+      "Students should evaluate evidence before accepting a claim.",
+      "The report evaluates evidence from interviews and sales data.",
+      "A strong essay can evaluate evidence instead of just listing facts.",
+    ],
+    collocations: ["evaluate evidence carefully", "evaluate evidence in an essay", "evaluate evidence before deciding"],
+  },
+  {
+    term: "balanced conclusion",
+    category: "IELTS",
+    level: "medium",
+    meaning: "A conclusion that fairly considers the main sides of an issue while giving a clear final view.",
+    examples: [
+      "A balanced conclusion shows that you understand both sides of the debate.",
+      "End the essay with a balanced conclusion, not a sudden opinion.",
+      "The examiner expects a balanced conclusion in discussion essays.",
+    ],
+    collocations: ["write a balanced conclusion", "balanced conclusion for IELTS", "clear balanced conclusion"],
+  },
+  {
+    term: "keep in touch",
+    category: "Social",
+    level: "easy",
+    meaning: "To continue communicating with someone after meeting or working together.",
+    examples: [
+      "It was great meeting you. Let's keep in touch.",
+      "We should keep in touch after the conference.",
+      "Please keep in touch if you need support with the setup.",
+    ],
+    collocations: ["keep in touch after a meeting", "keep in touch with partners", "let's keep in touch"],
+  },
+  {
+    term: "break the ice",
+    category: "Social",
+    level: "medium",
+    meaning: "To start a conversation so the situation feels less tense or awkward.",
+    examples: [
+      "A simple question can break the ice at the start of a meeting.",
+      "The host used a quick story to break the ice.",
+      "Small talk helps break the ice with new partners.",
+    ],
+    collocations: ["break the ice with a question", "break the ice at a meeting", "break the ice with partners"],
+  },
 ];
 
 const VOCAB_DIFFICULTY_RULES = {
@@ -146,35 +313,34 @@ function getVocabDifficultyRules(level) {
   return VOCAB_DIFFICULTY_RULES[level] || VOCAB_DIFFICULTY_RULES.medium;
 }
 
-function starterLesson(term, category, meaning, example) {
+function starterLesson(item) {
   return {
-    meaning_vi: `${category}: ${meaning}`,
+    meaning_en: item.meaning,
+    meaning_vi: "",
     pronunciation: "",
-    examples: [
-      example,
-      `Can you make a natural sentence with "${term}"?`,
-      `Use "${term}" in a ${category.toLowerCase()} conversation.`,
-    ],
+    examples: item.examples,
+    collocations: item.collocations || [],
     quiz: [
-      { type: "recall", prompt: `Make one natural sentence with "${term}".`, answer: example },
-      { type: "meaning", prompt: `What does "${term}" mean in this context?`, answer: meaning },
+      { type: "recall", prompt: `Say one natural sentence with "${item.term}".`, answer: item.examples[0] },
+      { type: "meaning", prompt: `What does "${item.term}" mean in this context?`, answer: item.meaning },
     ],
   };
 }
 
 function buildStarterWords() {
   const now = new Date().toISOString();
-  return STARTER_VOCAB.map(([term, category, meaning, example], index) => ({
-    id: `starter-${index + 1}-${term.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
-    term,
+  return STARTER_VOCAB.map((item, index) => ({
+    id: `starter-${index + 1}-${item.term.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+    term: item.term,
+    category: item.category,
     score: 0,
     streak: 0,
     mistake_count: 0,
     review_count: 0,
     mastered: false,
-    level: category === "IELTS" ? "hard" : "medium",
-    sources: [`starter-${category.toLowerCase()}`],
-    lesson: starterLesson(term, category, meaning, example),
+    level: item.level,
+    sources: [`starter-${item.category.toLowerCase()}`],
+    lesson: starterLesson(item),
     created_at: now,
     updated_at: now,
     last_reviewed: null,
@@ -183,8 +349,16 @@ function buildStarterWords() {
 }
 
 function ensureStarterVocab(db) {
-  if (db.words && db.words.length > 0) return db;
-  return { ...db, words: buildStarterWords() };
+  const starterWords = buildStarterWords();
+  const normalizedWords = (Array.isArray(db.words) ? db.words : [])
+    .map((word) => normalizeStoredVocabItem(word, db.settings))
+    .filter((word) => word && word.term);
+  if (!db.words || db.words.length === 0) {
+    return { ...db, version: STARTER_VOCAB_VERSION, words: starterWords };
+  }
+  if ((Number(db.version) || 1) >= STARTER_VOCAB_VERSION) return db;
+  const customWords = normalizedWords.filter((word) => !String(word.id || "").startsWith("starter-"));
+  return { ...db, version: STARTER_VOCAB_VERSION, words: [...starterWords, ...customWords] };
 }
 
 function getBumbeeTokenFilePath() {
@@ -205,6 +379,76 @@ function reloadBumbeeSmartLayer() {
     console.warn("Clawd: intelligent layer reload failed:", err.message);
     return false;
   }
+}
+
+function isTrustedVisionUrl(url) {
+  try {
+    const parsed = new URL(url || "");
+    return parsed.protocol === "https:" && parsed.hostname === "vision.bumbee.asia";
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedVisionOrigin(origin) {
+  try {
+    const parsed = new URL(origin || "");
+    return parsed.protocol === "https:" && parsed.hostname === "vision.bumbee.asia";
+  } catch {
+    return false;
+  }
+}
+
+function canGrantMediaPermission(webContents, permission) {
+  const allowedPermissions = ["media", "microphone", "camera", "display-capture", "fullscreen", "window-management"];
+  if (!allowedPermissions.includes(permission)) return false;
+  try {
+    const url = webContents?.getURL?.() || "";
+    return url.startsWith("file://") || isTrustedVisionUrl(url);
+  } catch {
+    return false;
+  }
+}
+
+function pickPrimaryDisplaySource(sources) {
+  const displays = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
+  const preferredIds = [primary.id, ...displays.map((display) => display.id)].map(String);
+  for (const displayId of preferredIds) {
+    const source = sources.find((item) => String(item.display_id || "") === displayId);
+    if (source) return source;
+  }
+  return sources.find((item) => String(item.id || "").startsWith("screen:")) || sources[0] || null;
+}
+
+function configureDisplayCapturePermissions(defaultSession) {
+  if (!defaultSession?.setDisplayMediaRequestHandler) return;
+  defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    if (!isTrustedVisionOrigin(request.securityOrigin)) {
+      callback({});
+      return;
+    }
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ["screen", "window"],
+        thumbnailSize: { width: 320, height: 180 },
+        fetchWindowIcons: true,
+      });
+      const source = pickPrimaryDisplaySource(sources);
+      if (!source || !request.videoRequested) {
+        callback({});
+        return;
+      }
+      const streams = {
+        video: { id: source.id, name: source.name },
+      };
+      if (request.audioRequested && isWin) streams.audio = "loopback";
+      callback(streams);
+    } catch (err) {
+      console.warn("Clawd: display capture request failed:", err.message);
+      callback({});
+    }
+  }, { useSystemPicker: true });
 }
 
 function requestJson(url, body) {
@@ -345,7 +589,7 @@ async function sendBumbeeChat(payload) {
 
 function defaultVocabDb() {
   return {
-    version: 1,
+    version: STARTER_VOCAB_VERSION,
     updated_at: new Date().toISOString(),
     settings: {
       nativeLanguage: "vi",
@@ -363,12 +607,13 @@ function defaultVocabDb() {
 function readVocabDb() {
   try {
     const data = JSON.parse(fs.readFileSync(VOCAB_DB_PATH, "utf8"));
-    const db = {
+    let db = {
       ...defaultVocabDb(),
       ...data,
       settings: { ...defaultVocabDb().settings, ...(data.settings || {}) },
       words: Array.isArray(data.words) ? data.words : [],
     };
+    db = ensureStarterVocab(db);
     const thisMonth = new Date().toISOString().slice(0, 7);
     if (db.settings.monthlyReset !== false && db.last_reset_month !== thisMonth) {
       for (const item of db.words) {
@@ -380,8 +625,10 @@ function readVocabDb() {
       }
       db.last_reset_month = thisMonth;
       writeVocabDb(db);
+    } else if ((Number(data.version) || 1) < STARTER_VOCAB_VERSION) {
+      writeVocabDb(db);
     }
-    return ensureStarterVocab(db);
+    return db;
   } catch {
     return ensureStarterVocab(defaultVocabDb());
   }
@@ -423,17 +670,55 @@ function extractVocabTerms(input) {
 function fallbackLesson(term, settings) {
   const goal = settings.goal || "daily conversation";
   return {
-    meaning_vi: `Từ/cụm từ cần học trong ngữ cảnh: ${goal}.`,
+    meaning_en: `A phrase to practise in ${goal}; use it to express an idea more clearly and naturally.`,
+    meaning_vi: "",
     pronunciation: "",
     examples: [
-      `I want to use "${term}" in a real conversation.`,
-      `Can you explain "${term}" with a simple example?`,
-      `Let's practice "${term}" at work.`,
+      `I want to use "${term}" naturally in a real conversation.`,
+      `This phrase helps me explain my idea more clearly: "${term}".`,
+      `Let's use "${term}" when we talk about the next step.`,
     ],
+    collocations: [`use "${term}" naturally`, `practice "${term}" in context`, `say "${term}" clearly`],
     quiz: [
       { type: "recall", prompt: `Nói một câu tiếng Anh có dùng "${term}".`, answer: term },
-      { type: "meaning", prompt: `"${term}" dùng trong ngữ cảnh nào?`, answer: goal },
+      { type: "meaning", prompt: `What situation is "${term}" useful for?`, answer: goal },
     ],
+  };
+}
+
+function normalizeStoredLesson(term, lesson, settings) {
+  const next = lesson && typeof lesson === "object" ? { ...lesson } : fallbackLesson(term, settings);
+  const oldMeaning = String(next.meaning_en || next.meaning || next.meaning_vi || "");
+  const genericMeaning = /^Từ\/cụm từ cần học trong ngữ cảnh:|^Cụm từ cần luyện trong ngữ cảnh/i.test(oldMeaning);
+  const hasVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(oldMeaning);
+  next.meaning_en = String(next.meaning_en || next.meaning || "")
+    .replace(/^(IELTS|Work|Funny|Social|Sales|Product|Operations):\s*/i, "")
+    .trim();
+  if (!next.meaning_en || genericMeaning || hasVietnamese) next.meaning_en = fallbackLesson(term, settings).meaning_en;
+  next.meaning_vi = "";
+
+  const cleanExamples = (Array.isArray(next.examples) ? next.examples : [])
+    .map((item) => String(item || "").trim())
+    .filter((item) => item && !/^Can you explain|^Can you make|^Use ".+" in a|^Let's practice/i.test(item));
+  next.examples = cleanExamples.length >= 2 ? cleanExamples.slice(0, 6) : fallbackLesson(term, settings).examples;
+
+  const cleanCollocations = (Array.isArray(next.collocations) ? next.collocations : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  next.collocations = cleanCollocations.length ? cleanCollocations.slice(0, 8) : fallbackLesson(term, settings).collocations;
+  next.quiz = Array.isArray(next.quiz) ? next.quiz : fallbackLesson(term, settings).quiz;
+  return next;
+}
+
+function normalizeStoredVocabItem(word, settings) {
+  const term = normalizeVocabTerm(word?.term || "");
+  if (!term) return word;
+  return {
+    ...word,
+    term,
+    category: word.category || "General",
+    level: VOCAB_DIFFICULTY_RULES[word.level] ? word.level : (settings.difficulty || "medium"),
+    lesson: normalizeStoredLesson(term, word.lesson, settings),
   };
 }
 
@@ -449,7 +734,8 @@ async function enrichVocabTerm(term, settings, sourceNote) {
         `Learning goal: ${settings.goal || "business conversation"}. Difficulty: ${settings.difficulty || "medium"}.`,
         `Term: ${term}`,
         sourceNote ? `Source note: ${sourceNote.slice(0, 500)}` : "",
-        "JSON shape: {\"meaning_vi\":\"...\",\"pronunciation\":\"...\",\"examples\":[\"easy sentence\",\"work sentence\",\"hard sentence\"],\"quiz\":[{\"type\":\"recall\",\"prompt\":\"...\",\"answer\":\"...\"},{\"type\":\"fill_blank\",\"prompt\":\"...\",\"answer\":\"...\"}]}",
+        "Return professional learning content. Do not create silly distractors. Examples must be natural full English sentences.",
+        "JSON shape: {\"meaning_en\":\"...\",\"pronunciation\":\"...\",\"examples\":[\"easy sentence\",\"work sentence\",\"hard sentence\"],\"collocations\":[\"common phrase\",\"common phrase\"],\"quiz\":[{\"type\":\"recall\",\"prompt\":\"...\",\"answer\":\"...\"},{\"type\":\"fill_blank\",\"prompt\":\"...\",\"answer\":\"...\"}]}",
       ].filter(Boolean).join("\n"),
       context: {
         source: "bumbee-english-vocab",
@@ -462,9 +748,11 @@ async function enrichVocabTerm(term, settings, sourceNote) {
     const parsed = jsonText ? JSON.parse(jsonText) : null;
     if (!parsed || typeof parsed !== "object") return lesson;
     return {
-      meaning_vi: String(parsed.meaning_vi || lesson.meaning_vi).slice(0, 500),
+      meaning_en: String(parsed.meaning_en || parsed.meaning || lesson.meaning_en).slice(0, 500),
+      meaning_vi: "",
       pronunciation: String(parsed.pronunciation || "").slice(0, 120),
       examples: Array.isArray(parsed.examples) ? parsed.examples.slice(0, 6).map((x) => String(x).slice(0, 240)) : lesson.examples,
+      collocations: Array.isArray(parsed.collocations) ? parsed.collocations.slice(0, 8).map((x) => String(x).slice(0, 120)) : lesson.collocations,
       quiz: Array.isArray(parsed.quiz) ? parsed.quiz.slice(0, 6).map((q) => ({
         type: String(q.type || "recall").slice(0, 40),
         prompt: String(q.prompt || "").slice(0, 260),
@@ -709,6 +997,44 @@ function openBumbeeChat() {
   });
 }
 
+function openBumbeeVision() {
+  if (visionWin && !visionWin.isDestroyed()) {
+    visionWin.show();
+    visionWin.focus();
+    return;
+  }
+
+  const primary = screen.getPrimaryDisplay().workArea;
+  const width = Math.min(1180, Math.max(860, primary.width - 120));
+  const height = Math.min(820, Math.max(620, primary.height - 100));
+  visionWin = new BrowserWindow({
+    width,
+    height,
+    minWidth: 760,
+    minHeight: 560,
+    title: "Bumbee Vision",
+    show: false,
+    backgroundColor: "#0f1117",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  visionWin.loadURL(BUMBEE_VISION_URL);
+  visionWin.once("ready-to-show", () => {
+    if (visionWin && !visionWin.isDestroyed()) visionWin.show();
+  });
+  visionWin.webContents.setWindowOpenHandler(({ url }) => {
+    if (isTrustedVisionUrl(url)) return { action: "allow" };
+    return { action: "deny" };
+  });
+  visionWin.on("closed", () => {
+    visionWin = null;
+  });
+}
+
 function togglePetVisibility() {
   if (!win || win.isDestroyed()) return;
   if (_mini.getMiniTransitioning()) return;
@@ -755,8 +1081,17 @@ function unregisterToggleShortcut() {
   } catch {}
 }
 
+function canUseWebContents(browserWindow) {
+  return !!(
+    browserWindow &&
+    !browserWindow.isDestroyed() &&
+    browserWindow.webContents &&
+    !browserWindow.webContents.isDestroyed()
+  );
+}
+
 function sendToRenderer(channel, ...args) {
-  if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
+  if (canUseWebContents(win)) win.webContents.send(channel, ...args);
   if (channel === "state-change" && _clawdbot) {
     try {
       const sid = _state ? _state.getActiveSessionId?.() : null;
@@ -766,7 +1101,7 @@ function sendToRenderer(channel, ...args) {
   }
 }
 function sendToHitWin(channel, ...args) {
-  if (hitWin && !hitWin.isDestroyed()) hitWin.webContents.send(channel, ...args);
+  if (canUseWebContents(hitWin)) hitWin.webContents.send(channel, ...args);
 }
 
 function sendAppearance() {
@@ -1374,7 +1709,7 @@ function createWindow() {
     win.on("unresponsive", () => {
       if (isQuitting) return;
       console.warn("Clawd: renderer unresponsive — reloading");
-      win.webContents.reload();
+      if (canUseWebContents(win)) win.webContents.reload();
     });
   }
 
@@ -1466,7 +1801,7 @@ function createWindow() {
     // Crash recovery for hitWin
     hitWin.webContents.on("render-process-gone", (_event, details) => {
       console.error("hitWin renderer crashed:", details.reason);
-      hitWin.webContents.reload();
+      if (canUseWebContents(hitWin)) hitWin.webContents.reload();
     });
   }
 
@@ -1526,6 +1861,7 @@ function createWindow() {
     if (best) focusTerminalWindow(best.sourcePid, best.cwd, best.editor, best.pidChain);
   });
   ipcMain.on("open-bumbee-chat", openBumbeeChat);
+  ipcMain.on("open-bumbee-vision", openBumbeeVision);
 
   ipcMain.on("show-session-menu", () => {
     popupMenuAt(Menu.buildFromTemplate(buildSessionSubmenu()));
@@ -1603,7 +1939,7 @@ function createWindow() {
     dragLocked = false;
     idlePaused = false;
     mouseOverPet = false;
-    win.webContents.reload();
+    if (canUseWebContents(win)) win.webContents.reload();
   });
 
   guardAlwaysOnTop(win);
@@ -1771,15 +2107,21 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     permDebugLog = path.join(app.getPath("userData"), "permission-debug.log");
     updateDebugLog = path.join(app.getPath("userData"), "update-debug.log");
+    if (isMac && systemPreferences?.askForMediaAccess) {
+      systemPreferences.askForMediaAccess("microphone").catch(() => {});
+      systemPreferences.askForMediaAccess("camera").catch(() => {});
+    }
+    session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+      return canGrantMediaPermission(webContents, permission);
+    });
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-      const url = webContents.getURL() || "";
-      const isLocalAppWindow = url.startsWith("file://");
-      if (isLocalAppWindow && ["media", "microphone", "camera"].includes(permission)) {
+      if (canGrantMediaPermission(webContents, permission)) {
         callback(true);
         return;
       }
       callback(false);
     });
+    configureDisplayCapturePermissions(session.defaultSession);
     createWindow();
     if (LEARN_ON_START) {
       setTimeout(() => {
@@ -1881,6 +2223,7 @@ if (!gotTheLock) {
     _focus.cleanup();
     if (hitWin && !hitWin.isDestroyed()) hitWin.destroy();
     if (chatWin && !chatWin.isDestroyed()) chatWin.destroy();
+    if (visionWin && !visionWin.isDestroyed()) visionWin.destroy();
   });
 
   app.on("window-all-closed", () => {

@@ -136,8 +136,17 @@
     <footer class="composer">
       <textarea id="promptInput" rows="3" placeholder="Ask Bumbee..." autocomplete="off"></textarea>
       <div class="toolbar">
+        <select id="cameraDeviceSelect" title="Camera device" aria-label="Camera device">
+          <option value="">Default camera</option>
+        </select>
         <button id="cameraBtn" type="button" title="Open camera">Camera</button>
-        <button id="voiceBtn" type="button" title="Voice input">Voice</button>
+        <select id="micDeviceSelect" title="Microphone device" aria-label="Microphone device">
+          <option value="">Default mic</option>
+        </select>
+        <button id="voiceBtn" type="button" title="Record microphone">Mic</button>
+        <button id="liveBtn" type="button" title="Live conversation mode">Live</button>
+        <button id="visionBtn" type="button" title="Open Bumbee Vision">Vision</button>
+        <button id="refreshDevicesBtn" type="button" title="Refresh camera and microphone devices">Refresh</button>
         <button id="speakBtn" type="button" title="Read replies aloud">Speak: On</button>
         <button id="sendBtn" type="button" class="primary">Send</button>
       </div>

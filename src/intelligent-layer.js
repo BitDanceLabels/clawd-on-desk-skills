@@ -152,36 +152,64 @@ module.exports = function initIntelligentLayer(opts) {
   const chatAuthToken = chatAuth.token;
 
   async function gatewayChat(prompt, system, mode, context) {
-    const url = `${gatewayUrl}${chatEndpoint}`;
+    return gatewayChatToEndpoint(chatEndpoint, prompt, system, mode, context);
+  }
+
+  async function gatewayChatToEndpoint(endpoint, prompt, system, mode, context) {
+    const url = `${gatewayUrl}${endpoint}`;
     const contextObj = context && typeof context === "object" ? context : {};
     const camera = contextObj.camera || null;
+    const audio = contextObj.audio || null;
     const gatewayContext = { ...contextObj };
     delete gatewayContext.source;
     delete gatewayContext.device_id;
     delete gatewayContext.session_id;
     delete gatewayContext.camera;
-    const payload = chatEndpoint === "/bumbee/chat"
+    delete gatewayContext.audio;
+    const userContent = [{ type: "text", text: prompt }];
+    if (camera?.image_data_url) {
+      userContent.push({ type: "image_url", image_url: { url: camera.image_data_url } });
+    }
+    if (audio?.audio_data_url) {
+      const base64 = String(audio.audio_data_url).split(",")[1] || "";
+      userContent.push({ type: "input_audio", input_audio: { data: base64, format: /wav/i.test(audio.mime_type || "") ? "wav" : "webm" } });
+    }
+    const payload = endpoint === "/bumbee/chat"
       ? {
           message: prompt,
           mode: mode || "general",
           source: contextObj.source || "clawd-on-desk",
-          device_id: contextObj.device_id || null,
-          session_id: contextObj.session_id || null,
+          device_id: String(contextObj.device_id || ""),
+          session_id: String(contextObj.session_id || ""),
           context: Object.keys(gatewayContext).length ? gatewayContext : {},
           camera,
+          audio,
         }
       : {
           model: chatModel,
           messages: [
             ...(system ? [{ role: "system", content: system }] : []),
-            { role: "user", content: prompt },
+            { role: "user", content: userContent.length > 1 ? userContent : prompt },
           ],
           stream: false,
+          metadata: { mode: mode || "general", source: contextObj.source || "clawd-on-desk", camera, audio },
         };
     const headers = { "Content-Type": "application/json" };
     if (chatAuthToken) headers.Authorization = `Bearer ${chatAuthToken}`;
-    if (contextObj.session_id) headers["x-clawdbot-session-key"] = contextObj.session_id;
+    if (contextObj.session_id) headers["x-clawdbot-session-key"] = String(contextObj.session_id);
     return fetch(url, { method: "POST", body: payload, timeout: 30_000, headers });
+  }
+
+  async function gatewayChatWithFallback(prompt, system, mode, context) {
+    try {
+      const data = await gatewayChat(prompt, system, mode, context);
+      return { data, endpoint: chatEndpoint };
+    } catch (err) {
+      const message = err?.message || "";
+      if (chatEndpoint === "/bumbee/chat" || !/timeout|ECONNREFUSED|ECONNRESET|HTTP 5\d\d/i.test(message)) throw err;
+      const data = await gatewayChatToEndpoint("/bumbee/chat", String(prompt || "").split("\n\nContext:")[0], system, mode, context);
+      return { data, endpoint: "/bumbee/chat" };
+    }
   }
 
   async function chat({ mode, query, context }) {
@@ -224,11 +252,11 @@ module.exports = function initIntelligentLayer(opts) {
       // fallback gateway: dich + giai thich
       try {
         const sys = "Ban la tro ly hoc tieng Anh cho nguoi Viet. Tra loi ngan gon, kem nghia tieng Viet va 1 vi du.";
-        const data = await gatewayChat(query, sys, mode, context);
+        const { data, endpoint } = await gatewayChatWithFallback(query, sys, mode, context);
         return {
           mode: "english",
           answer: extractAnswer(data) || JSON.stringify(data).slice(0, 500),
-          source: { type: "gateway", endpoint: chatEndpoint },
+          source: { type: "gateway", endpoint },
         };
       } catch (e) {
         return { mode: "english", error: `Wiktionary khong co tu nay; gateway loi: ${e.message}` };
@@ -242,11 +270,11 @@ module.exports = function initIntelligentLayer(opts) {
     const fullPrompt = context ? `${query}\n\nContext: ${typeof context === "string" ? context : JSON.stringify(context)}` : query;
     const gatewayPrompt = chatEndpoint === "/bumbee/chat" ? query : fullPrompt;
     try {
-      const data = await gatewayChat(gatewayPrompt, sys, mode, context);
+      const { data, endpoint } = await gatewayChatWithFallback(gatewayPrompt, sys, mode, context);
       return {
         mode,
         answer: extractAnswer(data) || JSON.stringify(data).slice(0, 500),
-        source: { type: "gateway", endpoint: chatEndpoint },
+        source: { type: "gateway", endpoint },
       };
     } catch (e) {
       return { mode, error: `Gateway chat that bai: ${e.message}` };

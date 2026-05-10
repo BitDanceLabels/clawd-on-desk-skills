@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   buildGameRound,
+  getCategory,
   getPlayerLevel,
   normalizeAnswer,
   uniqueChoices,
@@ -16,17 +17,22 @@ const sampleWords = [
     term: "follow up",
     score: 45,
     streak: 2,
+    category: "Work",
+    level: "medium",
     lesson: {
-      meaning_vi: "Liên hệ lại sau một cuộc nói chuyện trước đó.",
+      meaning_en: "To contact someone again after a previous conversation.",
       examples: ["I will follow up with the client today.", "Let me follow up after the meeting."],
+      collocations: ["follow up with the client"],
     },
   },
   {
     id: "w2",
     term: "clarify scope",
     score: 60,
+    category: "Work",
+    level: "medium",
     lesson: {
-      meaning_vi: "Làm rõ phạm vi công việc.",
+      meaning_en: "To make the boundaries of the work clear.",
       examples: ["Can we clarify scope before we quote the price?"],
     },
   },
@@ -35,9 +41,10 @@ const sampleWords = [
 test("buildGameRound creates a playable meaning round with one correct answer", () => {
   const round = buildGameRound(sampleWords[0], sampleWords, { mode: "meaning" });
   assert.equal(round.mode, "meaning");
-  assert.equal(round.answer, sampleWords[0].lesson.meaning_vi);
+  assert.equal(round.answer, sampleWords[0].lesson.meaning_en);
   assert.ok(round.choices.includes(round.answer));
-  assert.ok(round.choices.length >= 2);
+  assert.equal(round.choices.length, 4);
+  assert.ok(!round.choices.some((choice) => /^Work:|^IELTS:|^Funny:/i.test(choice)));
 });
 
 test("buildGameRound creates conversation rounds with speakable lines", () => {
@@ -64,4 +71,11 @@ test("getPlayerLevel returns stable level progress from word scores", () => {
 test("normalizeAnswer and uniqueChoices prevent duplicate answer variants", () => {
   assert.equal(normalizeAnswer(" Follow-up!! "), "follow-up");
   assert.deepEqual(uniqueChoices(["A", " a ", "B", "B!"], 4), ["A", "B"]);
+});
+
+test("getCategory falls back to starter source without leaking into the meaning", () => {
+  const word = { sources: ["starter-sales"], lesson: { meaning_en: "A sales meaning." } };
+  assert.equal(getCategory(word), "Sales");
+  const round = buildGameRound(word, sampleWords, { mode: "meaning" });
+  assert.equal(round.answer, "A sales meaning.");
 });

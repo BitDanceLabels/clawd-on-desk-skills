@@ -203,22 +203,41 @@ function renderEmailHint() {
 }
 const cameraBtn = document.getElementById("cameraBtn");
 const voiceBtn = document.getElementById("voiceBtn");
+const liveBtn = document.getElementById("liveBtn");
+const visionBtn = document.getElementById("visionBtn");
+const refreshDevicesBtn = document.getElementById("refreshDevicesBtn");
 const speakBtn = document.getElementById("speakBtn");
 const cameraPanel = document.getElementById("cameraPanel");
 const cameraPreview = document.getElementById("cameraPreview");
 const cameraCanvas = document.getElementById("cameraCanvas");
 const captureBtn = document.getElementById("captureBtn");
 const stopCameraBtn = document.getElementById("stopCameraBtn");
+const cameraDeviceSelect = document.getElementById("cameraDeviceSelect");
+const micDeviceSelect = document.getElementById("micDeviceSelect");
 
 let cameraStream = null;
 let cameraStarting = false;
 let capturedFrame = null;
+let micStream = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let capturedAudio = null;
+let liveStream = null;
+let liveRecorder = null;
+let liveChunks = [];
+let liveAudioContext = null;
+let liveAnalyser = null;
+let liveMonitorFrame = null;
+let liveActive = false;
+let liveSpeaking = false;
+let liveSpeechStartedAt = 0;
+let liveLastVoiceAt = 0;
 let speakingEnabled = true;
-let recognition = null;
-let recognizing = false;
 let voiceWanted = false;
-let voiceRestartTimer = null;
 let pendingRequest = false;
+let chatRequestId = 0;
+let cameraOpenId = 0;
+let liveSessionId = 0;
 
 function setActiveTab(tab) {
   activeTab = tab;
@@ -240,7 +259,7 @@ function pushActivityState() {
   window.bumbeeChat.activity({
     typing: document.activeElement === promptInput && promptInput.value.trim().length > 0,
     camera: cameraStarting || !!cameraStream,
-    voice: voiceWanted || recognizing,
+    voice: voiceWanted || !!micStream || liveActive,
     pending: pendingRequest,
   });
 }
@@ -319,11 +338,11 @@ function renderVocab() {
     title.textContent = word.term;
     const score = document.createElement("span");
     score.className = "score-pill";
-    score.textContent = `${word.level || vocabState.settings?.difficulty || "medium"} · ${word.score || 0}/100`;
+    score.textContent = `${word.category || "General"} · ${word.level || vocabState.settings?.difficulty || "medium"} · ${word.score || 0}/100`;
     header.append(title, score);
 
     const meaning = document.createElement("p");
-    meaning.textContent = word.lesson?.meaning_vi || "No lesson yet.";
+    meaning.textContent = word.lesson?.meaning_en || word.lesson?.meaning || "No lesson yet.";
     const examples = document.createElement("ul");
     examples.className = "examples";
     for (const ex of (word.lesson?.examples || []).slice(0, 3)) {
@@ -439,7 +458,7 @@ function pickChallengeWord(options = {}) {
 }
 
 function getMeaning(word) {
-  return word?.lesson?.meaning_vi || "Use this naturally in a real conversation.";
+  return word?.lesson?.meaning_en || word?.lesson?.meaning || "Use this naturally in a real conversation.";
 }
 
 function buildChoiceSet(word) {
@@ -645,6 +664,7 @@ function setBusy(busy) {
   pendingRequest = !!busy;
   sendBtn.disabled = busy;
   sendBtn.textContent = busy ? "Sending..." : "Send";
+  if (liveActive && !liveSpeaking) liveBtn.textContent = busy ? "Live: Thinking" : "Live: On";
   pushActivityState();
 }
 
@@ -743,35 +763,54 @@ async function verifyLoginCode() {
   }
 }
 
-async function sendPrompt() {
-  const query = promptInput.value.trim();
+async function sendPrompt(displayText) {
+  if (pendingRequest) {
+    addMessage("system", "Bumbee is still answering the previous turn. Please wait a moment.");
+    return;
+  }
+  let query = promptInput.value.trim();
+  if (!query && capturedAudio) query = "Hãy nghe đoạn ghi âm này và trả lời bằng tiếng Việt như trợ lý công việc.";
+  if (!query && capturedFrame) query = "Hãy xem ảnh camera này và trả lời bằng tiếng Việt.";
   if (!query) return;
+  const requestId = ++chatRequestId;
   promptInput.value = "";
-  addMessage("user", query);
+  addMessage("user", displayText || query);
   setBusy(true);
 
   const context = {
     source: "clawd-on-desk",
     camera: capturedFrame ? {
       captured_at: capturedFrame.capturedAt,
-      image_data_url: capturedFrame.dataUrl.slice(0, 50000),
+      image_data_url: capturedFrame.dataUrl,
       note: "Snapshot included for multimodal gateways; text-only gateways may ignore it.",
+    } : null,
+    audio: capturedAudio ? {
+      captured_at: capturedAudio.capturedAt,
+      mime_type: capturedAudio.mimeType,
+      audio_data_url: capturedAudio.dataUrl,
+      note: "Microphone recording included for multimodal gateways; text-only gateways may ignore it.",
     } : null,
   };
 
   try {
-    const result = await window.bumbeeChat.send({
+    const result = await withTimeout(window.bumbeeChat.send({
       mode: modeSelect.value,
       query,
       context,
-    });
+    }), 60_000, "Bumbee response timeout");
+    if (requestId !== chatRequestId) return;
     const answer = result.answer || result.error || "No response.";
     addMessage(result.ok && !result.error ? "assistant" : "system", answer);
     if (result.ok && !result.error) speak(answer);
+    if (result.ok && !result.error) {
+      capturedAudio = null;
+      capturedFrame = null;
+    }
   } catch (err) {
+    if (requestId !== chatRequestId) return;
     addMessage("system", `Chat failed: ${err.message}`);
   } finally {
-    setBusy(false);
+    if (requestId === chatRequestId) setBusy(false);
   }
 }
 
@@ -780,54 +819,125 @@ async function startCamera() {
     addMessage("system", "Camera is not available in this Electron runtime.");
     return;
   }
+  const openId = ++cameraOpenId;
   cameraStarting = true;
   cameraBtn.disabled = true;
   cameraBtn.textContent = "Camera: Opening";
   pushActivityState();
   try {
-    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
-    const videoInputs = devices.filter((device) => device.kind === "videoinput");
-    const iphoneCamera = videoInputs.find((device) => /iphone|continuity/i.test(device.label || ""));
-    const video = iphoneCamera
-      ? { deviceId: { exact: iphoneCamera.deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    if (cameraStream) closeCameraStream();
+    const videoInputs = await refreshMediaDevices({ silent: true, probe: false });
+    if (openId !== cameraOpenId) return;
+    const selected = cameraDeviceSelect.value;
+    const iphoneCamera = videoInputs.cameras.find((device) => /iphone|continuity/i.test(device.label || ""));
+    const deviceId = selected || iphoneCamera?.deviceId || "";
+    const video = deviceId
+      ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
       : { width: { ideal: 1280 }, height: { ideal: 720 } };
-    cameraStream = await navigator.mediaDevices.getUserMedia({
+    cameraStream = await getUserMediaWithTimeout({
       video,
       audio: false,
-    });
+    }, 7000);
+    if (openId !== cameraOpenId) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     for (const track of cameraStream.getVideoTracks()) {
       track.addEventListener("ended", () => {
         addMessage("system", "Camera device ended. Reopen Camera if you still want to use it.");
         stopCamera();
       });
     }
+    cameraPreview.pause();
+    cameraPreview.removeAttribute("src");
     cameraPreview.srcObject = cameraStream;
+    cameraPreview.muted = true;
+    cameraPreview.playsInline = true;
     cameraPanel.hidden = false;
-    await cameraPreview.play().catch(() => {});
+    await playCameraPreview();
+    if (openId !== cameraOpenId) return;
+    const track = cameraStream.getVideoTracks()[0];
+    const settings = track?.getSettings?.() || {};
+    addMessage("system", `Camera connected: ${track?.label || "camera"}${settings.width && settings.height ? ` (${settings.width}x${settings.height})` : ""}.`);
+    setTimeout(() => {
+      if (cameraStream && !cameraPreview.videoWidth) {
+        addMessage("system", "Camera connected but no video frame is visible yet. Unlock iPhone and keep Continuity Camera active, then press Stop and Camera again.");
+      }
+    }, 1500);
     cameraBtn.textContent = "Camera: On";
     pushActivityState();
   } catch (err) {
+    if (openId !== cameraOpenId) return;
     addMessage("system", `Camera failed: ${err.message}`);
+    addMessage("system", "Nếu muốn dùng iPhone, kiểm tra Continuity Camera trong macOS trước: FaceTime/QuickTime phải thấy iPhone Camera thì app mới thấy.");
     stopCamera();
   } finally {
-    cameraStarting = false;
-    cameraBtn.disabled = false;
-    if (!cameraStream) cameraBtn.textContent = "Camera";
-    pushActivityState();
+    if (openId === cameraOpenId) {
+      cameraStarting = false;
+      cameraBtn.disabled = false;
+      cameraBtn.textContent = cameraStream ? "Camera: On" : "Camera";
+      pushActivityState();
+    }
   }
 }
 
+async function playCameraPreview() {
+  if (cameraPreview.readyState < 1) {
+    await new Promise((resolve) => {
+      const done = () => {
+        cameraPreview.removeEventListener("loadedmetadata", done);
+        resolve();
+      };
+      cameraPreview.addEventListener("loadedmetadata", done, { once: true });
+      setTimeout(done, 1200);
+    });
+  }
+  await cameraPreview.play().catch((err) => {
+    addMessage("system", `Camera preview play warning: ${err.message}`);
+  });
+}
+
 function stopCamera() {
+  cameraOpenId += 1;
   cameraStarting = false;
+  closeCameraStream();
+  cameraBtn.disabled = false;
+  cameraBtn.textContent = "Camera";
+  pushActivityState();
+}
+
+function closeCameraStream() {
   if (cameraStream) {
     for (const track of cameraStream.getTracks()) track.stop();
   }
   cameraStream = null;
   cameraPreview.srcObject = null;
   cameraPanel.hidden = true;
-  cameraBtn.disabled = false;
-  cameraBtn.textContent = "Camera";
-  pushActivityState();
+}
+
+function getUserMediaWithTimeout(constraints, timeoutMs = 8000) {
+  let timedOut = false;
+  const mediaPromise = navigator.mediaDevices.getUserMedia(constraints);
+  mediaPromise.then((stream) => {
+    if (timedOut) stream.getTracks().forEach((track) => track.stop());
+  }).catch(() => {});
+  return Promise.race([
+    mediaPromise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        timedOut = true;
+        reject(new Error("camera/mic open timeout"));
+      }, timeoutMs);
+    }),
+  ]);
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function captureFrame() {
@@ -846,92 +956,259 @@ function captureFrame() {
   addMessage("system", "Camera snapshot attached to the next message.");
 }
 
-function initVoice() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    voiceBtn.disabled = true;
-    voiceBtn.textContent = "Voice: N/A";
-    return;
+async function refreshMediaDevices(options = {}) {
+  if (!navigator.mediaDevices?.enumerateDevices) return { cameras: [], mics: [] };
+  if (options.probe) await probeMediaPermissions(options);
+  const previousCamera = cameraDeviceSelect.value;
+  const previousMic = micDeviceSelect.value;
+  const devices = await withTimeout(navigator.mediaDevices.enumerateDevices(), 3000, "device list timeout").catch((err) => {
+    if (!options.silent) addMessage("system", `Device refresh failed: ${err.message}`);
+    return [];
+  });
+  const cameras = devices.filter((device) => device.kind === "videoinput");
+  const mics = devices.filter((device) => device.kind === "audioinput");
+
+  cameraDeviceSelect.replaceChildren(new Option("Default camera", ""));
+  cameras.forEach((device, index) => {
+    cameraDeviceSelect.append(new Option(device.label || `Camera ${index + 1}`, device.deviceId));
+  });
+  if (previousCamera && cameras.some((device) => device.deviceId === previousCamera)) {
+    cameraDeviceSelect.value = previousCamera;
   }
-  recognition = new SpeechRecognition();
-  recognition.lang = "vi-VN";
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.onstart = () => {
-    recognizing = true;
-    voiceBtn.textContent = "Voice: On";
-    pushActivityState();
-  };
-  recognition.onend = () => {
-    recognizing = false;
-    if (voiceWanted) {
-      voiceBtn.textContent = "Voice: Reconnecting";
-      clearTimeout(voiceRestartTimer);
-      voiceRestartTimer = setTimeout(() => {
-        voiceRestartTimer = null;
-        if (!voiceWanted || recognizing) return;
-        try {
-          recognition.start();
-        } catch (err) {
-          addMessage("system", `Voice restart failed: ${err.message}`);
-          stopVoice();
-        }
-      }, 350);
-    } else {
-      voiceBtn.textContent = "Voice";
-    }
-    pushActivityState();
-  };
-  recognition.onerror = (event) => {
-    const error = event.error || "unknown";
-    addMessage("system", `Voice input error: ${error}`);
-    if (["not-allowed", "service-not-allowed", "audio-capture"].includes(error)) {
-      stopVoice();
-    }
-  };
-  recognition.onresult = (event) => {
-    let finalText = "";
-    let interimText = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const text = event.results[i][0]?.transcript || "";
-      if (event.results[i].isFinal) finalText += text;
-      else interimText += text;
-    }
-    if (finalText) {
-      const prefix = promptInput.value.trim();
-      promptInput.value = `${prefix}${prefix ? " " : ""}${finalText.trim()}`;
-      pushActivityState();
-    } else if (interimText) {
-      promptInput.placeholder = interimText.trim();
-    }
-  };
+
+  micDeviceSelect.replaceChildren(new Option("Default mic", ""));
+  mics.forEach((device, index) => {
+    micDeviceSelect.append(new Option(device.label || `Microphone ${index + 1}`, device.deviceId));
+  });
+  if (previousMic && mics.some((device) => device.deviceId === previousMic)) {
+    micDeviceSelect.value = previousMic;
+  }
+
+  if (!options.silent) {
+    addMessage("system", cameras.length ? `Cameras: ${cameras.map((d, i) => d.label || `Camera ${i + 1}`).join(", ")}` : "No cameras found.");
+    addMessage("system", mics.length ? `Microphones: ${mics.map((d, i) => d.label || `Mic ${i + 1}`).join(", ")}` : "No microphones found.");
+  }
+  return { cameras, mics };
 }
 
-function startVoice() {
-  if (!recognition) return;
+async function probeMediaPermissions(options = {}) {
+  if (!navigator.mediaDevices?.getUserMedia) return;
+  const probes = micStream || liveStream ? [] : [
+    ["microphone", { audio: true, video: false }],
+  ];
+  for (const [label, constraints] of probes) {
+    try {
+      const stream = await getUserMediaWithTimeout(constraints, 3500);
+      stream.getTracks().forEach((track) => track.stop());
+    } catch (err) {
+      if (!options.silent) addMessage("system", `${label} probe: ${err.name || "Error"}: ${err.message}`);
+    }
+  }
+}
+
+async function startVoice() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    addMessage("system", "Microphone is not available in this Electron runtime.");
+    return;
+  }
   voiceWanted = true;
-  voiceBtn.textContent = "Voice: Starting";
+  voiceBtn.disabled = true;
+  voiceBtn.textContent = "Mic: Opening";
   pushActivityState();
   try {
-    recognition.start();
+    await refreshMediaDevices({ silent: true });
+    const selected = micDeviceSelect.value;
+    micStream = await getUserMediaWithTimeout({
+      audio: selected ? { deviceId: { exact: selected }, echoCancellation: true, noiseSuppression: true } : { echoCancellation: true, noiseSuppression: true },
+      video: false,
+    }, 6000);
+    const track = micStream.getAudioTracks()[0];
+    addMessage("system", `Mic connected: ${track?.label || "microphone"}. Press Mic again to stop and send.`);
+    audioChunks = [];
+    const mimeType = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+    mediaRecorder = mimeType ? new MediaRecorder(micStream, { mimeType }) : new MediaRecorder(micStream);
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data?.size) audioChunks.push(event.data);
+    };
+    mediaRecorder.onstop = async () => {
+      if (!audioChunks.length) return;
+      const blob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || "audio/webm" });
+      capturedAudio = {
+        capturedAt: new Date().toISOString(),
+        mimeType: blob.type || "audio/webm",
+        dataUrl: await blobToDataUrl(blob),
+      };
+      addMessage("system", "Mic recording attached. Sending to Bumbee...");
+      sendPrompt();
+    };
+    mediaRecorder.start();
+    voiceBtn.textContent = "Mic: Recording";
   } catch (err) {
-    if (!/already started/i.test(err.message || "")) {
-      addMessage("system", `Voice start failed: ${err.message}`);
-      stopVoice();
-    }
+    addMessage("system", `Mic failed: ${err.message}`);
+    stopVoice();
+  } finally {
+    voiceBtn.disabled = false;
+    pushActivityState();
   }
 }
 
 function stopVoice() {
   voiceWanted = false;
-  clearTimeout(voiceRestartTimer);
-  voiceRestartTimer = null;
-  if (recognition && recognizing) {
-    try { recognition.stop(); } catch {}
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    try { mediaRecorder.stop(); } catch {}
   }
-  recognizing = false;
-  voiceBtn.textContent = "Voice";
+  if (micStream) {
+    for (const track of micStream.getTracks()) track.stop();
+  }
+  micStream = null;
+  voiceBtn.disabled = false;
+  voiceBtn.textContent = "Mic";
   pushActivityState();
+}
+
+async function startLiveMode() {
+  if (liveActive) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    addMessage("system", "Live mode needs microphone access.");
+    return;
+  }
+  const sessionId = ++liveSessionId;
+  liveBtn.disabled = true;
+  liveBtn.textContent = "Live: Opening";
+  try {
+    await refreshMediaDevices({ silent: true });
+    if (sessionId !== liveSessionId) return;
+    const selected = micDeviceSelect.value;
+    const stream = await getUserMediaWithTimeout({
+      audio: selected ? { deviceId: { exact: selected }, echoCancellation: true, noiseSuppression: true } : { echoCancellation: true, noiseSuppression: true },
+      video: false,
+    }, 6000);
+    if (sessionId !== liveSessionId) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    liveStream = stream;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    liveAudioContext = new AudioCtx();
+    await liveAudioContext.resume();
+    const source = liveAudioContext.createMediaStreamSource(liveStream);
+    liveAnalyser = liveAudioContext.createAnalyser();
+    liveAnalyser.fftSize = 1024;
+    source.connect(liveAnalyser);
+    liveActive = true;
+    liveSpeaking = false;
+    liveBtn.textContent = "Live: On";
+    addMessage("system", "Live mode on. Bumbee will listen, detect pauses, and reply in chat.");
+    monitorLiveVoice();
+    pushActivityState();
+  } catch (err) {
+    addMessage("system", `Live failed: ${err.message}`);
+    stopLiveMode();
+  } finally {
+    liveBtn.disabled = false;
+    if (!liveActive) liveBtn.textContent = "Live";
+    pushActivityState();
+  }
+}
+
+function stopLiveMode() {
+  liveSessionId += 1;
+  liveActive = false;
+  liveSpeaking = false;
+  if (liveMonitorFrame) cancelAnimationFrame(liveMonitorFrame);
+  liveMonitorFrame = null;
+  if (liveRecorder && liveRecorder.state !== "inactive") {
+    try { liveRecorder.stop(); } catch {}
+  }
+  liveRecorder = null;
+  if (liveStream) liveStream.getTracks().forEach((track) => track.stop());
+  liveStream = null;
+  if (liveAudioContext) {
+    try { liveAudioContext.close(); } catch {}
+  }
+  liveAudioContext = null;
+  liveAnalyser = null;
+  if (pendingRequest) chatRequestId += 1;
+  if (pendingRequest) setBusy(false);
+  liveBtn.textContent = "Live";
+  addMessage("system", "Live mode off.");
+  pushActivityState();
+}
+
+function monitorLiveVoice() {
+  if (!liveActive || !liveAnalyser) return;
+  if (pendingRequest) {
+    if (!liveSpeaking) liveBtn.textContent = "Live: Thinking";
+    liveMonitorFrame = requestAnimationFrame(monitorLiveVoice);
+    return;
+  }
+  const data = new Uint8Array(liveAnalyser.fftSize);
+  liveAnalyser.getByteTimeDomainData(data);
+  let sum = 0;
+  for (const value of data) {
+    const centered = value - 128;
+    sum += centered * centered;
+  }
+  const rms = Math.sqrt(sum / data.length) / 128;
+  const now = Date.now();
+  const voiceThreshold = 0.035;
+  const silenceMs = 900;
+  const minSpeechMs = 450;
+
+  if (rms > voiceThreshold) {
+    liveLastVoiceAt = now;
+    if (!liveSpeaking) {
+      liveSpeaking = true;
+      liveSpeechStartedAt = now;
+      startLiveRecorder();
+      liveBtn.textContent = "Live: Listening";
+      addMessage("system", "Live is listening...");
+    }
+  } else if (liveSpeaking && now - liveLastVoiceAt > silenceMs && now - liveSpeechStartedAt > minSpeechMs) {
+    liveSpeaking = false;
+    liveBtn.textContent = "Live: Thinking";
+    stopLiveRecorderAndSend();
+  }
+  liveMonitorFrame = requestAnimationFrame(monitorLiveVoice);
+}
+
+function startLiveRecorder() {
+  if (!liveStream || liveRecorder?.state === "recording") return;
+  const sessionId = liveSessionId;
+  liveChunks = [];
+  const mimeType = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+  liveRecorder = mimeType ? new MediaRecorder(liveStream, { mimeType }) : new MediaRecorder(liveStream);
+  liveRecorder.ondataavailable = (event) => {
+    if (event.data?.size) liveChunks.push(event.data);
+  };
+  liveRecorder.onstop = async () => {
+    if (!liveChunks.length || !liveActive || sessionId !== liveSessionId) return;
+    const blob = new Blob(liveChunks, { type: liveRecorder?.mimeType || "audio/webm" });
+    capturedAudio = {
+      capturedAt: new Date().toISOString(),
+      mimeType: blob.type || "audio/webm",
+      dataUrl: await blobToDataUrl(blob),
+    };
+    promptInput.value = "Tôi vừa nói qua mic. Hãy nghe audio và trả lời tự nhiên bằng tiếng Việt.";
+    await sendPrompt("🎙️ Voice turn");
+    if (liveActive && sessionId === liveSessionId) liveBtn.textContent = "Live: On";
+  };
+  liveRecorder.start(250);
+}
+
+function stopLiveRecorderAndSend() {
+  if (liveRecorder && liveRecorder.state !== "inactive") {
+    try { liveRecorder.stop(); } catch {}
+  }
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Could not read audio."));
+    reader.readAsDataURL(blob);
+  });
 }
 
 sendBtn.addEventListener("click", sendPrompt);
@@ -1019,10 +1296,19 @@ captureBtn.addEventListener("click", captureFrame);
 stopCameraBtn.addEventListener("click", stopCamera);
 
 voiceBtn.addEventListener("click", () => {
-  if (!recognition) return;
-  if (voiceWanted || recognizing) stopVoice();
+  if (liveActive) stopLiveMode();
+  if (voiceWanted || micStream) stopVoice();
   else startVoice();
 });
+liveBtn.addEventListener("click", () => {
+  if (voiceWanted || micStream) stopVoice();
+  if (liveActive) stopLiveMode();
+  else startLiveMode();
+});
+visionBtn.addEventListener("click", () => {
+  window.bumbeeChat.openVision();
+});
+refreshDevicesBtn.addEventListener("click", () => refreshMediaDevices({ silent: false, probe: true }));
 
 speakBtn.addEventListener("click", () => {
   speakingEnabled = !speakingEnabled;
@@ -1050,12 +1336,14 @@ codeInput.addEventListener("keydown", (event) => {
 window.addEventListener("beforeunload", () => {
   stopCamera();
   stopVoice();
+  stopLiveMode();
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   window.bumbeeChat.activity({ typing: false, camera: false, voice: false, pending: false });
 });
 
-initVoice();
+refreshMediaDevices({ silent: true, probe: true });
 renderModeButtons();
 refreshStatus();
-setActiveTab("learn");
-addMessage("assistant", "Bumbee chat is ready. Use Camera to attach a snapshot, Voice to dictate, and Speak to hear replies.");
+setActiveTab("chat");
+loadVocab();
+addMessage("assistant", "Bumbee chat is ready. Use Camera for a live preview, Mic for one recording, or Live for pause-detected voice conversation.");

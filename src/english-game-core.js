@@ -22,7 +22,7 @@ const GAME_MODES = [
   {
     id: "translate",
     label: "Say It Better",
-    prompt: "Pick the English line that best matches the Vietnamese cue.",
+    prompt: "Pick the most natural English line for the situation.",
     coach: "Use it like a person would say it, not like a dictionary entry.",
   },
 ];
@@ -92,12 +92,41 @@ function normalizeAnswer(text) {
 }
 
 function getMeaning(word) {
-  return word?.lesson?.meaning_vi || "Use this naturally in a real conversation.";
+  return word?.lesson?.meaning_en || word?.lesson?.meaning || word?.lesson?.meaning_vi || "Use this naturally in a real conversation.";
 }
 
 function getExamples(word) {
   const examples = Array.isArray(word?.lesson?.examples) ? word.lesson.examples : [];
-  return examples.filter(Boolean).map(String);
+  return examples
+    .filter(Boolean)
+    .map(String)
+    .filter((example) => !/^can you make|^use ".+" in a|^let's practice/i.test(example.trim()));
+}
+
+function getCollocations(word) {
+  const items = Array.isArray(word?.lesson?.collocations) ? word.lesson.collocations : [];
+  return items.filter(Boolean).map(String);
+}
+
+function getCategory(word) {
+  const direct = String(word?.category || "").trim();
+  if (direct) return direct;
+  const source = (Array.isArray(word?.sources) ? word.sources : [])
+    .map(String)
+    .find((item) => item.startsWith("starter-"));
+  return source ? source.replace(/^starter-/, "").replace(/^\w/, (ch) => ch.toUpperCase()) : "General";
+}
+
+function seededShuffle(items, seedText = "") {
+  const next = items.slice();
+  let seed = 17;
+  for (const ch of String(seedText)) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  for (let i = next.length - 1; i > 0; i--) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    const j = seed % (i + 1);
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
 }
 
 function totalXp(words) {
@@ -154,6 +183,43 @@ function uniqueChoices(choices, limit = 4) {
     .slice(0, limit);
 }
 
+function getPeerWords(word, allWords = []) {
+  const category = normalizeAnswer(getCategory(word));
+  const level = String(word?.level || "").toLowerCase();
+  const peers = (Array.isArray(allWords) ? allWords : [])
+    .filter((item) => item && item.id !== word.id);
+  return peers.sort((a, b) => {
+    const aScore = (normalizeAnswer(getCategory(a)) === category ? 0 : 1) + (String(a.level || "").toLowerCase() === level ? 0 : 1);
+    const bScore = (normalizeAnswer(getCategory(b)) === category ? 0 : 1) + (String(b.level || "").toLowerCase() === level ? 0 : 1);
+    return aScore - bScore || String(a.term || "").localeCompare(String(b.term || ""));
+  });
+}
+
+function buildMeaningChoices(word, allWords, seedText) {
+  const correct = getMeaning(word);
+  const peerMeanings = getPeerWords(word, allWords).map(getMeaning);
+  const fallback = [
+    "To agree on goals, timing, and responsibilities before starting.",
+    "To identify the customer's main problem before choosing a solution.",
+    "To check quality before delivery or deployment.",
+    "To keep communication open and confirm the next step after a discussion.",
+  ];
+  return seededShuffle(uniqueChoices([correct, ...peerMeanings, ...fallback], 4), seedText);
+}
+
+function buildTermChoices(word, allWords, seedText) {
+  const term = String(word.term || "").trim();
+  const peers = getPeerWords(word, allWords).map((item) => item.term);
+  const fallback = ["follow up", "clarify scope", "align expectations", "action item", "value proposition"];
+  return seededShuffle(uniqueChoices([term, ...peers, ...fallback], 4), seedText);
+}
+
+function replaceTermWithBlank(example, term) {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const blanked = example.replace(new RegExp(escaped, "ig"), "_____");
+  return blanked === example ? `${example} (${term}: _____)` : blanked;
+}
+
 function buildGameRound(word, allWords = [], options = {}) {
   if (!word) return null;
   const index = Number(options.index) || 0;
@@ -162,67 +228,68 @@ function buildGameRound(word, allWords = [], options = {}) {
   const term = String(word.term || "").trim();
   const meaning = getMeaning(word);
   const examples = getExamples(word);
+  const collocations = getCollocations(word);
   const scene = pickScene(word, index);
-  const otherMeanings = (Array.isArray(allWords) ? allWords : [])
-    .filter((item) => item && item.id !== word.id)
-    .map(getMeaning);
+  const seedText = `${term}:${mode}:${index}`;
 
   if (mode === "dialogue") {
     const correct = examples[0] || scene.answerTemplate.replace("{term}", term);
+    const peerExamples = getPeerWords(word, allWords).flatMap(getExamples);
     return {
       mode,
-      title: scene.title,
+      title: `${getCategory(word)} dialogue`,
       coach: modeMeta.coach,
       prompt: modeMeta.prompt,
-      scene: scene.setup,
-      cue: scene.cueVi,
+      scene: `Scenario: ${scene.setup}`,
+      cue: `Choose the line that naturally uses "${term}".`,
       answer: correct,
-      choices: uniqueChoices([correct, ...scene.distractors, scene.answerTemplate.replace("{term}", term)]),
+      choices: seededShuffle(uniqueChoices([correct, ...peerExamples, ...scene.distractors], 4), seedText),
       speakLine: correct,
     };
   }
 
   if (mode === "fill") {
     const example = examples.find((item) => normalizeAnswer(item).includes(normalizeAnswer(term))) || scene.answerTemplate.replace("{term}", term);
-    const blank = example.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "_____");
+    const blank = replaceTermWithBlank(example, term);
     return {
       mode,
-      title: scene.title,
+      title: `${getCategory(word)} fill-in`,
       coach: modeMeta.coach,
       prompt: modeMeta.prompt,
-      scene: scene.setup,
+      scene: `Context: ${scene.setup}`,
       cue: blank,
       answer: term,
-      choices: uniqueChoices([term, "follow up", "small talk", "plot twist", "action item"].filter((item) => normalizeAnswer(item) !== normalizeAnswer(term) || item === term)),
+      choices: buildTermChoices(word, allWords, seedText),
       speakLine: example,
     };
   }
 
   if (mode === "translate") {
     const correct = examples[1] || scene.answerTemplate.replace("{term}", term);
+    const peerExamples = getPeerWords(word, allWords).flatMap(getExamples);
     return {
       mode,
-      title: scene.title,
+      title: `${getCategory(word)} translation`,
       coach: modeMeta.coach,
       prompt: modeMeta.prompt,
-      scene: scene.setup,
-      cue: scene.cueVi,
+      scene: `Meaning: ${meaning}`,
+      cue: `Pick the best English sentence for "${term}".`,
       answer: correct,
-      choices: uniqueChoices([correct, ...scene.distractors]),
+      choices: seededShuffle(uniqueChoices([correct, ...peerExamples, ...scene.distractors], 4), seedText),
       speakLine: correct,
     };
   }
 
   return {
     mode: "meaning",
-    title: "Meaning sprint",
+    title: `${getCategory(word)} meaning sprint`,
     coach: modeMeta.coach,
     prompt: modeMeta.prompt,
     scene: `Term: ${term}`,
     cue: "What does it mean?",
     answer: meaning,
-    choices: uniqueChoices([meaning, ...otherMeanings, ...scene.distractors]),
-    speakLine: examples[0] || term,
+    choices: buildMeaningChoices(word, allWords, seedText),
+    speakLine: examples[0] || collocations[0] || term,
   };
 }
 
@@ -233,11 +300,14 @@ const EnglishGameCore = {
   normalizeAnswer,
   getMeaning,
   getExamples,
+  getCollocations,
+  getCategory,
   totalXp,
   getPlayerLevel,
   chooseGameMode,
   pickScene,
   uniqueChoices,
+  seededShuffle,
   buildGameRound,
 };
 
