@@ -8,6 +8,29 @@ const isLinux = process.platform === "linux";
 const isWin = process.platform === "win32";
 const LINUX_WINDOW_TYPE = "toolbar";
 
+function installSafeConsoleStreams() {
+  const ignoredCodes = new Set(["EIO", "EPIPE", "EBADF"]);
+  for (const stream of [process.stdout, process.stderr]) {
+    if (!stream || stream.__clawdSafeConsole) continue;
+    stream.__clawdSafeConsole = true;
+    stream.on("error", (err) => {
+      if (!ignoredCodes.has(err?.code)) throw err;
+    });
+  }
+  for (const method of ["log", "info", "warn", "error"]) {
+    const original = console[method].bind(console);
+    console[method] = (...args) => {
+      try {
+        original(...args);
+      } catch (err) {
+        if (!ignoredCodes.has(err?.code)) throw err;
+      }
+    };
+  }
+}
+
+installSafeConsoleStreams();
+
 
 // ── Windows: AllowSetForegroundWindow via FFI ──
 let _allowSetForeground = null;

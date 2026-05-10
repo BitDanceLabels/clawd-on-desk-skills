@@ -182,9 +182,10 @@ function showPermissionBubble(permEntry) {
 }
 
 function resolvePermissionEntry(permEntry, behavior, message) {
-  // Codex notify bubbles have no HTTP connection — route to dedicated cleanup
-  if (permEntry.isCodexNotify) {
-    dismissCodexNotify(permEntry);
+  // Notify-only bubbles have no HTTP response object. Dismiss them without
+  // trying to write a permission response during app shutdown.
+  if (permEntry.isCodexNotify || permEntry.isCoachNotify || !permEntry.res) {
+    dismissNotify(permEntry);
     return;
   }
   const idx = pendingPermissions.indexOf(permEntry);
@@ -204,7 +205,9 @@ function resolvePermissionEntry(permEntry, behavior, message) {
   pendingPermissions.splice(idx, 1);
 
   const { res, abortHandler, bubble: bub } = permEntry;
-  if (abortHandler) res.removeListener("close", abortHandler);
+  if (abortHandler && res && typeof res.removeListener === "function") {
+    res.removeListener("close", abortHandler);
+  }
 
   // Hide this bubble (fade out + destroy)
   if (bub && !bub.isDestroyed()) {
@@ -219,7 +222,7 @@ function resolvePermissionEntry(permEntry, behavior, message) {
   repositionBubbles();
 
   // Guard: client may have disconnected
-  if (res.writableEnded || res.destroyed) return;
+  if (!res || res.writableEnded || res.destroyed) return;
 
   if (permEntry.isElicitation) {
     sendPermissionResponse(res, "deny", null, "Elicitation");
@@ -243,6 +246,7 @@ function permLog(msg) {
 }
 
 function sendPermissionResponse(res, decisionOrBehavior, message, hookEventName = "PermissionRequest") {
+  if (!res || res.writableEnded || res.destroyed) return;
   let decision;
   if (typeof decisionOrBehavior === "string") {
     decision = { behavior: decisionOrBehavior };
@@ -254,11 +258,15 @@ function sendPermissionResponse(res, decisionOrBehavior, message, hookEventName 
     hookSpecificOutput: { hookEventName, decision },
   });
   permLog(`response: ${responseBody}`);
-  res.writeHead(200, {
-    "Content-Type": "application/json",
-    [CLAWD_SERVER_HEADER]: CLAWD_SERVER_ID,
-  });
-  res.end(responseBody);
+  try {
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      [CLAWD_SERVER_HEADER]: CLAWD_SERVER_ID,
+    });
+    res.end(responseBody);
+  } catch (err) {
+    permLog(`response skipped: ${err.message}`);
+  }
 }
 
 function handleBubbleHeight(event, height) {
