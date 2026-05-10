@@ -118,7 +118,7 @@ const CHAT_AUTH_SERVER_URL = (process.env.BUMBEE_DESK_AUTH_URL || process.env.TO
 const VOCAB_DB_PATH = path.join(app.getPath("userData"), "bumbee-english-vocab.json");
 const LEARN_ON_START = process.env.BUMBEE_LEARN_ON_START !== "0";
 
-const STARTER_VOCAB_VERSION = 3;
+const STARTER_VOCAB_VERSION = 7;
 const STARTER_VOCAB = [
   {
     term: "follow up",
@@ -307,6 +307,225 @@ const VOCAB_DIFFICULTY_RULES = {
   medium: { gain: 8, loss: 22, masterScore: 94, masterStreak: 6, correctHourBase: 6, wrongHours: 2 },
   hard: { gain: 6, loss: 20, masterScore: 96, masterStreak: 8, correctHourBase: 8, wrongHours: 3 },
   expert: { gain: 5, loss: 18, masterScore: 98, masterStreak: 10, correctHourBase: 10, wrongHours: 4 },
+};
+
+const ENGLISH_LESSON_LIBRARY = {
+  "make progress": {
+    meaning: "To move forward and improve, even if the work is not finished yet.",
+    examples: [
+      "We made progress on the proposal, but we still need the final numbers.",
+      "I want to make progress on this feature before the next meeting.",
+      "The team is making steady progress with the new customer workflow.",
+    ],
+    collocations: ["make steady progress", "make progress on a task", "make progress toward a goal"],
+  },
+  "handle feedback": {
+    meaning: "To receive comments or criticism professionally and use them to improve the work.",
+    examples: [
+      "She handled the feedback well and updated the design the same day.",
+      "I want to handle feedback calmly, even when the client is direct.",
+      "A good manager helps the team handle feedback without losing momentum.",
+    ],
+    collocations: ["handle feedback well", "handle client feedback", "handle feedback professionally"],
+  },
+  "client requirement": {
+    meaning: "Something a customer needs or expects the product, service, or team to deliver.",
+    examples: [
+      "This client requirement affects the timeline and the budget.",
+      "We should confirm every client requirement before development starts.",
+      "The new dashboard was added because of a clear client requirement.",
+    ],
+    collocations: ["confirm client requirements", "document client requirements", "meet a client requirement"],
+  },
+  "deadline pressure": {
+    meaning: "Stress or urgency caused by having limited time to finish important work.",
+    examples: [
+      "The team is under deadline pressure, so we need to protect focus time.",
+      "Deadline pressure can create mistakes if the scope is not clear.",
+      "I work better under deadline pressure when the priorities are simple.",
+    ],
+    collocations: ["under deadline pressure", "manage deadline pressure", "reduce deadline pressure"],
+  },
+  "catch up": {
+    meaning: "To talk with someone and learn what has happened since you last spoke.",
+    examples: [
+      "Let's catch up after lunch and compare notes.",
+      "I caught up with an old partner at the event.",
+      "We should catch up this week before the project gets busy.",
+    ],
+    collocations: ["catch up with a friend", "catch up after work", "quick catch-up"],
+  },
+  "small talk": {
+    meaning: "Light, polite conversation about simple topics before or between serious discussions.",
+    examples: [
+      "A little small talk helped everyone feel comfortable before the meeting.",
+      "I use small talk to start conversations with new partners.",
+      "Good small talk should feel natural, not forced.",
+    ],
+    collocations: ["make small talk", "start with small talk", "natural small talk"],
+  },
+  "hang out": {
+    meaning: "To spend relaxed time with someone without a formal plan.",
+    examples: [
+      "We might hang out after work if the schedule is clear.",
+      "I like to hang out with friends on Sunday evening.",
+      "The team hung out after the event and shared ideas.",
+    ],
+    collocations: ["hang out with friends", "hang out after work", "casually hang out"],
+  },
+  "first impression": {
+    meaning: "The opinion someone forms when they first meet a person, see a product, or experience a situation.",
+    examples: [
+      "Your first impression matters when you meet a new client.",
+      "The homepage creates the first impression of the product.",
+      "I want to make a strong first impression in tomorrow's interview.",
+    ],
+    collocations: ["make a first impression", "strong first impression", "first impression of a product"],
+  },
+  "awkward silence": {
+    meaning: "An uncomfortable pause in a conversation when nobody knows what to say.",
+    examples: [
+      "There was an awkward silence after the pricing question.",
+      "A simple follow-up question can break an awkward silence.",
+      "I smiled and changed the topic to avoid an awkward silence.",
+    ],
+    collocations: ["avoid an awkward silence", "break an awkward silence", "long awkward silence"],
+  },
+  "sense of humor": {
+    meaning: "The ability to understand jokes and enjoy funny situations in a natural way.",
+    examples: [
+      "A good sense of humor can make a difficult conversation easier.",
+      "She has a dry sense of humor that the whole team enjoys.",
+      "Use your sense of humor carefully in a professional meeting.",
+    ],
+    collocations: ["good sense of humor", "dry sense of humor", "share a sense of humor"],
+  },
+  "personal boundary": {
+    meaning: "A limit someone sets to protect their time, privacy, energy, or comfort.",
+    examples: [
+      "It's healthy to set a personal boundary around work messages at night.",
+      "He explained his personal boundary politely and clearly.",
+      "Respecting a personal boundary builds trust in a relationship.",
+    ],
+    collocations: ["set a personal boundary", "respect a personal boundary", "clear personal boundary"],
+  },
+  "significant factor": {
+    meaning: "An important cause or influence that affects a result or decision.",
+    examples: [
+      "Cost is a significant factor in the customer's decision.",
+      "Location became a significant factor in the research results.",
+      "A significant factor should be explained with evidence.",
+    ],
+    collocations: ["a significant factor in", "consider a significant factor", "identify a significant factor"],
+  },
+  "limited perspective": {
+    meaning: "A narrow way of seeing an issue because some information or viewpoints are missing.",
+    examples: [
+      "The report has a limited perspective because it only uses one data source.",
+      "A limited perspective can lead to a weak business decision.",
+      "We need customer interviews to avoid a limited perspective.",
+    ],
+    collocations: ["from a limited perspective", "avoid a limited perspective", "broaden a limited perspective"],
+  },
+  "practical implication": {
+    meaning: "The real-world effect or consequence of an idea, decision, or result.",
+    examples: [
+      "The practical implication is that we need more support staff.",
+      "Every recommendation should include a practical implication.",
+      "This research has a practical implication for product training.",
+    ],
+    collocations: ["practical implication of", "explain the practical implication", "clear practical implication"],
+  },
+  "long-term consequence": {
+    meaning: "An effect that appears or continues far into the future.",
+    examples: [
+      "A poor onboarding process can have long-term consequences for retention.",
+      "The long-term consequence of this policy is hard to measure.",
+      "We should consider the long-term consequence before cutting quality checks.",
+    ],
+    collocations: ["consider long-term consequences", "serious long-term consequence", "long-term consequence of a decision"],
+  },
+  "controversial issue": {
+    meaning: "A topic that people strongly disagree about because it involves competing values or interests.",
+    examples: [
+      "Remote work remains a controversial issue in some companies.",
+      "The essay discusses a controversial issue with balanced evidence.",
+      "Pricing data can become a controversial issue during partner negotiations.",
+    ],
+    collocations: ["discuss a controversial issue", "debate a controversial issue", "controversial issue in society"],
+  },
+  "plot twist": {
+    meaning: "A surprising change in a story or situation that makes people rethink what happened.",
+    examples: [
+      "The plot twist is that the quietest customer became our biggest buyer.",
+      "That meeting had a plot twist when the investor asked to join the pilot.",
+      "I did not expect that plot twist in the negotiation.",
+    ],
+    collocations: ["unexpected plot twist", "funny plot twist", "plot twist in the story"],
+  },
+  "brain freeze": {
+    meaning: "A short moment when your mind goes blank, especially while speaking or answering quickly.",
+    examples: [
+      "I had a brain freeze during the presentation and forgot the next slide.",
+      "Take a breath if you get a brain freeze in English conversation.",
+      "The question was simple, but I had a complete brain freeze.",
+    ],
+    collocations: ["get brain freeze", "complete brain freeze", "avoid brain freeze"],
+  },
+  "accidentally professional": {
+    meaning: "Funny or informal: doing something in a surprisingly polished or competent way without planning to.",
+    examples: [
+      "I was accidentally professional when I turned my messy notes into a clear proposal.",
+      "The quick demo looked accidentally professional, so the client asked for a pilot.",
+      "He sounded accidentally professional even though he joined the meeting late.",
+    ],
+    collocations: ["look accidentally professional", "sound accidentally professional", "accidentally professional presentation"],
+  },
+  "chaotic meeting": {
+    meaning: "A meeting that feels disorganized, noisy, or hard to control.",
+    examples: [
+      "That chaotic meeting needed a clear agenda and one decision owner.",
+      "We turned a chaotic meeting into three simple action items.",
+      "A chaotic meeting can still be useful if someone summarizes the next steps.",
+    ],
+    collocations: ["chaotic meeting agenda", "survive a chaotic meeting", "turn a chaotic meeting around"],
+  },
+  "coffee-powered": {
+    meaning: "Funny or informal: full of energy because of drinking coffee.",
+    examples: [
+      "Our Monday meeting was completely coffee-powered.",
+      "I finished the report in one coffee-powered morning.",
+      "The team looked tired but coffee-powered before launch.",
+    ],
+    collocations: ["coffee-powered morning", "coffee-powered meeting", "coffee-powered energy"],
+  },
+  "awkward but honest": {
+    meaning: "Uncomfortable to say, but truthful and direct in a useful way.",
+    examples: [
+      "The feedback was awkward but honest, and it helped us improve the product.",
+      "This is awkward but honest: the launch plan is not ready yet.",
+      "An awkward but honest conversation can save a partnership from bigger problems.",
+    ],
+    collocations: ["awkward but honest feedback", "awkward but honest conversation", "awkward but honest answer"],
+  },
+  "tiny victory": {
+    meaning: "A small success that still feels encouraging or worth celebrating.",
+    examples: [
+      "Fixing that bug was a tiny victory after a long day.",
+      "Every new sentence you can say naturally is a tiny victory.",
+      "The first customer reply felt like a tiny victory for the team.",
+    ],
+    collocations: ["celebrate a tiny victory", "small tiny victory", "tiny victory today"],
+  },
+  "suspiciously productive": {
+    meaning: "Funny or informal: so productive that it feels surprising or almost unbelievable.",
+    examples: [
+      "This morning was suspiciously productive; I finished three tasks before lunch.",
+      "The meeting was suspiciously productive and ended early.",
+      "I get suspiciously productive when my calendar is empty.",
+    ],
+    collocations: ["suspiciously productive morning", "suspiciously productive meeting", "feel suspiciously productive"],
+  },
 };
 
 function getVocabDifficultyRules(level) {
@@ -667,20 +886,45 @@ function extractVocabTerms(input) {
     .slice(0, 30);
 }
 
+function cloneLessonTemplate(template) {
+  return {
+    meaning_en: String(template.meaning || "").trim(),
+    meaning_vi: "",
+    pronunciation: "",
+    examples: (Array.isArray(template.examples) ? template.examples : []).map(String).filter(Boolean).slice(0, 6),
+    collocations: (Array.isArray(template.collocations) ? template.collocations : []).map(String).filter(Boolean).slice(0, 8),
+    quiz: [],
+  };
+}
+
+function knownFallbackLesson(term) {
+  const key = normalizeVocabTerm(term).toLowerCase();
+  const template = ENGLISH_LESSON_LIBRARY[key] || STARTER_VOCAB.find((item) => item.term.toLowerCase() === key);
+  if (!template) return null;
+  const lesson = cloneLessonTemplate(template);
+  lesson.quiz = [
+    { type: "recall", prompt: `Say one natural sentence with "${term}".`, answer: lesson.examples[0] || term },
+    { type: "meaning", prompt: `What does "${term}" mean in this context?`, answer: lesson.meaning_en },
+  ];
+  return lesson;
+}
+
 function fallbackLesson(term, settings) {
   const goal = settings.goal || "daily conversation";
+  const known = knownFallbackLesson(term);
+  if (known) return known;
   return {
-    meaning_en: `A phrase to practise in ${goal}; use it to express an idea more clearly and naturally.`,
+    meaning_en: `A useful English expression for ${goal}; learn the exact meaning before using it in a real conversation.`,
     meaning_vi: "",
     pronunciation: "",
     examples: [
-      `I want to use "${term}" naturally in a real conversation.`,
-      `This phrase helps me explain my idea more clearly: "${term}".`,
-      `Let's use "${term}" when we talk about the next step.`,
+      `I want to use "${term}" correctly in a real conversation.`,
+      `Let's check the context before we use "${term}".`,
+      `Can you give me a natural example with "${term}"?`,
     ],
-    collocations: [`use "${term}" naturally`, `practice "${term}" in context`, `say "${term}" clearly`],
+    collocations: [`use "${term}" correctly`, `practice "${term}" in context`, `say "${term}" clearly`],
     quiz: [
-      { type: "recall", prompt: `Nói một câu tiếng Anh có dùng "${term}".`, answer: term },
+      { type: "recall", prompt: `Say one natural English sentence with "${term}".`, answer: term },
       { type: "meaning", prompt: `What situation is "${term}" useful for?`, answer: goal },
     ],
   };
@@ -689,7 +933,7 @@ function fallbackLesson(term, settings) {
 function normalizeStoredLesson(term, lesson, settings) {
   const next = lesson && typeof lesson === "object" ? { ...lesson } : fallbackLesson(term, settings);
   const oldMeaning = String(next.meaning_en || next.meaning || next.meaning_vi || "");
-  const genericMeaning = /^Từ\/cụm từ cần học trong ngữ cảnh:|^Cụm từ cần luyện trong ngữ cảnh/i.test(oldMeaning);
+  const genericMeaning = /^Từ\/cụm từ cần học trong ngữ cảnh:|^Cụm từ cần luyện trong ngữ cảnh|^A phrase to practi[cs]e in |^A useful English expression for |^Use this naturally in a real conversation/i.test(oldMeaning);
   const hasVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(oldMeaning);
   next.meaning_en = String(next.meaning_en || next.meaning || "")
     .replace(/^(IELTS|Work|Funny|Social|Sales|Product|Operations):\s*/i, "")
@@ -700,7 +944,18 @@ function normalizeStoredLesson(term, lesson, settings) {
   const cleanExamples = (Array.isArray(next.examples) ? next.examples : [])
     .map((item) => String(item || "").trim())
     .filter((item) => item && !/^Can you explain|^Can you make|^Use ".+" in a|^Let's practice/i.test(item));
-  next.examples = cleanExamples.length >= 2 ? cleanExamples.slice(0, 6) : fallbackLesson(term, settings).examples;
+  const genericExamples = cleanExamples.filter((item) => {
+    const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`^I want to use ["']?${escapedTerm}["']? naturally in a real conversation\\.?$`, "i").test(item)
+      || new RegExp(`^I want to use ["']?${escapedTerm}["']? correctly in a real conversation\\.?$`, "i").test(item)
+      || new RegExp(`^This phrase helps me explain my idea more clearly:\\s*["']?${escapedTerm}["']?\\.?$`, "i").test(item)
+      || new RegExp(`^Let's use ["']?${escapedTerm}["']? when we talk about the next step\\.?$`, "i").test(item)
+      || new RegExp(`^Let's check the context before we use ["']?${escapedTerm}["']?\\.?$`, "i").test(item)
+      || new RegExp(`^Can you give me a natural example with ["']?${escapedTerm}["']?\\??$`, "i").test(item);
+  });
+  next.examples = cleanExamples.length >= 2 && genericExamples.length === 0
+    ? cleanExamples.slice(0, 6)
+    : fallbackLesson(term, settings).examples;
 
   const cleanCollocations = (Array.isArray(next.collocations) ? next.collocations : [])
     .map((item) => String(item || "").trim())

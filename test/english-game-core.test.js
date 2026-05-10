@@ -7,6 +7,7 @@ const {
   buildGameRound,
   getCategory,
   getPlayerLevel,
+  isGenericMeaning,
   normalizeAnswer,
   uniqueChoices,
 } = require("../src/english-game-core");
@@ -78,4 +79,21 @@ test("getCategory falls back to starter source without leaking into the meaning"
   assert.equal(getCategory(word), "Sales");
   const round = buildGameRound(word, sampleWords, { mode: "meaning" });
   assert.equal(round.answer, "A sales meaning.");
+});
+
+test("meaning choices exclude stale generic fallback meanings from peers", () => {
+  const words = [
+    ...sampleWords,
+    {
+      id: "w3",
+      term: "first impression",
+      category: "Social",
+      lesson: {
+        meaning_en: "A phrase to practise in business conversation; use it to express an idea more clearly and naturally.",
+      },
+    },
+  ];
+  const round = buildGameRound(sampleWords[0], words, { mode: "meaning" });
+  assert.ok(isGenericMeaning(words[2].lesson.meaning_en));
+  assert.ok(!round.choices.some(isGenericMeaning));
 });

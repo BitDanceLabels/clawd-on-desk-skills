@@ -95,6 +95,10 @@ function getMeaning(word) {
   return word?.lesson?.meaning_en || word?.lesson?.meaning || word?.lesson?.meaning_vi || "Use this naturally in a real conversation.";
 }
 
+function isGenericMeaning(text) {
+  return /^A phrase to practi[cs]e in |^A useful English expression for |^Use this naturally in a real conversation/i.test(String(text || "").trim());
+}
+
 function getExamples(word) {
   const examples = Array.isArray(word?.lesson?.examples) ? word.lesson.examples : [];
   return examples
@@ -197,7 +201,9 @@ function getPeerWords(word, allWords = []) {
 
 function buildMeaningChoices(word, allWords, seedText) {
   const correct = getMeaning(word);
-  const peerMeanings = getPeerWords(word, allWords).map(getMeaning);
+  const peerMeanings = getPeerWords(word, allWords)
+    .map(getMeaning)
+    .filter((meaning) => !isGenericMeaning(meaning));
   const fallback = [
     "To agree on goals, timing, and responsibilities before starting.",
     "To identify the customer's main problem before choosing a solution.",
@@ -299,6 +305,7 @@ const EnglishGameCore = {
   LEVELS,
   normalizeAnswer,
   getMeaning,
+  isGenericMeaning,
   getExamples,
   getCollocations,
   getCategory,
