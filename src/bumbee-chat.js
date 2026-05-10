@@ -214,6 +214,8 @@ const captureBtn = document.getElementById("captureBtn");
 const stopCameraBtn = document.getElementById("stopCameraBtn");
 const cameraDeviceSelect = document.getElementById("cameraDeviceSelect");
 const micDeviceSelect = document.getElementById("micDeviceSelect");
+const VISION_AUDIO_WS_URL = "wss://vision.bumbee.asia/ws/audio-stream";
+const VISION_AUDIO_SAMPLE_RATE = 16000;
 
 let cameraStream = null;
 let cameraStarting = false;
@@ -222,16 +224,29 @@ let micStream = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let capturedAudio = null;
+let micAudioContext = null;
+let micSourceNode = null;
+let micProcessorNode = null;
+let micSilentGain = null;
+let micSpeechBuffers = [];
 let liveStream = null;
 let liveRecorder = null;
 let liveChunks = [];
 let liveAudioContext = null;
+let liveSourceNode = null;
+let liveProcessorNode = null;
+let liveSilentGain = null;
 let liveAnalyser = null;
 let liveMonitorFrame = null;
 let liveActive = false;
 let liveSpeaking = false;
 let liveSpeechStartedAt = 0;
 let liveLastVoiceAt = 0;
+let liveSpeechBuffers = [];
+let liveVisionWs = null;
+let liveVisionChunkId = 0;
+let liveVisionTranscriptWaiter = null;
+let liveVisionSourceId = `bumbee-live-${Date.now().toString(36)}`;
 let speakingEnabled = true;
 let voiceWanted = false;
 let pendingRequest = false;
@@ -940,6 +955,212 @@ function withTimeout(promise, timeoutMs, message) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+function downsampleBuffer(buffer, inputRate, outputRate) {
+  if (!buffer?.length) return new Float32Array();
+  if (!inputRate || inputRate === outputRate) return buffer;
+  const ratio = inputRate / outputRate;
+  const nextLength = Math.round(buffer.length / ratio);
+  const result = new Float32Array(nextLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio);
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i];
+      count += 1;
+    }
+    result[offsetResult] = count ? accum / count : 0;
+    offsetResult += 1;
+    offsetBuffer = nextOffsetBuffer;
+  }
+  return result;
+}
+
+function mergeAudioBuffers(buffers) {
+  const total = buffers.reduce((sum, buffer) => sum + (buffer?.length || 0), 0);
+  const result = new Float32Array(total);
+  let offset = 0;
+  for (const buffer of buffers) {
+    if (!buffer?.length) continue;
+    result.set(buffer, offset);
+    offset += buffer.length;
+  }
+  return result;
+}
+
+function encodeWavFromFloat32(samples, sampleRate = VISION_AUDIO_SAMPLE_RATE) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeString = (offset, value) => {
+    for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const sample = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  return new Blob([view], { type: "audio/wav" });
+}
+
+async function blobToBase64(blob) {
+  const dataUrl = await blobToDataUrl(blob);
+  return String(dataUrl).split(",")[1] || "";
+}
+
+function ensureVisionAudioWs() {
+  if (liveVisionWs && liveVisionWs.readyState === WebSocket.OPEN) return Promise.resolve(liveVisionWs);
+  if (liveVisionWs && liveVisionWs.readyState === WebSocket.CONNECTING) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Vision audio WebSocket timeout")), 6000);
+      liveVisionWs.addEventListener("open", () => {
+        clearTimeout(timeout);
+        resolve(liveVisionWs);
+      }, { once: true });
+      liveVisionWs.addEventListener("error", () => {
+        clearTimeout(timeout);
+        reject(new Error("Vision audio WebSocket failed"));
+      }, { once: true });
+    });
+  }
+  liveVisionWs = new WebSocket(VISION_AUDIO_WS_URL);
+  liveVisionWs.onmessage = (event) => {
+    let msg = null;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg.type === "transcript") {
+      const text = String(msg.text || "").trim();
+      if (text) addMessage("system", `Vision heard: ${text}`);
+      if (liveVisionTranscriptWaiter && msg.chunk_id === liveVisionTranscriptWaiter.chunkId) {
+        liveVisionTranscriptWaiter.resolve(text);
+        liveVisionTranscriptWaiter = null;
+      }
+    } else if (msg.type === "summary" && msg.summary) {
+      addMessage("system", `Vision summary: ${msg.summary}`);
+    } else if (msg.type === "error") {
+      const error = String(msg.error || "Vision audio error");
+      addMessage("system", error);
+      if (liveVisionTranscriptWaiter) {
+        liveVisionTranscriptWaiter.reject(new Error(error));
+        liveVisionTranscriptWaiter = null;
+      }
+    }
+  };
+  liveVisionWs.onclose = () => {
+    liveVisionWs = null;
+  };
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Vision audio WebSocket timeout")), 6000);
+    liveVisionWs.addEventListener("open", () => {
+      clearTimeout(timeout);
+      resolve(liveVisionWs);
+    }, { once: true });
+    liveVisionWs.addEventListener("error", () => {
+      clearTimeout(timeout);
+      reject(new Error("Vision audio WebSocket failed"));
+    }, { once: true });
+  });
+}
+
+function closeVisionAudioWs() {
+  if (liveVisionTranscriptWaiter) {
+    liveVisionTranscriptWaiter.reject(new Error("Live mode stopped"));
+    liveVisionTranscriptWaiter = null;
+  }
+  if (liveVisionWs) {
+    try { liveVisionWs.close(); } catch {}
+    liveVisionWs = null;
+  }
+}
+
+async function transcribeLiveBuffersWithVision(buffers, sessionId) {
+  const samples = mergeAudioBuffers(buffers);
+  if (!samples.length || samples.length < VISION_AUDIO_SAMPLE_RATE * 0.2) return "";
+  const ws = await ensureVisionAudioWs();
+  if (!liveActive || sessionId !== liveSessionId || ws.readyState !== WebSocket.OPEN) return "";
+  const chunkId = `${liveVisionSourceId}-${++liveVisionChunkId}`;
+  const wavBlob = encodeWavFromFloat32(samples, VISION_AUDIO_SAMPLE_RATE);
+  const data = await blobToBase64(wavBlob);
+  const transcriptPromise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (liveVisionTranscriptWaiter?.chunkId === chunkId) liveVisionTranscriptWaiter = null;
+      reject(new Error("Vision transcript timeout"));
+    }, 30_000);
+    liveVisionTranscriptWaiter = {
+      chunkId,
+      resolve: (text) => {
+        clearTimeout(timer);
+        resolve(text);
+      },
+      reject: (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    };
+  });
+  ws.send(JSON.stringify({
+    type: "chunk",
+    data,
+    source_id: liveVisionSourceId,
+    chunk_id: chunkId,
+  }));
+  return String(await transcriptPromise || "").trim();
+}
+
+async function sendLiveTranscript(transcript, sessionId) {
+  const clean = String(transcript || "").trim();
+  if (!clean || !liveActive || sessionId !== liveSessionId) return;
+  promptInput.value = `Tôi vừa nói qua mic: "${clean}". Hãy trả lời tự nhiên, ngắn gọn, đúng ngữ cảnh như đang giao tiếp trực tiếp với tôi.`;
+  await sendPrompt(`🎙️ ${clean}`);
+}
+
+async function transcribeBuffersWithVision(buffers, sourceIdPrefix = "bumbee-mic") {
+  const samples = mergeAudioBuffers(buffers);
+  if (!samples.length || samples.length < VISION_AUDIO_SAMPLE_RATE * 0.2) return "";
+  const ws = await ensureVisionAudioWs();
+  if (ws.readyState !== WebSocket.OPEN) return "";
+  const chunkId = `${sourceIdPrefix}-${Date.now().toString(36)}-${++liveVisionChunkId}`;
+  const wavBlob = encodeWavFromFloat32(samples, VISION_AUDIO_SAMPLE_RATE);
+  const data = await blobToBase64(wavBlob);
+  const transcriptPromise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (liveVisionTranscriptWaiter?.chunkId === chunkId) liveVisionTranscriptWaiter = null;
+      reject(new Error("Vision transcript timeout"));
+    }, 30_000);
+    liveVisionTranscriptWaiter = {
+      chunkId,
+      resolve: (text) => {
+        clearTimeout(timer);
+        resolve(text);
+      },
+      reject: (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    };
+  });
+  ws.send(JSON.stringify({
+    type: "chunk",
+    data,
+    source_id: sourceIdPrefix,
+    chunk_id: chunkId,
+  }));
+  return String(await transcriptPromise || "").trim();
+}
+
 function captureFrame() {
   if (!cameraStream || !cameraPreview.videoWidth) {
     addMessage("system", "Camera is not ready yet.");
@@ -1025,45 +1246,86 @@ async function startVoice() {
     const track = micStream.getAudioTracks()[0];
     addMessage("system", `Mic connected: ${track?.label || "microphone"}. Press Mic again to stop and send.`);
     audioChunks = [];
-    const mimeType = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
-    mediaRecorder = mimeType ? new MediaRecorder(micStream, { mimeType }) : new MediaRecorder(micStream);
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data?.size) audioChunks.push(event.data);
+    micSpeechBuffers = [];
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    micAudioContext = new AudioCtx();
+    await micAudioContext.resume();
+    micSourceNode = micAudioContext.createMediaStreamSource(micStream);
+    micProcessorNode = micAudioContext.createScriptProcessor(4096, 1, 1);
+    micSilentGain = micAudioContext.createGain();
+    micSilentGain.gain.value = 0;
+    micProcessorNode.onaudioprocess = (event) => {
+      if (!voiceWanted) return;
+      const raw = event.inputBuffer.getChannelData(0);
+      const copied = new Float32Array(raw.length);
+      copied.set(raw);
+      const downsampled = downsampleBuffer(copied, micAudioContext.sampleRate, VISION_AUDIO_SAMPLE_RATE);
+      if (downsampled.length) micSpeechBuffers.push(downsampled);
     };
-    mediaRecorder.onstop = async () => {
-      if (!audioChunks.length) return;
-      const blob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || "audio/webm" });
-      capturedAudio = {
-        capturedAt: new Date().toISOString(),
-        mimeType: blob.type || "audio/webm",
-        dataUrl: await blobToDataUrl(blob),
-      };
-      addMessage("system", "Mic recording attached. Sending to Bumbee...");
-      sendPrompt();
-    };
-    mediaRecorder.start();
+    micSourceNode.connect(micProcessorNode);
+    micProcessorNode.connect(micSilentGain);
+    micSilentGain.connect(micAudioContext.destination);
+    await ensureVisionAudioWs();
     voiceBtn.textContent = "Mic: Recording";
   } catch (err) {
     addMessage("system", `Mic failed: ${err.message}`);
-    stopVoice();
+    stopVoice({ send: false });
   } finally {
     voiceBtn.disabled = false;
     pushActivityState();
   }
 }
 
-function stopVoice() {
+function stopVoice(options = {}) {
+  const shouldSend = options.send !== false;
+  const buffers = micSpeechBuffers.slice();
+  micSpeechBuffers = [];
   voiceWanted = false;
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     try { mediaRecorder.stop(); } catch {}
   }
+  mediaRecorder = null;
+  if (micProcessorNode) {
+    try { micProcessorNode.disconnect(); } catch {}
+  }
+  micProcessorNode = null;
+  if (micSourceNode) {
+    try { micSourceNode.disconnect(); } catch {}
+  }
+  micSourceNode = null;
+  if (micSilentGain) {
+    try { micSilentGain.disconnect(); } catch {}
+  }
+  micSilentGain = null;
+  if (micAudioContext) {
+    try { micAudioContext.close(); } catch {}
+  }
+  micAudioContext = null;
   if (micStream) {
     for (const track of micStream.getTracks()) track.stop();
   }
   micStream = null;
   voiceBtn.disabled = false;
-  voiceBtn.textContent = "Mic";
+  voiceBtn.textContent = shouldSend ? "Mic: Thinking" : "Mic";
   pushActivityState();
+  if (!shouldSend) return;
+  (async () => {
+    try {
+      const transcript = await transcribeBuffersWithVision(buffers, "bumbee-mic");
+      if (!transcript) {
+        addMessage("system", "Vision did not hear a clear sentence.");
+        return;
+      }
+      promptInput.value = `Tôi vừa nói qua mic: "${transcript}". Hãy trả lời tự nhiên, ngắn gọn, đúng ngữ cảnh như đang giao tiếp trực tiếp với tôi.`;
+      await sendPrompt(`🎙️ ${transcript}`);
+    } catch (err) {
+      addMessage("system", `Vision mic failed: ${err.message}`);
+    } finally {
+      if (!liveActive) closeVisionAudioWs();
+      if (!voiceWanted && !micStream) voiceBtn.textContent = "Mic";
+      pushActivityState();
+    }
+  })();
 }
 
 async function startLiveMode() {
@@ -1091,14 +1353,29 @@ async function startLiveMode() {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     liveAudioContext = new AudioCtx();
     await liveAudioContext.resume();
-    const source = liveAudioContext.createMediaStreamSource(liveStream);
+    liveSourceNode = liveAudioContext.createMediaStreamSource(liveStream);
     liveAnalyser = liveAudioContext.createAnalyser();
     liveAnalyser.fftSize = 1024;
-    source.connect(liveAnalyser);
+    liveSourceNode.connect(liveAnalyser);
+    liveProcessorNode = liveAudioContext.createScriptProcessor(4096, 1, 1);
+    liveSilentGain = liveAudioContext.createGain();
+    liveSilentGain.gain.value = 0;
+    liveProcessorNode.onaudioprocess = (event) => {
+      if (!liveActive || !liveSpeaking) return;
+      const raw = event.inputBuffer.getChannelData(0);
+      const copied = new Float32Array(raw.length);
+      copied.set(raw);
+      const downsampled = downsampleBuffer(copied, liveAudioContext.sampleRate, VISION_AUDIO_SAMPLE_RATE);
+      if (downsampled.length) liveSpeechBuffers.push(downsampled);
+    };
+    liveSourceNode.connect(liveProcessorNode);
+    liveProcessorNode.connect(liveSilentGain);
+    liveSilentGain.connect(liveAudioContext.destination);
+    try { await ensureVisionAudioWs(); } catch (err) { addMessage("system", `Vision voice unavailable, live will not start: ${err.message}`); throw err; }
     liveActive = true;
     liveSpeaking = false;
     liveBtn.textContent = "Live: On";
-    addMessage("system", "Live mode on. Bumbee will listen, detect pauses, and reply in chat.");
+    addMessage("system", "Live mode on. Bumbee will listen with Vision voice, detect pauses, and reply in chat.");
     monitorLiveVoice();
     pushActivityState();
   } catch (err) {
@@ -1121,6 +1398,19 @@ function stopLiveMode() {
     try { liveRecorder.stop(); } catch {}
   }
   liveRecorder = null;
+  liveSpeechBuffers = [];
+  if (liveProcessorNode) {
+    try { liveProcessorNode.disconnect(); } catch {}
+  }
+  liveProcessorNode = null;
+  if (liveSourceNode) {
+    try { liveSourceNode.disconnect(); } catch {}
+  }
+  liveSourceNode = null;
+  if (liveSilentGain) {
+    try { liveSilentGain.disconnect(); } catch {}
+  }
+  liveSilentGain = null;
   if (liveStream) liveStream.getTracks().forEach((track) => track.stop());
   liveStream = null;
   if (liveAudioContext) {
@@ -1128,6 +1418,7 @@ function stopLiveMode() {
   }
   liveAudioContext = null;
   liveAnalyser = null;
+  closeVisionAudioWs();
   if (pendingRequest) chatRequestId += 1;
   if (pendingRequest) setBusy(false);
   liveBtn.textContent = "Live";
@@ -1160,6 +1451,7 @@ function monitorLiveVoice() {
     if (!liveSpeaking) {
       liveSpeaking = true;
       liveSpeechStartedAt = now;
+      liveSpeechBuffers = [];
       startLiveRecorder();
       liveBtn.textContent = "Live: Listening";
       addMessage("system", "Live is listening...");
@@ -1173,33 +1465,27 @@ function monitorLiveVoice() {
 }
 
 function startLiveRecorder() {
-  if (!liveStream || liveRecorder?.state === "recording") return;
-  const sessionId = liveSessionId;
   liveChunks = [];
-  const mimeType = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
-  liveRecorder = mimeType ? new MediaRecorder(liveStream, { mimeType }) : new MediaRecorder(liveStream);
-  liveRecorder.ondataavailable = (event) => {
-    if (event.data?.size) liveChunks.push(event.data);
-  };
-  liveRecorder.onstop = async () => {
-    if (!liveChunks.length || !liveActive || sessionId !== liveSessionId) return;
-    const blob = new Blob(liveChunks, { type: liveRecorder?.mimeType || "audio/webm" });
-    capturedAudio = {
-      capturedAt: new Date().toISOString(),
-      mimeType: blob.type || "audio/webm",
-      dataUrl: await blobToDataUrl(blob),
-    };
-    promptInput.value = "Tôi vừa nói qua mic. Hãy nghe audio và trả lời tự nhiên bằng tiếng Việt.";
-    await sendPrompt("🎙️ Voice turn");
-    if (liveActive && sessionId === liveSessionId) liveBtn.textContent = "Live: On";
-  };
-  liveRecorder.start(250);
 }
 
 function stopLiveRecorderAndSend() {
-  if (liveRecorder && liveRecorder.state !== "inactive") {
-    try { liveRecorder.stop(); } catch {}
-  }
+  const sessionId = liveSessionId;
+  const buffers = liveSpeechBuffers.slice();
+  liveSpeechBuffers = [];
+  (async () => {
+    try {
+      const transcript = await transcribeLiveBuffersWithVision(buffers, sessionId);
+      if (!transcript) {
+        addMessage("system", "Vision did not hear a clear sentence.");
+        return;
+      }
+      await sendLiveTranscript(transcript, sessionId);
+    } catch (err) {
+      addMessage("system", `Vision voice failed: ${err.message}`);
+    } finally {
+      if (liveActive && sessionId === liveSessionId) liveBtn.textContent = "Live: On";
+    }
+  })();
 }
 
 function blobToDataUrl(blob) {
@@ -1301,7 +1587,7 @@ voiceBtn.addEventListener("click", () => {
   else startVoice();
 });
 liveBtn.addEventListener("click", () => {
-  if (voiceWanted || micStream) stopVoice();
+  if (voiceWanted || micStream) stopVoice({ send: false });
   if (liveActive) stopLiveMode();
   else startLiveMode();
 });
