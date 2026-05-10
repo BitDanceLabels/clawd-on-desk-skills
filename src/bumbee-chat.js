@@ -1235,15 +1235,20 @@ async function refreshMediaDevices(options = {}) {
 
 async function probeMediaPermissions(options = {}) {
   if (!navigator.mediaDevices?.getUserMedia) return;
-  const probes = micStream || liveStream ? [] : [
-    ["microphone", { audio: true, video: false }],
-  ];
+  const probes = [];
+  if (!cameraStream) probes.push(["camera", { audio: false, video: true }]);
+  if (!micStream && !liveStream) probes.push(["microphone", { audio: true, video: false }]);
   for (const [label, constraints] of probes) {
     try {
       const stream = await getUserMediaWithTimeout(constraints, 3500);
       stream.getTracks().forEach((track) => track.stop());
     } catch (err) {
-      if (!options.silent) addMessage("system", `${label} probe: ${err.name || "Error"}: ${err.message}`);
+      if (!options.silent) {
+        const hint = label === "camera" && /notfound|requested device|not found/i.test(`${err.name} ${err.message}`)
+          ? " Open FaceTime/QuickTime once to wake Continuity Camera, then press Refresh again."
+          : "";
+        addMessage("system", `${label} probe: ${err.name || "Error"}: ${err.message}.${hint}`);
+      }
     }
   }
 }
@@ -1617,7 +1622,17 @@ liveBtn.addEventListener("click", () => {
 visionBtn.addEventListener("click", () => {
   window.bumbeeChat.openVision();
 });
-refreshDevicesBtn.addEventListener("click", () => refreshMediaDevices({ silent: false, probe: true }));
+refreshDevicesBtn.addEventListener("click", async () => {
+  refreshDevicesBtn.disabled = true;
+  refreshDevicesBtn.textContent = "Refreshing...";
+  addMessage("system", "Refreshing camera and microphone devices...");
+  try {
+    await refreshMediaDevices({ silent: false, probe: true });
+  } finally {
+    refreshDevicesBtn.disabled = false;
+    refreshDevicesBtn.textContent = "Refresh";
+  }
+});
 
 speakBtn.addEventListener("click", () => {
   speakingEnabled = !speakingEnabled;
@@ -1649,6 +1664,12 @@ window.addEventListener("beforeunload", () => {
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   window.bumbeeChat.activity({ typing: false, camera: false, voice: false, pending: false });
 });
+
+if (navigator.mediaDevices?.addEventListener) {
+  navigator.mediaDevices.addEventListener("devicechange", () => {
+    refreshMediaDevices({ silent: true, probe: false });
+  });
+}
 
 refreshMediaDevices({ silent: true, probe: true });
 renderModeButtons();

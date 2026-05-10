@@ -1298,8 +1298,8 @@ function openBumbeeChat() {
     return;
   }
 
-  const width = 440;
-  const height = 660;
+  const width = 460;
+  const height = 740;
   const bounds = getChatBoundsNearPet(width, height);
   chatWin = new BrowserWindow({
     width,
@@ -1307,7 +1307,7 @@ function openBumbeeChat() {
     x: bounds.x,
     y: bounds.y,
     minWidth: 380,
-    minHeight: 520,
+    minHeight: 560,
     title: "Bumbee English Coach",
     show: false,
     backgroundColor: "#111318",
