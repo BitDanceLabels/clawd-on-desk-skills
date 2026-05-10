@@ -1022,6 +1022,21 @@ async function blobToBase64(blob) {
   return String(dataUrl).split(",")[1] || "";
 }
 
+function canUseMainVisionAudio() {
+  return typeof window.bumbeeChat?.transcribeVisionAudio === "function";
+}
+
+async function transcribeVisionAudioInMain(data, sourceId, chunkId) {
+  const result = await window.bumbeeChat.transcribeVisionAudio({
+    data,
+    source_id: sourceId,
+    chunk_id: chunkId,
+  });
+  const text = String(result?.text || "").trim();
+  if (text) addMessage("system", `Vision heard: ${text}`);
+  return text;
+}
+
 function ensureVisionAudioWs() {
   if (liveVisionWs && liveVisionWs.readyState === WebSocket.OPEN) return Promise.resolve(liveVisionWs);
   if (liveVisionWs && liveVisionWs.readyState === WebSocket.CONNECTING) {
@@ -1094,6 +1109,9 @@ async function transcribeLiveBuffersWithVision(buffers, sessionId) {
   const chunkId = `${liveVisionSourceId}-${++liveVisionChunkId}`;
   const wavBlob = encodeWavFromFloat32(samples, VISION_AUDIO_SAMPLE_RATE);
   const data = await blobToBase64(wavBlob);
+  if (canUseMainVisionAudio()) {
+    return transcribeVisionAudioInMain(data, liveVisionSourceId, chunkId);
+  }
   const transcriptPromise = new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       if (liveVisionTranscriptWaiter?.chunkId === chunkId) liveVisionTranscriptWaiter = null;
@@ -1135,6 +1153,9 @@ async function transcribeBuffersWithVision(buffers, sourceIdPrefix = "bumbee-mic
   const chunkId = `${sourceIdPrefix}-${Date.now().toString(36)}-${++liveVisionChunkId}`;
   const wavBlob = encodeWavFromFloat32(samples, VISION_AUDIO_SAMPLE_RATE);
   const data = await blobToBase64(wavBlob);
+  if (canUseMainVisionAudio()) {
+    return transcribeVisionAudioInMain(data, sourceIdPrefix, chunkId);
+  }
   const transcriptPromise = new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       if (liveVisionTranscriptWaiter?.chunkId === chunkId) liveVisionTranscriptWaiter = null;
@@ -1265,7 +1286,7 @@ async function startVoice() {
     micSourceNode.connect(micProcessorNode);
     micProcessorNode.connect(micSilentGain);
     micSilentGain.connect(micAudioContext.destination);
-    await ensureVisionAudioWs();
+    if (!canUseMainVisionAudio()) await ensureVisionAudioWs();
     voiceBtn.textContent = "Mic: Recording";
   } catch (err) {
     addMessage("system", `Mic failed: ${err.message}`);
@@ -1371,7 +1392,9 @@ async function startLiveMode() {
     liveSourceNode.connect(liveProcessorNode);
     liveProcessorNode.connect(liveSilentGain);
     liveSilentGain.connect(liveAudioContext.destination);
-    try { await ensureVisionAudioWs(); } catch (err) { addMessage("system", `Vision voice unavailable, live will not start: ${err.message}`); throw err; }
+    if (!canUseMainVisionAudio()) {
+      try { await ensureVisionAudioWs(); } catch (err) { addMessage("system", `Vision voice unavailable, live will not start: ${err.message}`); throw err; }
+    }
     liveActive = true;
     liveSpeaking = false;
     liveBtn.textContent = "Live: On";

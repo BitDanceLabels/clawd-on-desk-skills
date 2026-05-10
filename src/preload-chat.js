@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("bumbeeChat", {
   loginRequest: (payload) => ipcRenderer.invoke("bumbee-chat:login-request", payload),
   loginVerify: (payload) => ipcRenderer.invoke("bumbee-chat:login-verify", payload),
   logout: () => ipcRenderer.invoke("bumbee-chat:logout"),
+  transcribeVisionAudio: (payload) => ipcRenderer.invoke("bumbee-chat:vision-audio", payload),
   openVision: () => ipcRenderer.send("open-bumbee-vision"),
   vocabList: () => ipcRenderer.invoke("bumbee-vocab:list"),
   vocabAdd: (payload) => ipcRenderer.invoke("bumbee-vocab:add", payload),

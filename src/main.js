@@ -7,6 +7,7 @@ const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
 const isWin = process.platform === "win32";
 const LINUX_WINDOW_TYPE = "toolbar";
+const VISION_AUDIO_WS_URL = "wss://vision.bumbee.asia/ws/audio-stream";
 
 function installSafeConsoleStreams() {
   const ignoredCodes = new Set(["EIO", "EPIPE", "EBADF"]);
@@ -54,6 +55,62 @@ const SIZES = {
 const BUMBEE_VISION_URL = "https://vision.bumbee.asia/login";
 
 let lang = "en";
+
+async function websocketDataToText(data) {
+  if (typeof data === "string") return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
+  if (Buffer.isBuffer(data)) return data.toString("utf8");
+  if (data && typeof data.text === "function") return data.text();
+  return String(data || "");
+}
+
+function transcribeVisionAudio(payload) {
+  const data = typeof payload?.data === "string" ? payload.data : "";
+  if (!data) return Promise.reject(new Error("missing audio data"));
+  if (typeof WebSocket !== "function") return Promise.reject(new Error("WebSocket is not available in main process"));
+  const sourceId = typeof payload?.source_id === "string" && payload.source_id ? payload.source_id : "bumbee-mic";
+  const chunkId = typeof payload?.chunk_id === "string" && payload.chunk_id ? payload.chunk_id : `${sourceId}-${Date.now().toString(36)}`;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let ws = null;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } catch {}
+      fn(value);
+    };
+    const timer = setTimeout(() => finish(reject, new Error("Vision transcript timeout")), 30_000);
+    try {
+      ws = new WebSocket(VISION_AUDIO_WS_URL);
+    } catch (err) {
+      finish(reject, err);
+      return;
+    }
+    ws.addEventListener("open", () => {
+      ws.send(JSON.stringify({ type: "chunk", data, source_id: sourceId, chunk_id: chunkId }));
+    }, { once: true });
+    ws.addEventListener("message", async (event) => {
+      let msg = null;
+      try { msg = JSON.parse(await websocketDataToText(event.data)); } catch { return; }
+      if (msg.type === "transcript" && (!msg.chunk_id || msg.chunk_id === chunkId)) {
+        finish(resolve, {
+          ok: true,
+          text: String(msg.text || "").trim(),
+          language: msg.language || null,
+          duration_sec: msg.duration_sec || null,
+          elapsed_ms: msg.elapsed_ms || null,
+        });
+      } else if (msg.type === "error") {
+        finish(reject, new Error(String(msg.error || "Vision audio error")));
+      }
+    });
+    ws.addEventListener("error", () => finish(reject, new Error("Vision audio WebSocket failed")), { once: true });
+    ws.addEventListener("close", () => {
+      if (!settled) finish(reject, new Error("Vision audio WebSocket closed"));
+    }, { once: true });
+  });
+}
 
 // ── Position persistence ──
 const PREFS_PATH = path.join(app.getPath("userData"), "clawd-prefs.json");
@@ -2155,6 +2212,7 @@ function createWindow() {
   ipcMain.handle("bumbee-chat:login-request", (_event, payload) => requestBumbeeLoginCode(payload));
   ipcMain.handle("bumbee-chat:login-verify", (_event, payload) => verifyBumbeeLoginCode(payload));
   ipcMain.handle("bumbee-chat:logout", () => logoutBumbeeChat());
+  ipcMain.handle("bumbee-chat:vision-audio", (_event, payload) => transcribeVisionAudio(payload));
   ipcMain.handle("bumbee-vocab:list", () => listVocabItems());
   ipcMain.handle("bumbee-vocab:add", (_event, payload) => addVocabItems(payload));
   ipcMain.handle("bumbee-vocab:review", (_event, payload) => reviewVocabItem(payload));
