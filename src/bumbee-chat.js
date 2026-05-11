@@ -205,6 +205,7 @@ const cameraBtn = document.getElementById("cameraBtn");
 const voiceBtn = document.getElementById("voiceBtn");
 const liveBtn = document.getElementById("liveBtn");
 const visionBtn = document.getElementById("visionBtn");
+const wikiSyncBtn = document.getElementById("wikiSyncBtn");
 const refreshDevicesBtn = document.getElementById("refreshDevicesBtn");
 const speakBtn = document.getElementById("speakBtn");
 const cameraPanel = document.getElementById("cameraPanel");
@@ -705,9 +706,11 @@ async function refreshStatus() {
     const status = await window.bumbeeChat.status();
     const smart = status.smart || {};
     const skills = status.skills || {};
+    const wiki = status.wiki || {};
     const chatHost = smart.gatewayUrl ? smart.gatewayUrl.replace(/^https?:\/\//, "") : "gateway not set";
     const authText = smart.authenticated ? "auth ok" : "login required";
-    statusLine.textContent = `Smart ${smart.enabled ? "on" : "off"} | ${authText} | Chat ${chatHost}${smart.chatEndpoint || ""} | Skills ${skills.count || 0}`;
+    const wikiText = wiki.enabled ? `Wiki ${wiki.project || "project"} @ ${wiki.deviceId || "device"}` : "Wiki off";
+    statusLine.textContent = `Smart ${smart.enabled ? "on" : "off"} | ${authText} | ${wikiText} | Chat ${chatHost}${smart.chatEndpoint || ""} | Skills ${skills.count || 0}`;
     loginPanel.hidden = !!smart.authenticated;
     if (!smart.authenticated && !loginStatus.textContent) {
       loginStatus.textContent = `Auth server: ${status.auth?.authServerUrl || "not set"}`;
@@ -1621,6 +1624,22 @@ liveBtn.addEventListener("click", () => {
 });
 visionBtn.addEventListener("click", () => {
   window.bumbeeChat.openVision();
+});
+wikiSyncBtn.addEventListener("click", async () => {
+  wikiSyncBtn.disabled = true;
+  wikiSyncBtn.textContent = "Syncing...";
+  addMessage("system", "Syncing ~/Bumbee/bumbee-wiki to Bumbee Wiki...");
+  try {
+    const result = await window.bumbeeChat.wikiSync({ force: false });
+    if (!result.ok && result.error) throw new Error(result.error);
+    addMessage("system", `Wiki sync done: ${result.synced || 0} synced, ${result.skipped || 0} skipped. Folder: ${result.folder || ""}`);
+    await refreshStatus();
+  } catch (err) {
+    addMessage("system", `Wiki sync failed: ${err.message}`);
+  } finally {
+    wikiSyncBtn.disabled = false;
+    wikiSyncBtn.textContent = "Sync Wiki";
+  }
 });
 refreshDevicesBtn.addEventListener("click", async () => {
   refreshDevicesBtn.disabled = true;

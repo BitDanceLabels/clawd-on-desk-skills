@@ -1,7 +1,7 @@
 // src/intelligent-layer.js — Lop tuong tac thong minh cho clawd-on-desk
 //
 // Modes:
-//   - "wiki"    : tra cuu Wikipedia REST API (vi/en) khong can key
+//   - "wiki"    : tra cuu Bumbee Wiki trung tam, fallback Wikipedia REST API
 //   - "english" : tu vung + dich Anh-Viet, dung Wiktionary + duckduckgo instant answer
 //   - "work"    : route prompt qua Bumbee API Gateway (/bumbee/chat)
 //                 → forward toi Claude/Codex backend, lay tra loi
@@ -150,6 +150,7 @@ module.exports = function initIntelligentLayer(opts) {
   const chatModel = config.chatModel || process.env.SMART_CHAT_MODEL || "clawdbot";
   const chatAuth = resolveChatAuthToken(config);
   const chatAuthToken = chatAuth.token;
+  const bumbeeWiki = config.bumbeeWiki || null;
 
   async function gatewayChat(prompt, system, mode, context) {
     return gatewayChatToEndpoint(chatEndpoint, prompt, system, mode, context);
@@ -217,6 +218,26 @@ module.exports = function initIntelligentLayer(opts) {
     if (!query || typeof query !== "string") return { error: "missing query" };
 
     if (mode === "wiki") {
+      if (bumbeeWiki && typeof bumbeeWiki.ask === "function") {
+        try {
+          const data = await bumbeeWiki.ask(query, {
+            mode: "auto",
+            project: context && typeof context === "object" ? context.project : null,
+          });
+          return {
+            mode: "wiki",
+            answer: extractAnswer(data) || JSON.stringify(data).slice(0, 500),
+            source: {
+              type: "bumbee-wiki",
+              appId: bumbeeWiki.status?.().appId,
+              project: bumbeeWiki.status?.().project,
+              sources: data?.sources || [],
+            },
+          };
+        } catch (e) {
+          // Public Wikipedia fallback keeps chat useful if the private wiki is offline.
+        }
+      }
       const result = await wikiSummary(query);
       if (!result) return { mode: "wiki", answer: `Khong tim thay bai Wikipedia cho: "${query}"` };
       if (result.error) return { mode: "wiki", error: result.error };

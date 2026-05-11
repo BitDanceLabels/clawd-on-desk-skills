@@ -335,6 +335,7 @@ function startHttpServer() {
         gateway: ctx.gateway ? ctx.gateway.status() : { registered: false },
         clawdbot: ctx.clawdbot ? ctx.clawdbot.status() : { connected: false },
         skills: ctx.skills ? ctx.skills.count() : 0,
+        wiki: ctx.wiki ? ctx.wiki.status() : { enabled: false },
       });
     } else if (req.method === "POST" && req.url === "/notification") {
       readJson(req, 64 * 1024, (err, data) => {
@@ -399,6 +400,33 @@ function startHttpServer() {
         try {
           const result = await ctx.smart.chat({ mode, query, context: data.context || null });
           jsonResponse(res, 200, { ok: true, mode, ...result });
+        } catch (e) {
+          jsonResponse(res, 500, { ok: false, error: e.message });
+        }
+      });
+    } else if (req.method === "GET" && req.url === "/wiki/status") {
+      if (!ctx.wiki) return jsonResponse(res, 503, { ok: false, error: "Bumbee Wiki service not available" });
+      jsonResponse(res, 200, { ok: true, ...ctx.wiki.status() });
+    } else if (req.method === "POST" && req.url === "/wiki/sync") {
+      readJson(req, 64 * 1024, async (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.wiki) return jsonResponse(res, 503, { ok: false, error: "Bumbee Wiki service not available" });
+        try {
+          const result = await ctx.wiki.syncOnce(data || {});
+          jsonResponse(res, 200, result);
+        } catch (e) {
+          jsonResponse(res, 500, { ok: false, error: e.message });
+        }
+      });
+    } else if (req.method === "POST" && req.url === "/wiki/ask") {
+      readJson(req, 64 * 1024, async (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.wiki) return jsonResponse(res, 503, { ok: false, error: "Bumbee Wiki service not available" });
+        const question = typeof data.question === "string" ? data.question.trim() : "";
+        if (!question) return jsonResponse(res, 400, { ok: false, error: "missing question" });
+        try {
+          const result = await ctx.wiki.ask(question, data || {});
+          jsonResponse(res, 200, { ok: true, ...result });
         } catch (e) {
           jsonResponse(res, 500, { ok: false, error: e.message });
         }

@@ -18,6 +18,9 @@ const ROUTES = [
   { name: "clawd_skills_list",       method: "GET",  gateway_path: "/v1/clawd/skills",        upstream_path: "/skills" },
   { name: "clawd_skills_trigger",    method: "POST", gateway_path: "/v1/clawd/skills/trigger",upstream_path: "/skills/trigger" },
   { name: "clawd_chat",              method: "POST", gateway_path: "/v1/clawd/chat",          upstream_path: "/chat" },
+  { name: "clawd_wiki_status",       method: "GET",  gateway_path: "/v1/clawd/wiki/status",   upstream_path: "/wiki/status" },
+  { name: "clawd_wiki_sync",         method: "POST", gateway_path: "/v1/clawd/wiki/sync",     upstream_path: "/wiki/sync" },
+  { name: "clawd_wiki_ask",          method: "POST", gateway_path: "/v1/clawd/wiki/ask",      upstream_path: "/wiki/ask" },
 ];
 
 function postJson(url, payload, timeoutMs) {

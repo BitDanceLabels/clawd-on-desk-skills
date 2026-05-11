@@ -664,9 +664,14 @@ function getBumbeeTokenFilePath() {
   return path.join(app.getPath("userData"), "bumbee-gateway-token.txt");
 }
 
+function getBumbeeWikiFolderPath() {
+  return process.env.BUMBEE_WIKI_DIR || path.join(os.homedir(), "Bumbee", "bumbee-wiki");
+}
+
 function initBumbeeSmartLayer() {
   _smart = require("./intelligent-layer")({
     chatAuthTokenFile: getBumbeeTokenFilePath(),
+    bumbeeWiki: _wiki,
   });
 }
 
@@ -836,6 +841,15 @@ function logoutBumbeeChat() {
   return { ok: true };
 }
 
+async function syncBumbeeWiki(options) {
+  if (!_wiki) return { ok: false, error: "Bumbee Wiki service is not available yet" };
+  try {
+    return await _wiki.syncOnce(options || {});
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 function getSmartStatusPayload() {
   return {
     smart: _smart ? _smart.status() : { enabled: false },
@@ -846,6 +860,7 @@ function getSmartStatusPayload() {
     gateway: _gateway ? _gateway.status() : { enabled: false, registered: false },
     clawdbot: _clawdbot ? _clawdbot.status() : { enabled: false, connected: false },
     skills: _skills ? _skills.status() : { enabled: false, count: 0 },
+    wiki: _wiki ? _wiki.status() : { enabled: false, folder: getBumbeeWikiFolderPath() },
   };
 }
 
@@ -1697,6 +1712,7 @@ let _clawdbot = null;
 let _gateway = null;
 let _skills = null;
 let _smart = null;
+let _wiki = null;
 let coachReminderTimer = null;
 let coachLastInteractionAt = 0;
 
@@ -1789,6 +1805,7 @@ Object.defineProperty(_serverCtx, "gateway", { get: () => _gateway, configurable
 Object.defineProperty(_serverCtx, "clawdbot", { get: () => _clawdbot, configurable: true });
 Object.defineProperty(_serverCtx, "skills", { get: () => _skills, configurable: true });
 Object.defineProperty(_serverCtx, "smart", { get: () => _smart, configurable: true });
+Object.defineProperty(_serverCtx, "wiki", { get: () => _wiki, configurable: true });
 
 // ── alwaysOnTop recovery (Windows DWM / Shell can strip TOPMOST flag) ──
 // The "always-on-top-changed" event only fires from Electron's own SetAlwaysOnTop
@@ -1939,6 +1956,7 @@ const _menuCtx = {
   getClawdbot: () => _clawdbot,
   getSkills: () => _skills,
   getSmart: () => _smart,
+  getWiki: () => _wiki,
   openBumbeeChat,
 };
 const _menu = require("./menu")(_menuCtx);
@@ -2212,6 +2230,8 @@ function createWindow() {
   ipcMain.handle("bumbee-chat:login-request", (_event, payload) => requestBumbeeLoginCode(payload));
   ipcMain.handle("bumbee-chat:login-verify", (_event, payload) => verifyBumbeeLoginCode(payload));
   ipcMain.handle("bumbee-chat:logout", () => logoutBumbeeChat());
+  ipcMain.handle("bumbee-wiki:sync", (_event, payload) => syncBumbeeWiki(payload));
+  ipcMain.handle("bumbee-wiki:status", () => _wiki ? { ok: true, ..._wiki.status() } : { ok: false, error: "Bumbee Wiki service is not available yet" });
   ipcMain.handle("bumbee-chat:vision-audio", (_event, payload) => transcribeVisionAudio(payload));
   ipcMain.handle("bumbee-vocab:list", () => listVocabItems());
   ipcMain.handle("bumbee-vocab:add", (_event, payload) => addVocabItems(payload));
@@ -2524,6 +2544,17 @@ if (!gotTheLock) {
       _skills.start();
     } catch (e) {
       console.warn("Clawd: skills loader init failed:", e.message);
+    }
+    try {
+      _wiki = require("./bumbee-wiki-service")({
+        folder: getBumbeeWikiFolderPath(),
+        tokenFile: getBumbeeTokenFilePath(),
+        deviceId: CHAT_DEVICE_ID,
+        deviceName: os.hostname(),
+      });
+      _wiki.start();
+    } catch (e) {
+      console.warn("Clawd: Bumbee Wiki init failed:", e.message);
     }
     try {
       initBumbeeSmartLayer();
