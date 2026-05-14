@@ -4,6 +4,7 @@ const path = require("path");
 
 const DEFAULT_PROJECT = "bumbee-desktop";
 const DEFAULT_APP_ID = "bumbee-desktop";
+const DEFAULT_STUDIO_PROJECT = "bumbee-wiki-studio";
 const SUPPORTED_EXTENSIONS = new Set([".md", ".markdown", ".txt", ".json", ".csv"]);
 const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
 
@@ -20,6 +21,171 @@ function safeRelativePath(root, filePath) {
   const rel = path.relative(root, filePath);
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
   return rel.split(path.sep).join("/");
+}
+
+function writeFileIfMissing(filePath, content) {
+  if (fs.existsSync(filePath)) return false;
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, "utf8");
+  return true;
+}
+
+function writeJsonIfMissing(filePath, value) {
+  return writeFileIfMissing(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function defaultStudioConfig(opts = {}) {
+  return {
+    studio_id: opts.studioId || "bumbee-wiki-studio-local",
+    edition: opts.edition || "pro",
+    account_id: opts.accountId || "",
+    device_id: opts.deviceId || "",
+    default_project: opts.project || DEFAULT_STUDIO_PROJECT,
+    wiki_api_url: opts.wikiApiUrl || "https://wiki.bumbee.asia/api",
+    sync: {
+      enabled: true,
+      include: [".md", ".txt", ".json", ".csv"],
+      exclude: [".DS_Store", "node_modules", ".git", ".env", "local-secrets.json"],
+    },
+    permissions: {
+      default_mode: "draft_action",
+      destructive_actions: "confirm_required",
+      publish_actions: "confirm_required",
+      email_actions: "confirm_required",
+    },
+  };
+}
+
+function ensureObsidianSettings(root) {
+  const obsidianDir = path.join(root, ".obsidian");
+  fs.mkdirSync(obsidianDir, { recursive: true });
+  writeJsonIfMissing(path.join(obsidianDir, "app.json"), {});
+  writeJsonIfMissing(path.join(obsidianDir, "appearance.json"), {});
+  writeJsonIfMissing(path.join(obsidianDir, "community-plugins.json"), ["omnisearch"]);
+  writeJsonIfMissing(path.join(obsidianDir, "core-plugins.json"), {
+    "file-explorer": true,
+    "global-search": true,
+    "switcher": true,
+    "graph": true,
+    "backlink": true,
+    "canvas": true,
+    "outgoing-link": true,
+    "tag-pane": true,
+    "properties": true,
+    "page-preview": true,
+    "daily-notes": true,
+    "templates": true,
+    "note-composer": true,
+    "command-palette": true,
+    "bookmarks": true,
+    "outline": true,
+    "word-count": true,
+    "file-recovery": true,
+  });
+}
+
+function ensureStudioTemplate(root, opts = {}) {
+  fs.mkdirSync(root, { recursive: true });
+  ensureObsidianSettings(root);
+  const config = defaultStudioConfig(opts);
+  writeJsonIfMissing(path.join(root, "bumbee.config.json"), config);
+  writeFileIfMissing(path.join(root, "AI_README.md"), [
+    "# Bumbee Wiki Studio",
+    "",
+    "This is an Obsidian-ready Bumbee Wiki Studio workspace.",
+    "",
+    "AI agents should read these files before work:",
+    "",
+    "1. `AI_README.md`",
+    "2. `AGENTS.md`",
+    "3. `CODEX.md` or `CLAUDE.md`",
+    "4. current project `PROJECT.work.md`",
+    "5. current project `PROJECT.progress.md`",
+    "",
+    "Main rule: one project = one `PROJECT.work.md` + one `PROJECT.progress.md`.",
+    "",
+  ].join("\n"));
+  writeFileIfMissing(path.join(root, "AGENTS.md"), [
+    "# Agent Rules",
+    "",
+    "- Preserve the user's intent.",
+    "- Keep the main project context in `PROJECT.work.md`.",
+    "- Record progress, blockers, and decisions in `PROJECT.progress.md`.",
+    "- Do not sync secrets or perform sensitive actions without permission.",
+    "- Use tags: `#IDEA`, `#CRM`, `#TICKET`, `#PUBLISHER`, `#THAM_MUU`, `#FINAL`.",
+    "",
+  ].join("\n"));
+  writeFileIfMissing(path.join(root, "CODEX.md"), [
+    "# Codex Instructions",
+    "",
+    "Read `AI_README.md`, `AGENTS.md`, then the current project work/progress files before editing.",
+    "",
+  ].join("\n"));
+  writeFileIfMissing(path.join(root, "CLAUDE.md"), [
+    "# Claude Code Instructions",
+    "",
+    "Read `AI_README.md`, `AGENTS.md`, then the current project work/progress files before editing.",
+    "",
+  ].join("\n"));
+  writeFileIfMissing(path.join(root, "01-rules", "tag-command-rules.md"), [
+    "# Tag Command Rules",
+    "",
+    "| Tag | Meaning |",
+    "| --- | --- |",
+    "| `#IDEA` | Analyze idea |",
+    "| `#CRM` | Customer or sales follow-up |",
+    "| `#TICKET` | Create work checklist |",
+    "| `#PUBLISHER` | Create content/publish workflow |",
+    "| `#THAM_MUU` | Strategic advice |",
+    "| `#FINAL` | Approved content |",
+    "",
+  ].join("\n"));
+  const sampleDir = path.join(root, "03-projects", "bumbee-wiki-studio");
+  fs.mkdirSync(path.join(sampleDir, "assets"), { recursive: true });
+  writeFileIfMissing(path.join(sampleDir, "PROJECT.work.md"), [
+    "# Bumbee Wiki Studio",
+    "",
+    "Tags: #IDEA #TICKET #THAM_MUU",
+    "Status: NEW",
+    "",
+    "## Goal",
+    "",
+    "Use Obsidian as the project editor while Bumbee On Desk syncs and assists in the background.",
+    "",
+    "## Next",
+    "",
+    "- Verify Obsidian vault setup.",
+    "- Sync to Bumbee Wiki.",
+    "- Ask Advisor for the next project step.",
+    "",
+  ].join("\n"));
+  writeFileIfMissing(path.join(sampleDir, "PROJECT.progress.md"), [
+    "# Bumbee Wiki Studio Progress",
+    "",
+    `## ${new Date().toISOString().slice(0, 10)}`,
+    "",
+    "- Studio template created.",
+    "- Pending: sync and advisor review.",
+    "",
+  ].join("\n"));
+  return { ok: true, folder: root, config };
+}
+
+function readStudioConfig(root) {
+  try {
+    const configPath = path.join(root, "bumbee.config.json");
+    return JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function deriveProjectForFile(root, file, fallbackProject) {
+  const parts = file.relativePath.split("/");
+  const projectIndex = parts.indexOf("03-projects");
+  if (projectIndex >= 0 && parts[projectIndex + 1]) return parts[projectIndex + 1];
+  const config = readStudioConfig(root);
+  return config?.default_project || fallbackProject;
 }
 
 function listSyncableFiles(root, opts = {}) {
@@ -61,6 +227,7 @@ module.exports = function initBumbeeWikiService(opts = {}) {
   const deviceId = opts.deviceId || process.env.BUMBEE_DEVICE_ID || `${os.hostname()}-${process.platform}`;
   const deviceName = opts.deviceName || os.hostname();
   const folder = opts.folder || process.env.BUMBEE_WIKI_DIR || path.join(os.homedir(), "Bumbee", "bumbee-wiki");
+  const studioFolder = opts.studioFolder || process.env.BUMBEE_STUDIO_DIR || path.join(os.homedir(), "Bumbee", "bumbee-wiki-studio");
   const libraryId = opts.libraryId || process.env.BUMBEE_WIKI_LIBRARY_ID || null;
   const tokenFile = opts.tokenFile || process.env.BUMBEE_WIKI_TOKEN_FILE || null;
   const client = opts.client || require("./bumbee-wiki-client")({
@@ -70,7 +237,9 @@ module.exports = function initBumbeeWikiService(opts = {}) {
   const enabled = opts.enabled !== false && process.env.BUMBEE_WIKI_ENABLE !== "0";
 
   let lastSyncAt = null;
+  let lastStudioSyncAt = null;
   let lastError = null;
+  let lastStudioError = null;
   let lastRegisteredAt = null;
   const syncedKeys = new Map();
 
@@ -151,6 +320,66 @@ module.exports = function initBumbeeWikiService(opts = {}) {
     return { ok: errors.length === 0, folder, appId, project, deviceId, synced, skipped, errors };
   }
 
+  async function setupStudio(options = {}) {
+    const targetFolder = options.folder || studioFolder;
+    return ensureStudioTemplate(targetFolder, {
+      edition: options.edition || "pro",
+      project: options.project || DEFAULT_STUDIO_PROJECT,
+      deviceId,
+      accountId: options.accountId || "",
+      wikiApiUrl: client.baseUrl || "https://wiki.bumbee.asia/api",
+    });
+  }
+
+  async function syncStudio(options = {}) {
+    if (!enabled) return { ok: false, error: "Bumbee Wiki disabled", synced: 0, skipped: 0 };
+    const targetFolder = options.folder || studioFolder;
+    setupStudio({ folder: targetFolder, edition: options.edition || "pro" });
+    if (options.register !== false) await registerApp().catch(() => {});
+    const files = listSyncableFiles(targetFolder, { maxFileBytes: options.maxFileBytes });
+    let synced = 0;
+    let skipped = 0;
+    const errors = [];
+    for (const file of files) {
+      if (file.relativePath.includes("/.obsidian/") || file.relativePath.startsWith(".obsidian/")) {
+        skipped++;
+        continue;
+      }
+      const key = `studio:${makeSyncKey(file)}`;
+      if (!options.force && syncedKeys.get(`studio:${file.relativePath}`) === key) {
+        skipped++;
+        continue;
+      }
+      let content = "";
+      try {
+        content = fs.readFileSync(file.path, "utf8");
+      } catch (err) {
+        errors.push({ file: file.relativePath, error: err.message });
+        continue;
+      }
+      const fileProject = deriveProjectForFile(targetFolder, file, DEFAULT_STUDIO_PROJECT);
+      const title = file.relativePath.replace(/\.[^.]+$/, "");
+      const payload = {
+        title,
+        content,
+        project: fileProject,
+        source: `bumbee-studio://${deviceId}/${file.relativePath}`,
+        source_kind: "bumbee-obsidian-studio",
+        tags: ["bumbee-wiki-studio", "obsidian", `device:${deviceId}`, `app:${appId}`],
+      };
+      try {
+        await client.ingestDocument(payload);
+        syncedKeys.set(`studio:${file.relativePath}`, key);
+        synced++;
+      } catch (err) {
+        errors.push({ file: file.relativePath, error: err.message });
+      }
+    }
+    lastStudioSyncAt = new Date().toISOString();
+    lastStudioError = errors.length ? errors.map(e => `${e.file}: ${e.error}`).join("; ") : null;
+    return { ok: errors.length === 0, folder: targetFolder, appId, project: DEFAULT_STUDIO_PROJECT, deviceId, synced, skipped, errors };
+  }
+
   async function ask(question, options = {}) {
     if (!enabled) return { ok: false, error: "Bumbee Wiki disabled" };
     if (!question || typeof question !== "string") return { ok: false, error: "missing question" };
@@ -215,19 +444,23 @@ module.exports = function initBumbeeWikiService(opts = {}) {
     return {
       enabled,
       folder,
+      studioFolder,
       appId,
       project,
       deviceId,
       deviceName,
       libraryId,
       lastSyncAt,
+      lastStudioSyncAt,
       lastRegisteredAt,
       lastError,
+      lastStudioError,
     };
   }
 
-  return { start, ensureFolder, registerApp, syncOnce, ask, updates, status };
+  return { start, ensureFolder, setupStudio, syncStudio, registerApp, syncOnce, ask, updates, status };
 };
 
 module.exports.listSyncableFiles = listSyncableFiles;
 module.exports.makeSyncKey = makeSyncKey;
+module.exports.ensureStudioTemplate = ensureStudioTemplate;

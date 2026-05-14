@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("bumbeeChat", {
   loginVerify: (payload) => ipcRenderer.invoke("bumbee-chat:login-verify", payload),
   logout: () => ipcRenderer.invoke("bumbee-chat:logout"),
   wikiSync: (payload) => ipcRenderer.invoke("bumbee-wiki:sync", payload),
+  studioSetup: (payload) => ipcRenderer.invoke("bumbee-studio:setup", payload),
+  studioSync: (payload) => ipcRenderer.invoke("bumbee-studio:sync", payload),
   wikiStatus: () => ipcRenderer.invoke("bumbee-wiki:status"),
   transcribeVisionAudio: (payload) => ipcRenderer.invoke("bumbee-chat:vision-audio", payload),
   openVision: () => ipcRenderer.send("open-bumbee-vision"),

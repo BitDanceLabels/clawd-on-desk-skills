@@ -5,7 +5,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const initBumbeeWikiService = require("../src/bumbee-wiki-service");
-const { listSyncableFiles } = initBumbeeWikiService;
+const { ensureStudioTemplate, listSyncableFiles } = initBumbeeWikiService;
 
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bumbee-wiki-test-"));
@@ -61,6 +61,54 @@ test("Bumbee Wiki service syncs supported changed files with project and device 
   const second = await service.syncOnce({ register: false });
   assert.equal(second.synced, 0);
   assert.equal(second.skipped, 2);
+});
+
+test("Bumbee Wiki service creates Obsidian-ready studio template", () => {
+  const root = path.join(tempDir(), "bumbee-wiki-studio");
+  const result = ensureStudioTemplate(root, {
+    edition: "pro",
+    project: "bumbee-wiki-studio",
+    deviceId: "pc-1",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(fs.existsSync(path.join(root, ".obsidian", "core-plugins.json")), true);
+  assert.equal(fs.existsSync(path.join(root, "AI_README.md")), true);
+  assert.equal(fs.existsSync(path.join(root, "03-projects", "bumbee-wiki-studio", "PROJECT.work.md")), true);
+  const config = JSON.parse(fs.readFileSync(path.join(root, "bumbee.config.json"), "utf8"));
+  assert.equal(config.edition, "pro");
+  assert.equal(config.default_project, "bumbee-wiki-studio");
+});
+
+test("Bumbee Wiki service syncs studio files with project derived from project folder", async () => {
+  const root = path.join(tempDir(), "studio");
+  const ingested = [];
+  const service = initBumbeeWikiService({
+    folder: tempDir(),
+    studioFolder: root,
+    appId: "bumbee-desktop",
+    project: "pc-project",
+    deviceId: "pc-1",
+    client: {
+      baseUrl: "https://wiki.bumbee.asia/api",
+      registerApp: async () => ({ ok: true }),
+      ingestDocument: async (payload) => {
+        ingested.push(payload);
+        return { status: "ok" };
+      },
+      ask: async () => ({ answer: "ok", sources: [], context: "" }),
+    },
+  });
+
+  await service.setupStudio({ folder: root, edition: "pro" });
+  fs.mkdirSync(path.join(root, "03-projects", "crm-demo"), { recursive: true });
+  fs.writeFileSync(path.join(root, "03-projects", "crm-demo", "PROJECT.work.md"), "# CRM\n#CRM", "utf8");
+  const result = await service.syncStudio({ folder: root, register: false, force: true });
+
+  assert.equal(result.ok, true);
+  assert.equal(ingested.some(item => item.project === "crm-demo"), true);
+  assert.equal(ingested.some(item => item.source === "bumbee-studio://pc-1/03-projects/crm-demo/PROJECT.work.md"), true);
+  assert.equal(ingested.every(item => item.tags.includes("obsidian")), true);
 });
 
 test("listSyncableFiles ignores hidden files, unsupported extensions, and oversized files", () => {

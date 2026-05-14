@@ -205,6 +205,8 @@ const cameraBtn = document.getElementById("cameraBtn");
 const voiceBtn = document.getElementById("voiceBtn");
 const liveBtn = document.getElementById("liveBtn");
 const visionBtn = document.getElementById("visionBtn");
+const studioSetupBtn = document.getElementById("studioSetupBtn");
+const studioSyncBtn = document.getElementById("studioSyncBtn");
 const wikiSyncBtn = document.getElementById("wikiSyncBtn");
 const refreshDevicesBtn = document.getElementById("refreshDevicesBtn");
 const speakBtn = document.getElementById("speakBtn");
@@ -1624,6 +1626,38 @@ liveBtn.addEventListener("click", () => {
 });
 visionBtn.addEventListener("click", () => {
   window.bumbeeChat.openVision();
+});
+studioSetupBtn.addEventListener("click", async () => {
+  studioSetupBtn.disabled = true;
+  studioSetupBtn.textContent = "Setting...";
+  addMessage("system", "Creating/verifying Obsidian Bumbee Wiki Studio...");
+  try {
+    const result = await window.bumbeeChat.studioSetup({ edition: "pro" });
+    if (!result.ok && result.error) throw new Error(result.error);
+    addMessage("system", `Studio ready: ${result.folder || ""}. Open this folder as an Obsidian vault.`);
+    await refreshStatus();
+  } catch (err) {
+    addMessage("system", `Studio setup failed: ${err.message}`);
+  } finally {
+    studioSetupBtn.disabled = false;
+    studioSetupBtn.textContent = "Setup Studio";
+  }
+});
+studioSyncBtn.addEventListener("click", async () => {
+  studioSyncBtn.disabled = true;
+  studioSyncBtn.textContent = "Syncing...";
+  addMessage("system", "Syncing Obsidian Bumbee Wiki Studio to Bumbee Wiki...");
+  try {
+    const result = await window.bumbeeChat.studioSync({ force: false });
+    if (!result.ok && result.error) throw new Error(result.error);
+    addMessage("system", `Studio sync done: ${result.synced || 0} synced, ${result.skipped || 0} skipped. Folder: ${result.folder || ""}`);
+    await refreshStatus();
+  } catch (err) {
+    addMessage("system", `Studio sync failed: ${err.message}`);
+  } finally {
+    studioSyncBtn.disabled = false;
+    studioSyncBtn.textContent = "Sync Studio";
+  }
 });
 wikiSyncBtn.addEventListener("click", async () => {
   wikiSyncBtn.disabled = true;

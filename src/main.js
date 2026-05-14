@@ -664,8 +664,16 @@ function getBumbeeTokenFilePath() {
   return path.join(app.getPath("userData"), "bumbee-gateway-token.txt");
 }
 
+function getBumbeeWikiTokenFilePath() {
+  return process.env.BUMBEE_WIKI_TOKEN_FILE || path.join(app.getPath("userData"), "bumbee-wiki-token.txt");
+}
+
 function getBumbeeWikiFolderPath() {
   return process.env.BUMBEE_WIKI_DIR || path.join(os.homedir(), "Bumbee", "bumbee-wiki");
+}
+
+function getBumbeeStudioFolderPath() {
+  return process.env.BUMBEE_STUDIO_DIR || path.join(os.homedir(), "Bumbee", "bumbee-wiki-studio");
 }
 
 function initBumbeeSmartLayer() {
@@ -850,6 +858,24 @@ async function syncBumbeeWiki(options) {
   }
 }
 
+async function setupBumbeeStudio(options) {
+  if (!_wiki) return { ok: false, error: "Bumbee Wiki service is not available yet" };
+  try {
+    return await _wiki.setupStudio(options || {});
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function syncBumbeeStudio(options) {
+  if (!_wiki) return { ok: false, error: "Bumbee Wiki service is not available yet" };
+  try {
+    return await _wiki.syncStudio(options || {});
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 function getSmartStatusPayload() {
   return {
     smart: _smart ? _smart.status() : { enabled: false },
@@ -860,7 +886,7 @@ function getSmartStatusPayload() {
     gateway: _gateway ? _gateway.status() : { enabled: false, registered: false },
     clawdbot: _clawdbot ? _clawdbot.status() : { enabled: false, connected: false },
     skills: _skills ? _skills.status() : { enabled: false, count: 0 },
-    wiki: _wiki ? _wiki.status() : { enabled: false, folder: getBumbeeWikiFolderPath() },
+    wiki: _wiki ? _wiki.status() : { enabled: false, folder: getBumbeeWikiFolderPath(), studioFolder: getBumbeeStudioFolderPath() },
   };
 }
 
@@ -2231,6 +2257,8 @@ function createWindow() {
   ipcMain.handle("bumbee-chat:login-verify", (_event, payload) => verifyBumbeeLoginCode(payload));
   ipcMain.handle("bumbee-chat:logout", () => logoutBumbeeChat());
   ipcMain.handle("bumbee-wiki:sync", (_event, payload) => syncBumbeeWiki(payload));
+  ipcMain.handle("bumbee-studio:setup", (_event, payload) => setupBumbeeStudio(payload));
+  ipcMain.handle("bumbee-studio:sync", (_event, payload) => syncBumbeeStudio(payload));
   ipcMain.handle("bumbee-wiki:status", () => _wiki ? { ok: true, ..._wiki.status() } : { ok: false, error: "Bumbee Wiki service is not available yet" });
   ipcMain.handle("bumbee-chat:vision-audio", (_event, payload) => transcribeVisionAudio(payload));
   ipcMain.handle("bumbee-vocab:list", () => listVocabItems());
@@ -2548,7 +2576,8 @@ if (!gotTheLock) {
     try {
       _wiki = require("./bumbee-wiki-service")({
         folder: getBumbeeWikiFolderPath(),
-        tokenFile: getBumbeeTokenFilePath(),
+        studioFolder: getBumbeeStudioFolderPath(),
+        tokenFile: getBumbeeWikiTokenFilePath(),
         deviceId: CHAT_DEVICE_ID,
         deviceName: os.hostname(),
       });
