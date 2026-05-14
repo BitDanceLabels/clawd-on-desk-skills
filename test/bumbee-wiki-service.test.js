@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -209,13 +210,60 @@ test("Bumbee Wiki service approves and prepares gateway action payload", async (
   assert.equal(approved.ok, true);
   assert.equal(approved.action.status, "approved");
 
-  const executed = await service.runGatewayAction({ actionId });
+  const executed = await service.runGatewayAction({ actionId, dryRun: true });
   assert.equal(executed.ok, true);
   assert.equal(executed.execution.dry_run, true);
   assert.equal(executed.action.status, "ready_for_gateway");
   assert.equal(fs.existsSync(path.join(root, "07-actions", "execution-log.json")), true);
   const log = JSON.parse(fs.readFileSync(path.join(root, "07-actions", "execution-log.json"), "utf8"));
   assert.equal(log.executions.some(item => item.action_id === actionId), true);
+});
+
+test("Bumbee Wiki service posts approved action to configured gateway", async () => {
+  const root = path.join(tempDir(), "studio");
+  let received = null;
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", chunk => { raw += chunk; });
+    req.on("end", () => {
+      received = { url: req.url, body: JSON.parse(raw || "{}") };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, run_id: "test-run" }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  const service = initBumbeeWikiService({
+    folder: tempDir(),
+    studioFolder: root,
+    appId: "bumbee-desktop",
+    project: "pc-project",
+    deviceId: "pc-1",
+    client: {
+      registerApp: async () => ({ ok: true }),
+      ingestDocument: async () => ({ ok: true }),
+      ask: async () => ({ answer: "ok", sources: [], context: "" }),
+    },
+  });
+
+  try {
+    await service.newStudioProject({ title: "Publisher Run", tags: ["#PUBLISHER"] });
+    await service.runWorkers({ includeConfirmRequired: false });
+    const actionId = "publisher-run:prepare_publish_package";
+    await service.approveAction({ actionId, approvedBy: "tester" });
+    const result = await service.runGatewayAction({
+      actionId,
+      gatewayBaseUrl: `http://127.0.0.1:${port}`,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.action.status, "executed");
+    assert.equal(result.execution.response.run_id, "test-run");
+    assert.equal(received.url, "/api/studio/runs");
+    assert.equal(received.body.skill_name, "publisher_worker");
+    assert.equal(received.body.input_data.action_type, "prepare_publish_package");
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 });
 
 test("listSyncableFiles ignores hidden files, unsupported extensions, and oversized files", () => {

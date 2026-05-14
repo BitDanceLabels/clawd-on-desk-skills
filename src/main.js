@@ -664,6 +664,14 @@ function getBumbeeTokenFilePath() {
   return path.join(app.getPath("userData"), "bumbee-gateway-token.txt");
 }
 
+function readTokenFile(filePath) {
+  try {
+    return fs.readFileSync(filePath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
 function getBumbeeWikiTokenFilePath() {
   return process.env.BUMBEE_WIKI_TOKEN_FILE || path.join(app.getPath("userData"), "bumbee-wiki-token.txt");
 }
@@ -915,7 +923,12 @@ async function approveBumbeeStudioAction(options) {
 async function runBumbeeStudioGatewayAction(options) {
   if (!_wiki) return { ok: false, error: "Bumbee Wiki service is not available yet" };
   try {
-    return await _wiki.runGatewayAction(options || {});
+    const payload = options || {};
+    return await _wiki.runGatewayAction({
+      ...payload,
+      gatewayToken: payload.gatewayToken || readTokenFile(getBumbeeTokenFilePath()),
+      gatewayBaseUrl: payload.gatewayBaseUrl || process.env.BUMBEE_GATEWAY_URL || "https://gateway.bumbee.asia",
+    });
   } catch (err) {
     return { ok: false, error: err.message };
   }

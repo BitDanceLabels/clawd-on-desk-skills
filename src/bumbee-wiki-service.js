@@ -10,6 +10,18 @@ const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
 const ACTION_QUEUE_PATH = path.join("07-actions", "action-queue.json");
 const CONNECTOR_REGISTRY_PATH = path.join("08-connectors", "connectors.json");
 const EXECUTION_LOG_PATH = path.join("07-actions", "execution-log.json");
+const DEFAULT_GATEWAY_BASE_URL = "https://gateway.bumbee.asia";
+const GATEWAY_SKILL_NAMES = {
+  crm_follow_up: "crm_followup_worker",
+  prepare_publish_package: "publisher_worker",
+  final_review: "final_review_worker",
+  collect_visual_assets: "visual_asset_worker",
+  operator_command: "operator_command_worker",
+  video_script_plan: "video_script_worker",
+  analyze_idea: "idea_analyst_worker",
+  advisor_review: "advisor_worker",
+  create_ticket_checklist: "project_operator_worker",
+};
 
 const TAG_ACTION_RULES = {
   IDEA: { type: "analyze_idea", title: "Analyze and score idea", mode: "suggest_only" },
@@ -734,6 +746,38 @@ function gatewayPayloadForAction(root, action) {
   };
 }
 
+function resolveGatewayRoute(action, options = {}) {
+  if (options.gatewayActionUrl || process.env.BUMBEE_GATEWAY_ACTION_URL) {
+    return {
+      endpoint: options.gatewayActionUrl || process.env.BUMBEE_GATEWAY_ACTION_URL,
+      payloadKind: "custom",
+      skillName: null,
+    };
+  }
+  const baseUrl = (options.gatewayBaseUrl || process.env.BUMBEE_GATEWAY_URL || DEFAULT_GATEWAY_BASE_URL).replace(/\/$/, "");
+  return {
+    endpoint: `${baseUrl}/api/studio/runs`,
+    payloadKind: "studio_skill_run",
+    skillName: options.skillName || GATEWAY_SKILL_NAMES[action.type] || "operator_command_worker",
+  };
+}
+
+function buildGatewayRequestPayload(root, action, options = {}) {
+  const payload = gatewayPayloadForAction(root, action);
+  const route = resolveGatewayRoute(action, options);
+  if (route.payloadKind === "studio_skill_run") {
+    return {
+      route,
+      payload: {
+        skill_name: route.skillName,
+        skill_id: options.skillId || null,
+        input_data: payload,
+      },
+    };
+  }
+  return { route, payload };
+}
+
 async function executeStudioGatewayAction(root, actionId, options = {}) {
   ensureStudioTemplate(root);
   const queue = readActionQueue(root);
@@ -747,8 +791,9 @@ async function executeStudioGatewayAction(root, actionId, options = {}) {
     action.approved_at = new Date().toISOString();
     action.approved_by = options.approvedBy || "local-user";
   }
-  const payload = gatewayPayloadForAction(root, action);
-  const endpoint = options.gatewayActionUrl || process.env.BUMBEE_GATEWAY_ACTION_URL || "";
+  const request = buildGatewayRequestPayload(root, action, options);
+  const payload = request.payload;
+  const endpoint = request.route.endpoint;
   const log = readExecutionLog(root);
   const execution = {
     id: `${action.id}:${Date.now()}`,
@@ -756,22 +801,23 @@ async function executeStudioGatewayAction(root, actionId, options = {}) {
     project: action.project,
     type: action.type,
     endpoint: endpoint || null,
-    dry_run: !endpoint,
+    route: request.route,
+    dry_run: options.dryRun === true,
     payload,
-    status: endpoint ? "executing" : "ready_for_gateway",
+    status: options.dryRun === true ? "ready_for_gateway" : "executing",
     created_at: new Date().toISOString(),
   };
   try {
-    if (endpoint) {
+    if (options.dryRun === true) {
+      action.status = "ready_for_gateway";
+      action.gateway_payload = payload;
+    } else {
       execution.response = await postJson(endpoint, payload, {
         headers: options.gatewayToken ? { Authorization: `Bearer ${options.gatewayToken}` } : {},
       });
       execution.status = "executed";
       action.status = "executed";
       action.executed_at = new Date().toISOString();
-    } else {
-      action.status = "ready_for_gateway";
-      action.gateway_payload = payload;
     }
     action.updated_at = new Date().toISOString();
     log.executions.push(execution);
