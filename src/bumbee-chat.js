@@ -11,9 +11,11 @@ const verifyCodeBtn = document.getElementById("verifyCodeBtn");
 const loginStatus = document.getElementById("loginStatus");
 const emailHint = document.getElementById("emailHint");
 const chatTabBtn = document.getElementById("chatTabBtn");
+const studioTabBtn = document.getElementById("studioTabBtn");
 const learnTabBtn = document.getElementById("learnTabBtn");
 const settingsTabBtn = document.getElementById("settingsTabBtn");
 const chatView = document.getElementById("chatView");
+const studioView = document.getElementById("studioView");
 const learnView = document.getElementById("learnView");
 const settingsView = document.getElementById("settingsView");
 const dropZone = document.getElementById("dropZone");
@@ -207,6 +209,16 @@ const liveBtn = document.getElementById("liveBtn");
 const visionBtn = document.getElementById("visionBtn");
 const studioSetupBtn = document.getElementById("studioSetupBtn");
 const studioSyncBtn = document.getElementById("studioSyncBtn");
+const studioRefreshBtn = document.getElementById("studioRefreshBtn");
+const studioCreateProjectBtn = document.getElementById("studioCreateProjectBtn");
+const studioProjectNameInput = document.getElementById("studioProjectNameInput");
+const studioProjectGoalInput = document.getElementById("studioProjectGoalInput");
+const studioFolderText = document.getElementById("studioFolderText");
+const studioProjectCount = document.getElementById("studioProjectCount");
+const studioActionCount = document.getElementById("studioActionCount");
+const studioProjectsList = document.getElementById("studioProjectsList");
+const studioActionsList = document.getElementById("studioActionsList");
+const studioConnectorsList = document.getElementById("studioConnectorsList");
 const wikiSyncBtn = document.getElementById("wikiSyncBtn");
 const refreshDevicesBtn = document.getElementById("refreshDevicesBtn");
 const speakBtn = document.getElementById("speakBtn");
@@ -261,6 +273,7 @@ function setActiveTab(tab) {
   activeTab = tab;
   for (const [name, btn, view] of [
     ["chat", chatTabBtn, chatView],
+    ["studio", studioTabBtn, studioView],
     ["learn", learnTabBtn, learnView],
     ["settings", settingsTabBtn, settingsView],
   ]) {
@@ -270,6 +283,7 @@ function setActiveTab(tab) {
   const chatMode = tab === "chat";
   document.querySelector(".composer").hidden = !chatMode;
   if (tab === "learn") loadVocab();
+  if (tab === "studio") refreshStudioDashboard();
   if (tab === "settings") renderSettings();
 }
 
@@ -303,6 +317,108 @@ function renderSettings() {
   nativeLanguageInput.value = settings.nativeLanguage || "vi";
   dailyWordsInput.value = settings.dailyWords || 8;
   monthlyResetInput.checked = settings.monthlyReset !== false;
+}
+
+function renderEmpty(target, text) {
+  target.replaceChildren();
+  const item = document.createElement("div");
+  item.className = "studio-empty";
+  item.textContent = text;
+  target.appendChild(item);
+}
+
+function renderStudioDashboard(data) {
+  if (!data?.ok) {
+    studioFolderText.textContent = data?.error || "Không đọc được Studio.";
+    renderEmpty(studioProjectsList, "Chưa có dữ liệu project.");
+    renderEmpty(studioActionsList, "Chưa có action.");
+    renderEmpty(studioConnectorsList, "Chưa có connector.");
+    return;
+  }
+  const projects = Array.isArray(data.projects) ? data.projects : [];
+  const actions = Array.isArray(data.actions) ? data.actions : [];
+  const connectors = data.connectors && typeof data.connectors === "object" ? data.connectors : {};
+  studioFolderText.textContent = data.folder || "Vault ready";
+  studioProjectCount.textContent = String(projects.length);
+  studioActionCount.textContent = `${data.pendingActions || 0} pending`;
+
+  studioProjectsList.replaceChildren();
+  if (!projects.length) renderEmpty(studioProjectsList, "Bấm New Project để tạo project đầu tiên.");
+  for (const project of projects) {
+    const item = document.createElement("div");
+    item.className = "studio-project";
+    const title = document.createElement("strong");
+    title.textContent = project.title || project.slug;
+    const meta = document.createElement("span");
+    meta.textContent = `${project.status || "NEW"} · ${(project.tags || []).map(tag => `#${tag}`).join(" ")}`;
+    const file = document.createElement("small");
+    file.textContent = project.work_file || "";
+    item.append(title, meta, file);
+    studioProjectsList.appendChild(item);
+  }
+
+  studioActionsList.replaceChildren();
+  if (!actions.length) renderEmpty(studioActionsList, "Chưa có tag nào tạo action queue.");
+  for (const action of actions.slice(0, 12)) {
+    const item = document.createElement("div");
+    item.className = "studio-action";
+    const title = document.createElement("strong");
+    title.textContent = action.title || action.type;
+    const meta = document.createElement("span");
+    meta.textContent = `${action.project} · ${action.tag} · ${action.mode} · ${action.status}`;
+    item.append(title, meta);
+    studioActionsList.appendChild(item);
+  }
+
+  studioConnectorsList.replaceChildren();
+  for (const [name, connector] of Object.entries(connectors)) {
+    const item = document.createElement("div");
+    item.className = `connector-pill ${connector?.enabled ? "on" : "off"}`;
+    item.textContent = `${name}: ${connector?.status || (connector?.enabled ? "active" : "planned")}`;
+    studioConnectorsList.appendChild(item);
+  }
+}
+
+async function refreshStudioDashboard() {
+  if (!window.bumbeeChat?.studioDashboard) return;
+  try {
+    const data = await window.bumbeeChat.studioDashboard({});
+    renderStudioDashboard(data);
+  } catch (err) {
+    renderStudioDashboard({ ok: false, error: err.message });
+  }
+}
+
+async function createStudioProject() {
+  const title = studioProjectNameInput.value.trim();
+  const goal = studioProjectGoalInput.value.trim();
+  if (!title) {
+    studioProjectNameInput.focus();
+    return;
+  }
+  studioCreateProjectBtn.disabled = true;
+  studioCreateProjectBtn.textContent = "Creating...";
+  try {
+    const result = await window.bumbeeChat.studioNewProject({ title, goal, tags: ["#IDEA", "#TICKET", "#THAM_MUU"] });
+    if (!result.ok && result.error) throw new Error(result.error);
+    studioProjectNameInput.value = "";
+    studioProjectGoalInput.value = "";
+    addMessage("system", `Studio project created: ${result.slug}. Open it in Obsidian and edit PROJECT.work.md.`);
+    renderStudioDashboard(result.dashboard ? {
+      ok: true,
+      folder: result.dashboard.folder || result.folder,
+      projects: result.dashboard.projects,
+      actions: result.dashboard.queue?.actions || result.dashboard.actions,
+      pendingActions: (result.dashboard.queue?.actions || []).filter(action => action.status === "pending").length,
+      connectors: result.dashboard.connectors || {},
+    } : await window.bumbeeChat.studioDashboard({}));
+    await refreshStudioDashboard();
+  } catch (err) {
+    addMessage("system", `Create Studio project failed: ${err.message}`);
+  } finally {
+    studioCreateProjectBtn.disabled = false;
+    studioCreateProjectBtn.textContent = "New Project";
+  }
 }
 
 function notifyCoach(type, message) {
@@ -1532,8 +1648,14 @@ function blobToDataUrl(blob) {
 
 sendBtn.addEventListener("click", sendPrompt);
 chatTabBtn.addEventListener("click", () => setActiveTab("chat"));
+studioTabBtn.addEventListener("click", () => setActiveTab("studio"));
 learnTabBtn.addEventListener("click", () => setActiveTab("learn"));
 settingsTabBtn.addEventListener("click", () => setActiveTab("settings"));
+studioRefreshBtn.addEventListener("click", refreshStudioDashboard);
+studioCreateProjectBtn.addEventListener("click", createStudioProject);
+studioProjectNameInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") createStudioProject();
+});
 
 addVocabBtn.addEventListener("click", () => addVocabFromText(vocabInput.value, "manual"));
 presetButtons.forEach((button) => {

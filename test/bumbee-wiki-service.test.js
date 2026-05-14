@@ -111,6 +111,38 @@ test("Bumbee Wiki service syncs studio files with project derived from project f
   assert.equal(ingested.every(item => item.tags.includes("obsidian")), true);
 });
 
+test("Bumbee Wiki service builds project dashboard and action queue from tags", async () => {
+  const root = path.join(tempDir(), "studio");
+  const service = initBumbeeWikiService({
+    folder: tempDir(),
+    studioFolder: root,
+    appId: "bumbee-desktop",
+    project: "pc-project",
+    deviceId: "pc-1",
+    client: {
+      registerApp: async () => ({ ok: true }),
+      ingestDocument: async () => ({ ok: true }),
+      ask: async () => ({ answer: "ok", sources: [], context: "" }),
+    },
+  });
+
+  const created = await service.newStudioProject({
+    title: "Idea CRM Money",
+    goal: "Find customer follow-up workflow",
+    tags: ["#IDEA", "#CRM", "#THAM_MUU"],
+  });
+  assert.equal(created.ok, true);
+  assert.equal(created.slug, "idea-crm-money");
+
+  const dashboard = await service.studioDashboard();
+  assert.equal(dashboard.ok, true);
+  assert.equal(dashboard.projects.some(item => item.slug === "idea-crm-money"), true);
+  assert.equal(dashboard.actions.some(item => item.project === "idea-crm-money" && item.type === "analyze_idea"), true);
+  assert.equal(dashboard.actions.some(item => item.project === "idea-crm-money" && item.mode === "confirm_required"), true);
+  assert.equal(fs.existsSync(path.join(root, "07-actions", "action-queue.json")), true);
+  assert.equal(dashboard.connectors.obsidian.enabled, true);
+});
+
 test("listSyncableFiles ignores hidden files, unsupported extensions, and oversized files", () => {
   const root = tempDir();
   fs.writeFileSync(path.join(root, "a.md"), "ok", "utf8");

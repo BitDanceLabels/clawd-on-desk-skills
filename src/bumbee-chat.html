@@ -24,6 +24,7 @@
 
     <nav class="tabs" aria-label="Bumbee modes">
       <button id="chatTabBtn" type="button" class="tab active">Chat</button>
+      <button id="studioTabBtn" type="button" class="tab">Studio</button>
       <button id="learnTabBtn" type="button" class="tab">Learn</button>
       <button id="settingsTabBtn" type="button" class="tab">Settings</button>
     </nav>
@@ -101,6 +102,47 @@
           <span id="vocabStats">0 words</span>
         </div>
         <div id="vocabList" class="vocab-list"></div>
+      </section>
+    </section>
+
+    <section id="studioView" class="view studio-view">
+      <section class="studio-hero">
+        <div>
+          <span class="eyebrow">Obsidian Project OS</span>
+          <h2>Bumbee Wiki Studio</h2>
+          <p id="studioFolderText">Vault chưa kiểm tra.</p>
+        </div>
+        <div class="studio-hero-actions">
+          <button id="studioRefreshBtn" type="button">Refresh</button>
+          <button id="studioCreateProjectBtn" type="button" class="primary">New Project</button>
+        </div>
+      </section>
+      <section class="studio-create-card">
+        <input id="studioProjectNameInput" type="text" placeholder="Tên project/idea mới...">
+        <input id="studioProjectGoalInput" type="text" placeholder="Mục tiêu kiếm tiền / giá trị cần tạo...">
+      </section>
+      <section class="studio-grid">
+        <article class="studio-card">
+          <header>
+            <strong>Projects</strong>
+            <span id="studioProjectCount">0</span>
+          </header>
+          <div id="studioProjectsList" class="studio-list"></div>
+        </article>
+        <article class="studio-card">
+          <header>
+            <strong>Worker Action Queue</strong>
+            <span id="studioActionCount">0 pending</span>
+          </header>
+          <div id="studioActionsList" class="studio-list"></div>
+        </article>
+      </section>
+      <section class="studio-card">
+        <header>
+          <strong>Connector Center</strong>
+          <span>settings only</span>
+        </header>
+        <div id="studioConnectorsList" class="connector-grid"></div>
       </section>
     </section>
 

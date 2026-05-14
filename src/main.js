@@ -876,6 +876,24 @@ async function syncBumbeeStudio(options) {
   }
 }
 
+async function getBumbeeStudioDashboard(options) {
+  if (!_wiki) return { ok: false, error: "Bumbee Wiki service is not available yet" };
+  try {
+    return await _wiki.studioDashboard(options || {});
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function createBumbeeStudioProject(options) {
+  if (!_wiki) return { ok: false, error: "Bumbee Wiki service is not available yet" };
+  try {
+    return await _wiki.newStudioProject(options || {});
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 function getSmartStatusPayload() {
   return {
     smart: _smart ? _smart.status() : { enabled: false },
@@ -2259,6 +2277,8 @@ function createWindow() {
   ipcMain.handle("bumbee-wiki:sync", (_event, payload) => syncBumbeeWiki(payload));
   ipcMain.handle("bumbee-studio:setup", (_event, payload) => setupBumbeeStudio(payload));
   ipcMain.handle("bumbee-studio:sync", (_event, payload) => syncBumbeeStudio(payload));
+  ipcMain.handle("bumbee-studio:dashboard", (_event, payload) => getBumbeeStudioDashboard(payload));
+  ipcMain.handle("bumbee-studio:new-project", (_event, payload) => createBumbeeStudioProject(payload));
   ipcMain.handle("bumbee-wiki:status", () => _wiki ? { ok: true, ..._wiki.status() } : { ok: false, error: "Bumbee Wiki service is not available yet" });
   ipcMain.handle("bumbee-chat:vision-audio", (_event, payload) => transcribeVisionAudio(payload));
   ipcMain.handle("bumbee-vocab:list", () => listVocabItems());

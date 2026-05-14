@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("bumbeeChat", {
   wikiSync: (payload) => ipcRenderer.invoke("bumbee-wiki:sync", payload),
   studioSetup: (payload) => ipcRenderer.invoke("bumbee-studio:setup", payload),
   studioSync: (payload) => ipcRenderer.invoke("bumbee-studio:sync", payload),
+  studioDashboard: (payload) => ipcRenderer.invoke("bumbee-studio:dashboard", payload),
+  studioNewProject: (payload) => ipcRenderer.invoke("bumbee-studio:new-project", payload),
   wikiStatus: () => ipcRenderer.invoke("bumbee-wiki:status"),
   transcribeVisionAudio: (payload) => ipcRenderer.invoke("bumbee-chat:vision-audio", payload),
   openVision: () => ipcRenderer.send("open-bumbee-vision"),
