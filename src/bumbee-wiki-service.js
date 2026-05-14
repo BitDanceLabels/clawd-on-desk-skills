@@ -93,6 +93,167 @@ function extractStatus(content) {
   return match ? match[1].trim() : "NEW";
 }
 
+function appendTextFile(filePath, content) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.appendFileSync(filePath, content, "utf8");
+}
+
+function readProjectWork(root, project) {
+  const workPath = path.join(root, "03-projects", project, "PROJECT.work.md");
+  try {
+    return fs.readFileSync(workPath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function writeWorkerOutput(root, action, markdown) {
+  const date = new Date().toISOString().slice(0, 10);
+  const outputDir = path.join(root, "03-projects", action.project, "worker-outputs");
+  const outputPath = path.join(outputDir, `${date}-${action.type}.md`);
+  writeFileIfMissing(outputPath, markdown);
+  return safeRelativePath(root, outputPath);
+}
+
+function appendProgressLog(root, action, outputRelPath) {
+  const progressPath = path.join(root, "03-projects", action.project, "PROJECT.progress.md");
+  const stamp = new Date().toISOString();
+  appendTextFile(progressPath, [
+    "",
+    `## Worker ${stamp}`,
+    "",
+    `- Action: ${action.title || action.type}`,
+    `- Tag: ${action.tag}`,
+    `- Mode: ${action.mode}`,
+    `- Output: ${outputRelPath}`,
+    `- Status: ${action.status}`,
+    "",
+  ].join("\n"));
+}
+
+function summarizeContent(content) {
+  return String(content || "")
+    .replace(/^---[\s\S]*?---/m, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 900);
+}
+
+function buildWorkerMarkdown(action, projectContent) {
+  const date = new Date().toISOString();
+  const summary = summarizeContent(projectContent) || "No project content available yet.";
+  const commonHeader = [
+    `# ${action.title || action.type}`,
+    "",
+    `Project: ${action.project}`,
+    `Source: ${action.source}`,
+    `Tag: ${action.tag}`,
+    `Mode: ${action.mode}`,
+    `Generated: ${date}`,
+    "",
+    "## Source Summary",
+    "",
+    summary,
+    "",
+  ];
+  const sectionsByType = {
+    analyze_idea: [
+      "## Idea Score",
+      "",
+      "| Dimension | Score | Note |",
+      "| --- | ---: | --- |",
+      "| Money path | 7 | Clarify who pays and first offer. |",
+      "| Speed to test | 8 | Can test with one landing note/proposal. |",
+      "| Data readiness | 6 | Needs customer/example evidence. |",
+      "| Reuse value | 8 | Can become template/worker/process. |",
+      "",
+      "## Recommended Next Step",
+      "",
+      "- Turn this idea into one demo package and one customer-facing pitch.",
+      "- Add concrete target customer, expected result, and proof/assets.",
+    ],
+    advisor_review: [
+      "## Advisor View",
+      "",
+      "- Keep the project simple: one outcome, one user, one money path.",
+      "- Do not expand into more platform work until one workflow is tested.",
+      "- Convert abstract ideas into a checklist that can be done in 1 day.",
+    ],
+    create_ticket_checklist: [
+      "## Execution Checklist",
+      "",
+      "- [ ] Define target user/customer.",
+      "- [ ] Define expected output/result.",
+      "- [ ] Collect needed source files, links, and images.",
+      "- [ ] Draft first deliverable.",
+      "- [ ] Review with AI advisor.",
+      "- [ ] Sync to Bumbee Wiki.",
+      "- [ ] Package for demo/sales/tester nghiệm thu.",
+    ],
+    crm_follow_up: [
+      "## CRM Draft",
+      "",
+      "- Identify customer status: cold/warm/active/waiting.",
+      "- Draft message, but do not send automatically.",
+      "- Add customer name, offer, next appointment, and attachment list.",
+      "",
+      "## Confirmation Needed",
+      "",
+      "This action should stay pending until the user confirms send/publish behavior.",
+    ],
+    prepare_publish_package: [
+      "## Publish Package Draft",
+      "",
+      "- Hook/title.",
+      "- Short post.",
+      "- Long post.",
+      "- Image/video asset list.",
+      "- Platform checklist.",
+      "",
+      "Do not publish automatically without confirmation.",
+    ],
+    final_review: [
+      "## Final Review",
+      "",
+      "- Check factual accuracy.",
+      "- Check customer-sensitive data.",
+      "- Check publish/send permission.",
+      "- Mark ready only after user approval.",
+    ],
+    collect_visual_assets: [
+      "## Visual Asset Plan",
+      "",
+      "- List required screenshots/images.",
+      "- Put files under project `assets/`.",
+      "- Add captions and usage purpose.",
+    ],
+    video_script_plan: [
+      "## Video Script Plan",
+      "",
+      "- Opening hook.",
+      "- Problem.",
+      "- Demo/process.",
+      "- Result/value.",
+      "- Call to action.",
+    ],
+    operator_command: [
+      "## Operator Command Draft",
+      "",
+      "- Intent.",
+      "- Required gateway skill/API.",
+      "- Payload draft.",
+      "- Risk level.",
+      "- Confirmation needed before execution.",
+    ],
+  };
+  return [...commonHeader, ...(sectionsByType[action.type] || [
+    "## Worker Output",
+    "",
+    "- Review project content.",
+    "- Produce next safe action.",
+  ]), ""].join("\n");
+}
+
 function defaultStudioConfig(opts = {}) {
   return {
     studio_id: opts.studioId || "bumbee-wiki-studio-local",
@@ -433,6 +594,37 @@ function refreshActionQueue(root) {
   return { ...scan, queue };
 }
 
+function runStudioWorkers(root, options = {}) {
+  ensureStudioTemplate(root);
+  const dashboard = refreshActionQueue(root);
+  const queue = dashboard.queue;
+  const includeConfirmRequired = options.includeConfirmRequired === true;
+  const limit = Number(options.limit) > 0 ? Number(options.limit) : 20;
+  let ran = 0;
+  const results = [];
+  for (const action of queue.actions) {
+    if (ran >= limit) break;
+    if (action.status !== "pending") continue;
+    if (action.mode === "confirm_required" && !includeConfirmRequired) {
+      action.status = "waiting_confirmation";
+      action.updated_at = new Date().toISOString();
+      results.push({ id: action.id, project: action.project, status: action.status, skipped: true });
+      continue;
+    }
+    const projectContent = readProjectWork(root, action.project);
+    const markdown = buildWorkerMarkdown(action, projectContent);
+    const outputRelPath = writeWorkerOutput(root, action, markdown);
+    action.status = action.mode === "confirm_required" ? "draft_ready" : "completed";
+    action.output = outputRelPath;
+    action.updated_at = new Date().toISOString();
+    appendProgressLog(root, action, outputRelPath);
+    ran++;
+    results.push({ id: action.id, project: action.project, status: action.status, output: outputRelPath });
+  }
+  writeActionQueue(root, queue);
+  return { ok: true, ran, results, queue };
+}
+
 function createStudioProject(root, options = {}) {
   ensureStudioTemplate(root, options);
   const title = String(options.title || options.name || "New Bumbee Project").trim();
@@ -696,6 +888,13 @@ module.exports = function initBumbeeWikiService(opts = {}) {
     return { ...projectResult, dashboard };
   }
 
+  async function runWorkers(options = {}) {
+    const targetFolder = options.folder || studioFolder;
+    const result = runStudioWorkers(targetFolder, options);
+    const dashboard = refreshActionQueue(targetFolder);
+    return { ...result, dashboard };
+  }
+
   async function ask(question, options = {}) {
     if (!enabled) return { ok: false, error: "Bumbee Wiki disabled" };
     if (!question || typeof question !== "string") return { ok: false, error: "missing question" };
@@ -774,7 +973,7 @@ module.exports = function initBumbeeWikiService(opts = {}) {
     };
   }
 
-  return { start, ensureFolder, setupStudio, syncStudio, studioDashboard, newStudioProject, registerApp, syncOnce, ask, updates, status };
+  return { start, ensureFolder, setupStudio, syncStudio, studioDashboard, newStudioProject, runWorkers, registerApp, syncOnce, ask, updates, status };
 };
 
 module.exports.listSyncableFiles = listSyncableFiles;
@@ -782,3 +981,4 @@ module.exports.makeSyncKey = makeSyncKey;
 module.exports.ensureStudioTemplate = ensureStudioTemplate;
 module.exports.extractTags = extractTags;
 module.exports.createStudioProject = createStudioProject;
+module.exports.runStudioWorkers = runStudioWorkers;

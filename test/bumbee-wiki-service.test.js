@@ -143,6 +143,41 @@ test("Bumbee Wiki service builds project dashboard and action queue from tags", 
   assert.equal(dashboard.connectors.obsidian.enabled, true);
 });
 
+test("Bumbee Wiki service runs safe workers and leaves confirm actions waiting", async () => {
+  const root = path.join(tempDir(), "studio");
+  const service = initBumbeeWikiService({
+    folder: tempDir(),
+    studioFolder: root,
+    appId: "bumbee-desktop",
+    project: "pc-project",
+    deviceId: "pc-1",
+    client: {
+      registerApp: async () => ({ ok: true }),
+      ingestDocument: async () => ({ ok: true }),
+      ask: async () => ({ answer: "ok", sources: [], context: "" }),
+    },
+  });
+
+  await service.newStudioProject({
+    title: "Publisher CRM",
+    goal: "Prepare content and customer follow-up",
+    tags: ["#IDEA", "#PUBLISHER", "#CRM"],
+  });
+
+  const result = await service.runWorkers({ includeConfirmRequired: false });
+  assert.equal(result.ok, true);
+  assert.equal(result.ran >= 1, true);
+
+  const dashboard = await service.studioDashboard();
+  const idea = dashboard.actions.find(action => action.project === "publisher-crm" && action.type === "analyze_idea");
+  const crm = dashboard.actions.find(action => action.project === "publisher-crm" && action.type === "crm_follow_up");
+  assert.equal(idea.status, "completed");
+  assert.match(idea.output, /worker-outputs/);
+  assert.equal(crm.status, "waiting_confirmation");
+  assert.equal(fs.existsSync(path.join(root, idea.output)), true);
+  assert.match(fs.readFileSync(path.join(root, "03-projects", "publisher-crm", "PROJECT.progress.md"), "utf8"), /Worker/);
+});
+
 test("listSyncableFiles ignores hidden files, unsupported extensions, and oversized files", () => {
   const root = tempDir();
   fs.writeFileSync(path.join(root, "a.md"), "ok", "utf8");

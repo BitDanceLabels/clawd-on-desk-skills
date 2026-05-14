@@ -210,6 +210,7 @@ const visionBtn = document.getElementById("visionBtn");
 const studioSetupBtn = document.getElementById("studioSetupBtn");
 const studioSyncBtn = document.getElementById("studioSyncBtn");
 const studioRefreshBtn = document.getElementById("studioRefreshBtn");
+const studioRunWorkersBtn = document.getElementById("studioRunWorkersBtn");
 const studioCreateProjectBtn = document.getElementById("studioCreateProjectBtn");
 const studioProjectNameInput = document.getElementById("studioProjectNameInput");
 const studioProjectGoalInput = document.getElementById("studioProjectGoalInput");
@@ -418,6 +419,22 @@ async function createStudioProject() {
   } finally {
     studioCreateProjectBtn.disabled = false;
     studioCreateProjectBtn.textContent = "New Project";
+  }
+}
+
+async function runStudioWorkersFromUi() {
+  studioRunWorkersBtn.disabled = true;
+  studioRunWorkersBtn.textContent = "Running...";
+  try {
+    const result = await window.bumbeeChat.studioRunWorkers({ includeConfirmRequired: false });
+    if (!result.ok && result.error) throw new Error(result.error);
+    addMessage("system", `Studio workers done: ${result.ran || 0} safe actions generated. Confirm-required actions stay waiting.`);
+    await refreshStudioDashboard();
+  } catch (err) {
+    addMessage("system", `Run Studio workers failed: ${err.message}`);
+  } finally {
+    studioRunWorkersBtn.disabled = false;
+    studioRunWorkersBtn.textContent = "Run Workers";
   }
 }
 
@@ -1652,6 +1669,7 @@ studioTabBtn.addEventListener("click", () => setActiveTab("studio"));
 learnTabBtn.addEventListener("click", () => setActiveTab("learn"));
 settingsTabBtn.addEventListener("click", () => setActiveTab("settings"));
 studioRefreshBtn.addEventListener("click", refreshStudioDashboard);
+studioRunWorkersBtn.addEventListener("click", runStudioWorkersFromUi);
 studioCreateProjectBtn.addEventListener("click", createStudioProject);
 studioProjectNameInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") createStudioProject();

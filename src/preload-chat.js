@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("bumbeeChat", {
   studioSync: (payload) => ipcRenderer.invoke("bumbee-studio:sync", payload),
   studioDashboard: (payload) => ipcRenderer.invoke("bumbee-studio:dashboard", payload),
   studioNewProject: (payload) => ipcRenderer.invoke("bumbee-studio:new-project", payload),
+  studioRunWorkers: (payload) => ipcRenderer.invoke("bumbee-studio:run-workers", payload),
   wikiStatus: () => ipcRenderer.invoke("bumbee-wiki:status"),
   transcribeVisionAudio: (payload) => ipcRenderer.invoke("bumbee-chat:vision-audio", payload),
   openVision: () => ipcRenderer.send("open-bumbee-vision"),
