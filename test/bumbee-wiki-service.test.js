@@ -178,6 +178,46 @@ test("Bumbee Wiki service runs safe workers and leaves confirm actions waiting",
   assert.match(fs.readFileSync(path.join(root, "03-projects", "publisher-crm", "PROJECT.progress.md"), "utf8"), /Worker/);
 });
 
+test("Bumbee Wiki service approves and prepares gateway action payload", async () => {
+  const root = path.join(tempDir(), "studio");
+  const service = initBumbeeWikiService({
+    folder: tempDir(),
+    studioFolder: root,
+    appId: "bumbee-desktop",
+    project: "pc-project",
+    deviceId: "pc-1",
+    client: {
+      registerApp: async () => ({ ok: true }),
+      ingestDocument: async () => ({ ok: true }),
+      ask: async () => ({ answer: "ok", sources: [], context: "" }),
+    },
+  });
+
+  await service.newStudioProject({
+    title: "CRM Send Draft",
+    goal: "Draft a customer follow-up",
+    tags: ["#CRM"],
+  });
+  await service.runWorkers({ includeConfirmRequired: false });
+  const actionId = "crm-send-draft:crm_follow_up";
+
+  const needsConfirm = await service.runGatewayAction({ actionId });
+  assert.equal(needsConfirm.ok, false);
+  assert.equal(needsConfirm.needsConfirmation, true);
+
+  const approved = await service.approveAction({ actionId, approvedBy: "tester" });
+  assert.equal(approved.ok, true);
+  assert.equal(approved.action.status, "approved");
+
+  const executed = await service.runGatewayAction({ actionId });
+  assert.equal(executed.ok, true);
+  assert.equal(executed.execution.dry_run, true);
+  assert.equal(executed.action.status, "ready_for_gateway");
+  assert.equal(fs.existsSync(path.join(root, "07-actions", "execution-log.json")), true);
+  const log = JSON.parse(fs.readFileSync(path.join(root, "07-actions", "execution-log.json"), "utf8"));
+  assert.equal(log.executions.some(item => item.action_id === actionId), true);
+});
+
 test("listSyncableFiles ignores hidden files, unsupported extensions, and oversized files", () => {
   const root = tempDir();
   fs.writeFileSync(path.join(root, "a.md"), "ok", "utf8");

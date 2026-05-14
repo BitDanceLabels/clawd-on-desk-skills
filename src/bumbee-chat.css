@@ -340,6 +340,15 @@ video {
   line-height: 1.35;
 }
 
+.mini-action {
+  justify-self: start;
+  min-height: 26px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .studio-empty {
   color: #9aa4b5;
   font-size: 12px;

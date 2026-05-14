@@ -368,6 +368,22 @@ function renderStudioDashboard(data) {
     const meta = document.createElement("span");
     meta.textContent = `${action.project} · ${action.tag} · ${action.mode} · ${action.status}`;
     item.append(title, meta);
+    if (["waiting_confirmation", "draft_ready"].includes(action.status)) {
+      const approve = document.createElement("button");
+      approve.type = "button";
+      approve.className = "mini-action";
+      approve.textContent = "Approve";
+      approve.addEventListener("click", () => approveStudioAction(action.id));
+      item.appendChild(approve);
+    }
+    if (["approved", "ready_for_gateway"].includes(action.status)) {
+      const run = document.createElement("button");
+      run.type = "button";
+      run.className = "mini-action primary";
+      run.textContent = "Run Gateway";
+      run.addEventListener("click", () => runStudioGatewayAction(action.id));
+      item.appendChild(run);
+    }
     studioActionsList.appendChild(item);
   }
 
@@ -435,6 +451,29 @@ async function runStudioWorkersFromUi() {
   } finally {
     studioRunWorkersBtn.disabled = false;
     studioRunWorkersBtn.textContent = "Run Workers";
+  }
+}
+
+async function approveStudioAction(actionId) {
+  try {
+    const result = await window.bumbeeChat.studioApproveAction({ actionId, approvedBy: "local-user" });
+    if (!result.ok && result.error) throw new Error(result.error);
+    addMessage("system", `Approved action: ${actionId}`);
+    await refreshStudioDashboard();
+  } catch (err) {
+    addMessage("system", `Approve action failed: ${err.message}`);
+  }
+}
+
+async function runStudioGatewayAction(actionId) {
+  try {
+    const result = await window.bumbeeChat.studioRunGatewayAction({ actionId, confirm: true, approvedBy: "local-user" });
+    if (!result.ok && result.error) throw new Error(result.error);
+    const dryRun = result.execution?.dry_run ? " Payload prepared; gateway endpoint not configured." : "";
+    addMessage("system", `Gateway action processed: ${actionId}.${dryRun}`);
+    await refreshStudioDashboard();
+  } catch (err) {
+    addMessage("system", `Run gateway action failed: ${err.message}`);
   }
 }
 

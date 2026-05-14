@@ -9,6 +9,7 @@ const SUPPORTED_EXTENSIONS = new Set([".md", ".markdown", ".txt", ".json", ".csv
 const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
 const ACTION_QUEUE_PATH = path.join("07-actions", "action-queue.json");
 const CONNECTOR_REGISTRY_PATH = path.join("08-connectors", "connectors.json");
+const EXECUTION_LOG_PATH = path.join("07-actions", "execution-log.json");
 
 const TAG_ACTION_RULES = {
   IDEA: { type: "analyze_idea", title: "Analyze and score idea", mode: "suggest_only" },
@@ -60,6 +61,45 @@ function readJsonFile(filePath, fallback) {
 function writeJsonFile(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function postJson(url, payload, opts = {}) {
+  const http = require("http");
+  const https = require("https");
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try { parsed = new URL(url); } catch (err) { return reject(err); }
+    const lib = parsed.protocol === "https:" ? https : http;
+    const body = JSON.stringify(payload);
+    const headers = {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+      "User-Agent": "clawd-on-desk/studio-gateway-action",
+      ...(opts.headers || {}),
+    };
+    const req = lib.request({
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === "https:" ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: "POST",
+      headers,
+      timeout: opts.timeout || 20_000,
+    }, (res) => {
+      let raw = "";
+      res.on("data", chunk => { raw += chunk; });
+      res.on("end", () => {
+        let data = null;
+        try { data = raw ? JSON.parse(raw) : {}; } catch { data = { raw }; }
+        if (res.statusCode >= 200 && res.statusCode < 300) return resolve(data);
+        reject(new Error(data?.error || data?.message || `HTTP ${res.statusCode}`));
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
 }
 
 function slugifyProjectName(name) {
@@ -127,6 +167,17 @@ function appendProgressLog(root, action, outputRelPath) {
     `- Mode: ${action.mode}`,
     `- Output: ${outputRelPath}`,
     `- Status: ${action.status}`,
+    "",
+  ].join("\n"));
+}
+
+function appendActionProgressLog(root, action, lines) {
+  const progressPath = path.join(root, "03-projects", action.project, "PROJECT.progress.md");
+  appendTextFile(progressPath, [
+    "",
+    `## Action ${new Date().toISOString()}`,
+    "",
+    ...lines,
     "",
   ].join("\n"));
 }
@@ -421,11 +472,18 @@ function ensureStudioTemplate(root, opts = {}) {
     "",
     "Bumbee On Desk writes suggested worker actions here. Sensitive execution stays pending until confirmed.",
     "",
+    "Flow: pending -> waiting_confirmation -> approved -> ready_for_gateway/executed.",
+    "",
   ].join("\n"));
   writeJsonIfMissing(path.join(root, ACTION_QUEUE_PATH), {
     version: 1,
     updated_at: null,
     actions: [],
+  });
+  writeJsonIfMissing(path.join(root, EXECUTION_LOG_PATH), {
+    version: 1,
+    updated_at: null,
+    executions: [],
   });
   writeFileIfMissing(path.join(root, "08-connectors", "CONNECTORS.md"), [
     "# Connector Center",
@@ -536,6 +594,18 @@ function writeActionQueue(root, queue) {
   writeJsonFile(path.join(root, ACTION_QUEUE_PATH), queue);
 }
 
+function readExecutionLog(root) {
+  const log = readJsonFile(path.join(root, EXECUTION_LOG_PATH), { version: 1, updated_at: null, executions: [] });
+  if (!Array.isArray(log.executions)) log.executions = [];
+  return log;
+}
+
+function writeExecutionLog(root, log) {
+  log.version = log.version || 1;
+  log.updated_at = new Date().toISOString();
+  writeJsonFile(path.join(root, EXECUTION_LOG_PATH), log);
+}
+
 function readConnectors(root) {
   return readJsonFile(path.join(root, CONNECTOR_REGISTRY_PATH), defaultStudioConfig().connectors);
 }
@@ -623,6 +693,109 @@ function runStudioWorkers(root, options = {}) {
   }
   writeActionQueue(root, queue);
   return { ok: true, ran, results, queue };
+}
+
+function findQueueAction(queue, actionId) {
+  return queue.actions.find(action => action.id === actionId);
+}
+
+function approveStudioAction(root, actionId, options = {}) {
+  ensureStudioTemplate(root);
+  const queue = readActionQueue(root);
+  const action = findQueueAction(queue, actionId);
+  if (!action) return { ok: false, error: `Action not found: ${actionId}` };
+  action.status = "approved";
+  action.approved_at = new Date().toISOString();
+  action.approved_by = options.approvedBy || "local-user";
+  action.updated_at = action.approved_at;
+  writeActionQueue(root, queue);
+  appendActionProgressLog(root, action, [
+    `- Approved action: ${action.title || action.type}`,
+    `- Action ID: ${action.id}`,
+    `- Approved by: ${action.approved_by}`,
+  ]);
+  return { ok: true, action };
+}
+
+function gatewayPayloadForAction(root, action) {
+  const projectContent = readProjectWork(root, action.project);
+  return {
+    action_id: action.id,
+    action_type: action.type,
+    project: action.project,
+    title: action.title,
+    source: action.source,
+    tag: action.tag,
+    mode: action.mode,
+    output: action.output || null,
+    project_summary: summarizeContent(projectContent),
+    requested_by: "bumbee-on-desk",
+    created_at: new Date().toISOString(),
+  };
+}
+
+async function executeStudioGatewayAction(root, actionId, options = {}) {
+  ensureStudioTemplate(root);
+  const queue = readActionQueue(root);
+  const action = findQueueAction(queue, actionId);
+  if (!action) return { ok: false, error: `Action not found: ${actionId}` };
+  if (action.mode === "confirm_required" && action.status !== "approved" && options.confirm !== true) {
+    return { ok: false, needsConfirmation: true, action };
+  }
+  if (options.confirm === true && action.status !== "approved") {
+    action.status = "approved";
+    action.approved_at = new Date().toISOString();
+    action.approved_by = options.approvedBy || "local-user";
+  }
+  const payload = gatewayPayloadForAction(root, action);
+  const endpoint = options.gatewayActionUrl || process.env.BUMBEE_GATEWAY_ACTION_URL || "";
+  const log = readExecutionLog(root);
+  const execution = {
+    id: `${action.id}:${Date.now()}`,
+    action_id: action.id,
+    project: action.project,
+    type: action.type,
+    endpoint: endpoint || null,
+    dry_run: !endpoint,
+    payload,
+    status: endpoint ? "executing" : "ready_for_gateway",
+    created_at: new Date().toISOString(),
+  };
+  try {
+    if (endpoint) {
+      execution.response = await postJson(endpoint, payload, {
+        headers: options.gatewayToken ? { Authorization: `Bearer ${options.gatewayToken}` } : {},
+      });
+      execution.status = "executed";
+      action.status = "executed";
+      action.executed_at = new Date().toISOString();
+    } else {
+      action.status = "ready_for_gateway";
+      action.gateway_payload = payload;
+    }
+    action.updated_at = new Date().toISOString();
+    log.executions.push(execution);
+    writeExecutionLog(root, log);
+    writeActionQueue(root, queue);
+    appendActionProgressLog(root, action, [
+      `- Gateway action: ${action.title || action.type}`,
+      `- Action ID: ${action.id}`,
+      `- Status: ${action.status}`,
+      `- Endpoint: ${endpoint || "not configured; payload prepared only"}`,
+      `- Execution log: ${EXECUTION_LOG_PATH}`,
+    ]);
+    return { ok: true, action, execution };
+  } catch (err) {
+    execution.status = "failed";
+    execution.error = err.message;
+    action.status = "execution_failed";
+    action.error = err.message;
+    action.updated_at = new Date().toISOString();
+    log.executions.push(execution);
+    writeExecutionLog(root, log);
+    writeActionQueue(root, queue);
+    return { ok: false, error: err.message, action, execution };
+  }
 }
 
 function createStudioProject(root, options = {}) {
@@ -895,6 +1068,20 @@ module.exports = function initBumbeeWikiService(opts = {}) {
     return { ...result, dashboard };
   }
 
+  async function approveAction(options = {}) {
+    const targetFolder = options.folder || studioFolder;
+    const result = approveStudioAction(targetFolder, options.actionId, options);
+    const dashboard = refreshActionQueue(targetFolder);
+    return { ...result, dashboard };
+  }
+
+  async function runGatewayAction(options = {}) {
+    const targetFolder = options.folder || studioFolder;
+    const result = await executeStudioGatewayAction(targetFolder, options.actionId, options);
+    const dashboard = refreshActionQueue(targetFolder);
+    return { ...result, dashboard };
+  }
+
   async function ask(question, options = {}) {
     if (!enabled) return { ok: false, error: "Bumbee Wiki disabled" };
     if (!question || typeof question !== "string") return { ok: false, error: "missing question" };
@@ -973,7 +1160,7 @@ module.exports = function initBumbeeWikiService(opts = {}) {
     };
   }
 
-  return { start, ensureFolder, setupStudio, syncStudio, studioDashboard, newStudioProject, runWorkers, registerApp, syncOnce, ask, updates, status };
+  return { start, ensureFolder, setupStudio, syncStudio, studioDashboard, newStudioProject, runWorkers, approveAction, runGatewayAction, registerApp, syncOnce, ask, updates, status };
 };
 
 module.exports.listSyncableFiles = listSyncableFiles;
@@ -982,3 +1169,5 @@ module.exports.ensureStudioTemplate = ensureStudioTemplate;
 module.exports.extractTags = extractTags;
 module.exports.createStudioProject = createStudioProject;
 module.exports.runStudioWorkers = runStudioWorkers;
+module.exports.approveStudioAction = approveStudioAction;
+module.exports.executeStudioGatewayAction = executeStudioGatewayAction;
