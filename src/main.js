@@ -2,6 +2,7 @@ const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, syst
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const net = require("net");
 
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
@@ -199,7 +200,12 @@ const CHAT_SESSION_ID = `desk-${Date.now().toString(36)}-${Math.random().toStrin
 const CHAT_AUTH_SERVER_URL = (process.env.BUMBEE_DESK_AUTH_URL || process.env.TOKEN_ADMIN_URL || "https://gateway.bumbee.asia/bumbee-desk-token-admin").replace(/\/$/, "");
 const VOCAB_DB_PATH = path.join(app.getPath("userData"), "bumbee-english-vocab.json");
 const DONATION_SETTINGS_PATH = path.join(app.getPath("userData"), "settings.json");
+const EVENTS_SOCK_PATH = path.join(app.getPath("userData"), "events.sock");
+const EVENTS_JSONL_PATH = path.join(app.getPath("userData"), "events.jsonl");
 const DEFAULT_DONATION_URL = "https://bitdancegroup.com/bumbee-vocab-tinder/checkout";
+const PROXYCLI_CHAT_URL = (process.env.BUMBEE_PROXYCLI_CHAT_URL || process.env.PROXYCLI_CHAT_URL || process.env.OPENAI_BASE_URL || "").replace(/\/$/, "");
+const PROXYCLI_API_KEY = process.env.BUMBEE_PROXYCLI_API_KEY || process.env.PROXYCLI_API_KEY || process.env.OPENAI_API_KEY || "";
+const PROXYCLI_MODEL = process.env.BUMBEE_PROXYCLI_MODEL || process.env.PROXYCLI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
 const DONATION_ALLOWED_HOSTS = [
   /^buymeacoffee\.com$/i,
   /^(www\.)?ko-fi\.com$/i,
@@ -1316,6 +1322,39 @@ function updateVocabSettings(payload) {
   return { ok: true, settings: db.settings, words: db.words };
 }
 
+function emitSemanticEvent(type, payload = {}) {
+  const event = {
+    type,
+    ts: new Date().toISOString(),
+    payload: payload && typeof payload === "object" ? payload : { value: payload },
+  };
+  const line = `${JSON.stringify(event)}\n`;
+  fs.mkdirSync(path.dirname(EVENTS_JSONL_PATH), { recursive: true });
+  let fallbackWritten = false;
+  const writeFallback = () => {
+    if (fallbackWritten) return;
+    fallbackWritten = true;
+    fs.appendFile(EVENTS_JSONL_PATH, line, () => {});
+  };
+
+  if (fs.existsSync(EVENTS_SOCK_PATH)) {
+    const client = net.createConnection(EVENTS_SOCK_PATH);
+    client.setTimeout(250);
+    client.on("connect", () => {
+      client.end(line);
+    });
+    client.on("timeout", () => {
+      client.destroy();
+      writeFallback();
+    });
+    client.on("error", writeFallback);
+    return { ok: true, target: "socket", event };
+  }
+
+  writeFallback();
+  return { ok: true, target: "jsonl", event };
+}
+
 function loadDonationSettings() {
   try {
     const data = JSON.parse(fs.readFileSync(DONATION_SETTINGS_PATH, "utf8"));
@@ -1393,7 +1432,10 @@ async function recordVocabSwipe(payload = {}) {
   const word = normalizeVocabTerm(payload.word || "");
   if (!word) return { ok: false, error: "missing_word" };
   if (!["keep", "skip", "known"].includes(action)) return { ok: false, error: "invalid_action" };
-  if (action === "skip") return { ok: true, action, skipped: true };
+  if (action === "skip") {
+    emitSemanticEvent("vocab.swipe.skipped", { word });
+    return { ok: true, action, skipped: true };
+  }
 
   const { upsertWord } = require("./vocab-library");
   const sm2 = require("./sm2");
@@ -1406,17 +1448,26 @@ async function recordVocabSwipe(payload = {}) {
     status: action === "known" ? "known" : "kept",
     sm2: sm2State,
   });
+  const library = require("./vocab-library");
+  const streak = library.getStreakDays(library.listLibrary());
+  emitSemanticEvent(action === "known" ? "vocab.swipe.known" : "vocab.swipe.kept", {
+    word,
+    source_app: String(payload.source_app || "Bumbee Vocab Tinder").slice(0, 120),
+  });
+  if (streak.days > 0 && streak.today_count === 1 && action !== "known") {
+    emitSemanticEvent("vocab.streak.day", { day_count: streak.days });
+  }
   const sync = await syncStudioAfterVocabChange();
-  return { ok: true, action, word, page: result.path, sync };
+  return { ok: true, action, word, page: result.path, streak, sync };
 }
 
-function getVocabReviewTasks() {
-  const { listLibrary } = require("./vocab-library");
-  const sm2 = require("./sm2");
-  return sm2.dueWords(listLibrary()).slice(0, 7).map(item => ({
+function buildHeuristicReviewTask(item) {
+  return {
     word: item.word,
     prompt: `Type the word that fits this context: ${item.context_sentence || item.word}`,
     answer: item.word,
+    expected: item.word,
+    kind: "recall-from-context",
     context: item.context_sentence || "",
     source_app: item.source_app || "Bumbee Vocab Tinder",
     sm2: {
@@ -1424,14 +1475,110 @@ function getVocabReviewTasks() {
       interval_days: Number(item.interval_days) || 0,
       repetition: Number(item.repetition) || 0,
     },
-  }));
+  };
+}
+
+async function callProxyCliJson(prompt, timeoutMs = 8000) {
+  if (!PROXYCLI_CHAT_URL) return null;
+  const endpoint = PROXYCLI_CHAT_URL.endsWith("/chat/completions")
+    ? PROXYCLI_CHAT_URL
+    : `${PROXYCLI_CHAT_URL}/chat/completions`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (PROXYCLI_API_KEY) headers.Authorization = `Bearer ${PROXYCLI_API_KEY}`;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: PROXYCLI_MODEL,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "Return strict JSON only. No markdown." },
+          { role: "user", content: prompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`proxycli_http_${res.status}`);
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content || data?.content || "";
+    if (!content) return null;
+    return typeof content === "string" ? JSON.parse(content) : content;
+  } catch (err) {
+    console.warn("Bumbee Vocab: proxycli JSON call failed:", err.message);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function buildLlmReviewTask(item) {
+  const context = String(item.context_sentence || item.word || "").slice(0, 500);
+  const prompt = [
+    "Cho từ tiếng Anh và câu ngữ cảnh người dùng đã thấy.",
+    "Hãy sinh 1 bài ôn tập ngắn dạng fill-blank hoặc recall-from-definition.",
+    "Trả về JSON đúng dạng:",
+    '{"kind":"fill-blank|recall-from-definition","prompt":"...","expected":"...","hint":"..."}',
+    `Word: ${item.word}`,
+    `Context: ${context}`,
+  ].join("\n");
+  const generated = await callProxyCliJson(prompt);
+  if (!generated?.prompt || !generated?.expected) return null;
+  return {
+    ...buildHeuristicReviewTask(item),
+    kind: String(generated.kind || "llm-review").slice(0, 80),
+    prompt: String(generated.prompt || "").slice(0, 600),
+    answer: String(generated.expected || item.word).slice(0, 120),
+    expected: String(generated.expected || item.word).slice(0, 120),
+    hint: String(generated.hint || "").slice(0, 240),
+    generated_by: "proxycli",
+  };
+}
+
+async function getVocabReviewTasks() {
+  const { listLibrary } = require("./vocab-library");
+  const sm2 = require("./sm2");
+  const due = sm2.dueWords(listLibrary()).slice(0, 7);
+  const tasks = [];
+  for (const item of due) {
+    const llmTask = tasks.length < 5 ? await buildLlmReviewTask(item) : null;
+    tasks.push(llmTask || buildHeuristicReviewTask(item));
+  }
+  return tasks;
+}
+
+function normalizeReviewText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}\s'-]/gu, "")
+    .replace(/\s+/g, " ");
 }
 
 async function gradeVocabReview(payload = {}) {
   const task = payload.task || {};
-  const expected = String(task.answer || task.word || "").trim().toLowerCase();
-  const answer = String(payload.answer || "").trim().toLowerCase();
-  const correct = !!expected && answer === expected;
+  const expected = normalizeReviewText(task.expected || task.answer || task.word || "");
+  const answer = normalizeReviewText(payload.answer || "");
+  let correct = !!expected && answer === expected;
+  let hint = task.hint || "";
+  if (PROXYCLI_CHAT_URL && expected && answer) {
+    const prompt = [
+      "Chấm câu trả lời ôn từ vựng tiếng Anh.",
+      "Đúng nếu answer trùng nghĩa hoặc chấp nhận biến thể nhỏ của expected.",
+      "Trả về JSON đúng dạng: {\"correct\":true|false,\"hint\":\"gợi ý tiếng Việt ngắn\"}",
+      `Prompt: ${task.prompt || ""}`,
+      `Expected: ${expected}`,
+      `Answer: ${answer}`,
+    ].join("\n");
+    const graded = await callProxyCliJson(prompt, 6000);
+    if (typeof graded?.correct === "boolean") {
+      correct = graded.correct;
+      hint = String(graded.hint || hint || "").slice(0, 240);
+    }
+  }
   const sm2 = require("./sm2");
   const { upsertWord } = require("./vocab-library");
   const nextSm2 = sm2.update(task.sm2 || {}, correct ? 4 : 2);
@@ -1442,8 +1589,17 @@ async function gradeVocabReview(payload = {}) {
     status: nextSm2.mastery_score >= 5 ? "mastered" : "kept",
     sm2: nextSm2,
   });
+  emitSemanticEvent(correct ? "vocab.review.correct" : "vocab.review.wrong", {
+    word: expected || task.word || "",
+    task_kind: task.kind || "review",
+    expected,
+    got: answer,
+  });
+  if (nextSm2.mastery_score >= 5) {
+    emitSemanticEvent("vocab.word.mastered", { word: expected || task.word || "" });
+  }
   const sync = await syncStudioAfterVocabChange();
-  return { ok: true, correct, word: expected, sm2: nextSm2, page: result.path, sync };
+  return { ok: true, correct, hint, word: expected, sm2: nextSm2, page: result.path, sync };
 }
 
 async function openBumbeeDonate() {
