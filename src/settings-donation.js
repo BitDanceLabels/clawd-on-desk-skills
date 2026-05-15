@@ -13,7 +13,7 @@
     /^paypal\.me$/i,
     /^(www\.)?tipeee\.com$/i,
     /^donate\.stripe\.com$/i,
-    /^bitdancegroup\.com$/i,           // matches the user's payment gateway redirect
+    /^bitdancegroup\.com$/i,           // matches BitDance Odoo checkout/product/payment links
   ];
 
   const els = {
@@ -34,12 +34,18 @@
     try { u = new URL(value); }
     catch { return { ok: false, reason: 'URL không hợp lệ.' }; }
     if (u.protocol !== 'https:') return { ok: false, reason: 'Phải là https://...' };
-    // bitdancegroup.com only allowed when path starts with /payment/
-    if (/^bitdancegroup\.com$/i.test(u.host) && !u.pathname.startsWith('/payment/')) {
-      return { ok: false, reason: 'bitdancegroup.com chỉ chấp nhận path /payment/...' };
+    if (
+      /^bitdancegroup\.com$/i.test(u.host) &&
+      !(
+        u.pathname.startsWith('/payment/') ||
+        u.pathname.startsWith('/shop/') ||
+        u.pathname.startsWith('/bumbee-vocab-tinder')
+      )
+    ) {
+      return { ok: false, reason: 'bitdancegroup.com chỉ chấp nhận /payment/, /shop/, hoặc /bumbee-vocab-tinder.' };
     }
     if (!ALLOWED_HOSTS.some(re => re.test(u.host))) {
-      return { ok: false, reason: `Host "${u.host}" không trong allow-list. Chỉ chấp nhận Buy Me a Coffee, Ko-fi, Patreon, PayPal.me, Tipeee, Stripe donate, bitdancegroup.com/payment.` };
+      return { ok: false, reason: `Host "${u.host}" không trong allow-list. Chỉ chấp nhận Buy Me a Coffee, Ko-fi, Patreon, PayPal.me, Tipeee, Stripe donate, hoặc bitdancegroup.com.` };
     }
     return { ok: true };
   }
@@ -83,6 +89,9 @@
   });
   els.name.addEventListener('input', refreshPreview);
   els.intent.addEventListener('input', refreshPreview);
+  els.prevCreator.addEventListener('click', (event) => {
+    event.preventDefault();
+  });
 
   els.save.addEventListener('click', async () => {
     els.saveMsg.className = '';

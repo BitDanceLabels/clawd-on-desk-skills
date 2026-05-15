@@ -116,6 +116,7 @@ const i18n = {
     characterEmpty: "(none yet — drop files in folder)",
     bumbee: "Bumbee Hub",
     bumbeeOpenChat: "Open Bumbee Chat…",
+    bumbeeOpenVocab: "Open Vocab Tinder…",
     bumbeeStatus: "Connection Status…",
     bumbeeReloadSkills: "Reload Skills ({n})",
     bumbeeOpenSkillsFolder: "Open Skills Folder",
@@ -388,6 +389,13 @@ module.exports = function initMenu(ctx) {
         enabled: typeof ctx.openBumbeeChat === "function",
         click: () => {
           if (ctx.openBumbeeChat) ctx.openBumbeeChat();
+        },
+      },
+      {
+        label: t("bumbeeOpenVocab"),
+        enabled: typeof ctx.openBumbeeVocab === "function",
+        click: () => {
+          if (ctx.openBumbeeVocab) ctx.openBumbeeVocab();
         },
       },
       { type: "separator" },

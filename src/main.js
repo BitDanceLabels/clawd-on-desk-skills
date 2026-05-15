@@ -170,6 +170,8 @@ let win;
 let hitWin;  // input window — small opaque rect over hitbox, receives all pointer events
 let chatWin;
 let visionWin;
+let vocabWin;
+let donationSettingsWin;
 let chatAutoHideTimer = null;
 let chatActivityState = { typing: false, camera: false, voice: false, pending: false };
 let tray = null;
@@ -196,6 +198,17 @@ const CHAT_DEVICE_ID = process.env.BUMBEE_DEVICE_ID || `${os.hostname()}-${proce
 const CHAT_SESSION_ID = `desk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const CHAT_AUTH_SERVER_URL = (process.env.BUMBEE_DESK_AUTH_URL || process.env.TOKEN_ADMIN_URL || "https://gateway.bumbee.asia/bumbee-desk-token-admin").replace(/\/$/, "");
 const VOCAB_DB_PATH = path.join(app.getPath("userData"), "bumbee-english-vocab.json");
+const DONATION_SETTINGS_PATH = path.join(app.getPath("userData"), "settings.json");
+const DEFAULT_DONATION_URL = "https://bitdancegroup.com/bumbee-vocab-tinder/checkout";
+const DONATION_ALLOWED_HOSTS = [
+  /^buymeacoffee\.com$/i,
+  /^(www\.)?ko-fi\.com$/i,
+  /^patreon\.com$/i,
+  /^paypal\.me$/i,
+  /^(www\.)?tipeee\.com$/i,
+  /^donate\.stripe\.com$/i,
+  /^bitdancegroup\.com$/i,
+];
 const LEARN_ON_START = process.env.BUMBEE_LEARN_ON_START !== "0";
 
 const STARTER_VOCAB_VERSION = 7;
@@ -1303,6 +1316,154 @@ function updateVocabSettings(payload) {
   return { ok: true, settings: db.settings, words: db.words };
 }
 
+function loadDonationSettings() {
+  try {
+    const data = JSON.parse(fs.readFileSync(DONATION_SETTINGS_PATH, "utf8"));
+    return {
+      creator_donation_url: String(data.creator_donation_url || ""),
+      creator_display_name: String(data.creator_display_name || ""),
+      creator_donation_intent: String(data.creator_donation_intent || ""),
+    };
+  } catch {
+    return { creator_donation_url: "", creator_display_name: "", creator_donation_intent: "" };
+  }
+}
+
+function validateDonationUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { ok: true, empty: true, url: "" };
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { ok: false, error: "invalid_url" };
+  }
+  if (url.protocol !== "https:") return { ok: false, error: "https_required" };
+  if (!DONATION_ALLOWED_HOSTS.some((rule) => rule.test(url.host))) {
+    return { ok: false, error: "host_not_allowed" };
+  }
+  if (
+    /^bitdancegroup\.com$/i.test(url.host) &&
+    !(
+      url.pathname.startsWith("/payment/") ||
+      url.pathname.startsWith("/shop/") ||
+      url.pathname.startsWith("/bumbee-vocab-tinder")
+    )
+  ) {
+    return { ok: false, error: "bitdance_path_not_allowed" };
+  }
+  return { ok: true, url: url.toString() };
+}
+
+function saveDonationSettings(payload = {}) {
+  const current = loadDonationSettings();
+  const checkedUrl = validateDonationUrl(payload.creator_donation_url);
+  if (!checkedUrl.ok) return { ok: false, error: checkedUrl.error };
+  const next = {
+    ...current,
+    creator_donation_url: checkedUrl.empty ? "" : checkedUrl.url.slice(0, 500),
+    creator_display_name: String(payload.creator_display_name || "").trim().slice(0, 80),
+    creator_donation_intent: String(payload.creator_donation_intent || "").trim().slice(0, 240),
+    updated_at: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(DONATION_SETTINGS_PATH), { recursive: true });
+  fs.writeFileSync(DONATION_SETTINGS_PATH, JSON.stringify(next, null, 2), { mode: 0o600 });
+  try { fs.chmodSync(DONATION_SETTINGS_PATH, 0o600); } catch {}
+  return { ok: true, settings: next };
+}
+
+function extractVocabCandidates(text) {
+  const { extract } = require("./vocab-extractor");
+  const { listLibrary } = require("./vocab-library");
+  const knownWords = new Set(listLibrary().map(item => String(item.word || "").toLowerCase()).filter(Boolean));
+  return extract(String(text || ""), { source_app: "Bumbee Vocab Tinder", knownWords });
+}
+
+async function syncStudioAfterVocabChange() {
+  if (!_wiki || typeof _wiki.syncStudio !== "function") return { ok: false, skipped: true, reason: "wiki_unavailable" };
+  try {
+    return await _wiki.syncStudio({ force: true, register: false });
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function recordVocabSwipe(payload = {}) {
+  const action = String(payload.action || "").toLowerCase();
+  const word = normalizeVocabTerm(payload.word || "");
+  if (!word) return { ok: false, error: "missing_word" };
+  if (!["keep", "skip", "known"].includes(action)) return { ok: false, error: "invalid_action" };
+  if (action === "skip") return { ok: true, action, skipped: true };
+
+  const { upsertWord } = require("./vocab-library");
+  const sm2 = require("./sm2");
+  const sm2State = action === "known" ? sm2.update({ repetition: 2, interval_days: 6 }, 5) : {};
+  const result = upsertWord({
+    word,
+    ipa: payload.ipa || "",
+    context: String(payload.context || "").slice(0, 1000),
+    source_app: String(payload.source_app || "Bumbee Vocab Tinder").slice(0, 120),
+    status: action === "known" ? "known" : "kept",
+    sm2: sm2State,
+  });
+  const sync = await syncStudioAfterVocabChange();
+  return { ok: true, action, word, page: result.path, sync };
+}
+
+function getVocabReviewTasks() {
+  const { listLibrary } = require("./vocab-library");
+  const sm2 = require("./sm2");
+  return sm2.dueWords(listLibrary()).slice(0, 7).map(item => ({
+    word: item.word,
+    prompt: `Type the word that fits this context: ${item.context_sentence || item.word}`,
+    answer: item.word,
+    context: item.context_sentence || "",
+    source_app: item.source_app || "Bumbee Vocab Tinder",
+    sm2: {
+      ease_factor: Number(item.ease_factor) || 2.5,
+      interval_days: Number(item.interval_days) || 0,
+      repetition: Number(item.repetition) || 0,
+    },
+  }));
+}
+
+async function gradeVocabReview(payload = {}) {
+  const task = payload.task || {};
+  const expected = String(task.answer || task.word || "").trim().toLowerCase();
+  const answer = String(payload.answer || "").trim().toLowerCase();
+  const correct = !!expected && answer === expected;
+  const sm2 = require("./sm2");
+  const { upsertWord } = require("./vocab-library");
+  const nextSm2 = sm2.update(task.sm2 || {}, correct ? 4 : 2);
+  const result = upsertWord({
+    word: expected || task.word,
+    context: task.context || task.prompt || "",
+    source_app: task.source_app || "Bumbee Vocab Tinder review",
+    status: nextSm2.mastery_score >= 5 ? "mastered" : "kept",
+    sm2: nextSm2,
+  });
+  const sync = await syncStudioAfterVocabChange();
+  return { ok: true, correct, word: expected, sm2: nextSm2, page: result.path, sync };
+}
+
+async function openBumbeeDonate() {
+  const { shell } = require("electron");
+  const creator = loadDonationSettings().creator_donation_url;
+  const checkedCreator = validateDonationUrl(creator);
+  if (checkedCreator.ok && checkedCreator.url) {
+    await shell.openExternal(checkedCreator.url);
+    return { ok: true, url: checkedCreator.url, source: "creator" };
+  }
+  try {
+    await shell.openExternal(DEFAULT_DONATION_URL);
+    return { ok: true, url: DEFAULT_DONATION_URL, source: "bitdancegroup" };
+  } catch (err) {
+    const fallback = "https://buymeacoffee.com/chrispham";
+    await shell.openExternal(fallback);
+    return { ok: false, fallback: true, url: fallback, error: err.message };
+  }
+}
+
 function getChatBoundsNearPet(width, height) {
   const fallbackPoint = screen.getCursorScreenPoint();
   const petBounds = win && !win.isDestroyed() ? win.getBounds() : null;
@@ -1466,6 +1627,69 @@ function openBumbeeVision() {
   });
   visionWin.on("closed", () => {
     visionWin = null;
+  });
+}
+
+function openVocabTinder() {
+  if (vocabWin && !vocabWin.isDestroyed()) {
+    vocabWin.show();
+    vocabWin.focus();
+    return;
+  }
+
+  const primary = screen.getPrimaryDisplay().workArea;
+  vocabWin = new BrowserWindow({
+    width: Math.min(920, Math.max(760, primary.width - 180)),
+    height: Math.min(760, Math.max(620, primary.height - 140)),
+    minWidth: 700,
+    minHeight: 560,
+    title: "Bumbee Vocab Tinder",
+    show: false,
+    backgroundColor: "#10151f",
+    webPreferences: {
+      preload: path.join(__dirname, "preload-vocab.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  vocabWin.loadFile(path.join(__dirname, "vocab-tinder.html"));
+  vocabWin.once("ready-to-show", () => {
+    if (vocabWin && !vocabWin.isDestroyed()) vocabWin.show();
+  });
+  vocabWin.on("closed", () => {
+    vocabWin = null;
+  });
+}
+
+function openDonationSettings() {
+  if (donationSettingsWin && !donationSettingsWin.isDestroyed()) {
+    donationSettingsWin.show();
+    donationSettingsWin.focus();
+    return;
+  }
+  donationSettingsWin = new BrowserWindow({
+    width: 720,
+    height: 640,
+    minWidth: 620,
+    minHeight: 520,
+    title: "Bumbee Donation Settings",
+    show: false,
+    backgroundColor: "#10151f",
+    webPreferences: {
+      preload: path.join(__dirname, "preload-vocab.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  donationSettingsWin.loadFile(path.join(__dirname, "settings-donation.html"));
+  donationSettingsWin.once("ready-to-show", () => {
+    if (donationSettingsWin && !donationSettingsWin.isDestroyed()) donationSettingsWin.show();
+  });
+  donationSettingsWin.on("closed", () => {
+    donationSettingsWin = null;
   });
 }
 
@@ -2042,6 +2266,7 @@ const _menuCtx = {
   getSmart: () => _smart,
   getWiki: () => _wiki,
   openBumbeeChat,
+  openBumbeeVocab: openVocabTinder,
 };
 const _menu = require("./menu")(_menuCtx);
 const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
@@ -2299,6 +2524,7 @@ function createWindow() {
   });
   ipcMain.on("open-bumbee-chat", openBumbeeChat);
   ipcMain.on("open-bumbee-vision", openBumbeeVision);
+  ipcMain.on("open-bumbee-vocab", openVocabTinder);
 
   ipcMain.on("show-session-menu", () => {
     popupMenuAt(Menu.buildFromTemplate(buildSessionSubmenu()));
@@ -2329,6 +2555,18 @@ function createWindow() {
   ipcMain.handle("bumbee-vocab:review", (_event, payload) => reviewVocabItem(payload));
   ipcMain.handle("bumbee-vocab:reset", () => resetVocabScores());
   ipcMain.handle("bumbee-vocab:settings", (_event, payload) => updateVocabSettings(payload));
+  ipcMain.handle("vocab:extract", (_event, text) => extractVocabCandidates(text));
+  ipcMain.handle("vocab:swipe", (_event, payload) => recordVocabSwipe(payload));
+  ipcMain.handle("vocab:review-tasks", () => getVocabReviewTasks());
+  ipcMain.handle("vocab:grade", (_event, payload) => gradeVocabReview(payload));
+  ipcMain.handle("vocab:list", () => require("./vocab-library").listLibrary());
+  ipcMain.handle("vocab:open-settings", () => {
+    openDonationSettings();
+    return { ok: true };
+  });
+  ipcMain.handle("vocab:open-donate", () => openBumbeeDonate());
+  ipcMain.handle("settings:donation:load", () => loadDonationSettings());
+  ipcMain.handle("settings:donation:save", (_event, payload) => saveDonationSettings(payload));
   ipcMain.on("bumbee-coach:event", (_event, payload) => {
     const type = typeof payload?.type === "string" ? payload.type : "prompt";
     triggerCoachInteraction(type, payload || {});

@@ -114,7 +114,8 @@
       const input = div.querySelector('input');
       input.addEventListener('keydown', async (e) => {
         if (e.key !== 'Enter') return;
-        const correct = await window.bumbeeVocabAPI.gradeReview({ task, answer: input.value });
+        const result = await window.bumbeeVocabAPI.gradeReview({ task, answer: input.value });
+        const correct = typeof result === 'boolean' ? result : !!result.correct;
         input.style.borderColor = correct ? 'var(--keep)' : 'var(--skip)';
         input.disabled = true;
       });
