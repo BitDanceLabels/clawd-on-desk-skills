@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('bumbeeVocabAPI', {
   getReviewTasks: () => ipcRenderer.invoke('vocab:review-tasks'),
   gradeReview: (args) => ipcRenderer.invoke('vocab:grade', args),
   listLibrary: () => ipcRenderer.invoke('vocab:list'),
+  dashboard: () => ipcRenderer.invoke('vocab:dashboard'),
+  checkDonationStatus: (payload) => ipcRenderer.invoke('vocab:donation-status', payload),
   openSettings: (section) => ipcRenderer.invoke('vocab:open-settings', section),
   openDonate: () => ipcRenderer.invoke('vocab:open-donate'),
 });

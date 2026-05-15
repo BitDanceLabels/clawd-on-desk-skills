@@ -109,6 +109,7 @@ test('sm2.dueWords filters by next_review_at', () => {
 // ---- vocab-library streak counter ----
 
 const { getStreakDays } = require('../src/vocab-library');
+const metrics = require('../src/vocab-metrics');
 
 test('getStreakDays returns 0 for empty library', () => {
   const r = getStreakDays([]);
@@ -159,4 +160,27 @@ test('getStreakDays ignores skipped words', () => {
   ];
   const r = getStreakDays(lib, now);
   assert.equal(r.days, 0);
+});
+
+// ---- vocab dashboard / donation metrics ----
+
+test('buildDashboard summarizes library and support metrics', () => {
+  const now = new Date('2026-05-15T10:00:00Z');
+  const library = [
+    { word: 'focus', status: 'kept', captured_at: '2026-05-15T08:00:00Z', next_review_at: '2026-05-14T08:00:00Z' },
+    { word: 'fluent', status: 'mastered', mastery_score: 5, captured_at: '2026-05-15T08:00:00Z', next_review_at: '2026-05-20T08:00:00Z' },
+  ];
+  const dashboard = metrics.buildDashboard(library, { ...metrics.defaultMetrics(now), support_clicks: 3 }, now);
+  assert.equal(dashboard.words_total, 2);
+  assert.equal(dashboard.words_kept, 2);
+  assert.equal(dashboard.words_mastered, 1);
+  assert.equal(dashboard.reviews_due, 1);
+  assert.equal(dashboard.support_clicks, 3);
+  assert.equal(dashboard.streak.days, 1);
+});
+
+test('normalizeDonationStatus accepts common paid states', () => {
+  assert.equal(metrics.normalizeDonationStatus({ state: 'sale', order_id: 'S00007' }).confirmed, true);
+  assert.equal(metrics.normalizeDonationStatus({ payment_state: 'paid', order_id: 'S00008' }).confirmed, true);
+  assert.equal(metrics.normalizeDonationStatus({ state: 'draft', order_id: 'S00009' }).confirmed, false);
 });

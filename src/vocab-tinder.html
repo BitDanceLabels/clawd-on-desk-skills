@@ -16,6 +16,25 @@
   </header>
 
   <main>
+    <section class="dashboard" aria-label="Bumbee Vocab dashboard">
+      <div class="metric-card">
+        <span class="metric-label">Từ đã lưu</span>
+        <strong id="metric-words">0</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Cần ôn hôm nay</span>
+        <strong id="metric-due">0</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Streak</span>
+        <strong id="metric-streak">0 ngày</strong>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">Support clicks</span>
+        <strong id="metric-support">0</strong>
+      </div>
+    </section>
+
     <!-- Tab: Swipe new words -->
     <section id="tab-swipe" class="tab-panel active">
       <div class="paste-box">
@@ -66,7 +85,13 @@
     <a href="#" id="open-settings">⚙️ Settings</a>
     ·
     <a href="#" id="open-donate">☕ Ủng hộ Bumbee</a>
+    ·
+    <a href="#" id="check-donation">Kiểm tra đơn</a>
+    ·
+    <a href="#" id="copy-demo-script">Copy demo script</a>
   </footer>
+
+  <div id="toast" class="toast" hidden></div>
 
   <script src="vocab-tinder.js"></script>
 </body>

@@ -19,11 +19,66 @@
     reviewQueue: document.getElementById('review-queue'),
     reviewEmpty: document.getElementById('review-empty'),
     libraryList: document.getElementById('library-list'),
+    metricWords: document.getElementById('metric-words'),
+    metricDue: document.getElementById('metric-due'),
+    metricStreak: document.getElementById('metric-streak'),
+    metricSupport: document.getElementById('metric-support'),
+    toast: document.getElementById('toast'),
   };
 
   let cards = [];
   let cardIndex = 0;
   let lastPastedText = '';
+  let toastTimer = null;
+
+  function showToast(message, timeout = 6000) {
+    if (!els.toast) return;
+    if (toastTimer) clearTimeout(toastTimer);
+    els.toast.textContent = message;
+    els.toast.hidden = false;
+    toastTimer = setTimeout(() => {
+      els.toast.hidden = true;
+      toastTimer = null;
+    }, timeout);
+  }
+
+  async function refreshDashboard(seed) {
+    const data = seed || await window.bumbeeVocabAPI.dashboard();
+    if (!data?.ok) return;
+    els.metricWords.textContent = String(data.words_kept || data.words_total || 0);
+    els.metricDue.textContent = String(data.reviews_due || 0);
+    els.metricStreak.textContent = `${data.streak?.days || 0} ngày`;
+    els.metricSupport.textContent = String(data.support_clicks || 0);
+  }
+
+  function buildDemoScript() {
+    const wordCount = els.metricWords?.textContent || '0';
+    const dueCount = els.metricDue?.textContent || '0';
+    return [
+      'Hook: Lướt tiếng Anh mỗi ngày nhưng không nhớ từ nào?',
+      'Show: Dán một đoạn article/email/README tiếng Anh vào Bumbee Vocab Tinder.',
+      'Show: Bumbee tự lọc từ khó, mình vuốt J để giữ, K để bỏ, L nếu đã biết.',
+      `Proof: Hiện đã lưu ${wordCount} từ, hôm nay có ${dueCount} từ cần ôn.`,
+      'Show: Qua tab Ôn tập, trả lời một câu để Bumbee lên lịch SM-2.',
+      'CTA: Dùng Bumbee miễn phí. Nếu thấy hữu ích thì ủng hộ mình ở bitdancegroup.com/bumbee-vocab-tinder.',
+    ].join('\n');
+  }
+
+  async function copyText(text) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  }
 
   // ---- Tab switching ----
   document.querySelectorAll('.tab').forEach(btn => {
@@ -85,6 +140,7 @@
     setTimeout(() => {
       cardIndex += 1;
       renderCard();
+      refreshDashboard().catch(() => {});
     }, 200);
   }
 
@@ -118,6 +174,9 @@
         const correct = typeof result === 'boolean' ? result : !!result.correct;
         input.style.borderColor = correct ? 'var(--keep)' : 'var(--skip)';
         input.disabled = true;
+        if (result?.hint && !correct) showToast(result.hint, 5000);
+        if (result?.dashboard) refreshDashboard(result.dashboard);
+        else refreshDashboard().catch(() => {});
       });
       els.reviewQueue.appendChild(div);
     });
@@ -141,6 +200,7 @@
       `;
       els.libraryList.appendChild(row);
     });
+    refreshDashboard().catch(() => {});
   }
 
   // ---- Footer links ----
@@ -150,6 +210,36 @@
   });
   document.getElementById('open-donate').addEventListener('click', (e) => {
     e.preventDefault();
-    window.bumbeeVocabAPI.openDonate();
+    window.bumbeeVocabAPI.openDonate().then((result) => {
+      if (result?.dashboard) refreshDashboard(result.dashboard);
+      showToast(result?.message || 'Bumbee đã mở link ủng hộ.');
+    }).catch((err) => {
+      showToast(`Không mở được link ủng hộ: ${err.message || err}`);
+    });
   });
+  document.getElementById('check-donation').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const orderId = window.prompt('Nhập mã order Odoo, ví dụ S00007:');
+    if (!orderId) return;
+    const result = await window.bumbeeVocabAPI.checkDonationStatus({ order_id: orderId });
+    if (result?.dashboard) refreshDashboard(result.dashboard);
+    if (result?.confirmed) {
+      showToast(`Đã xác nhận ủng hộ ${result.order_id}. Bumbee đã ghi event donation.`);
+    } else if (result?.ok) {
+      showToast(`Order ${orderId} chưa confirmed/paid. Trạng thái hiện tại: ${result.state || 'unknown'}.`);
+    } else {
+      showToast(`Chưa kiểm tra được order ${orderId}: ${result?.error || 'unknown error'}`);
+    }
+  });
+  document.getElementById('copy-demo-script').addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+      await copyText(buildDemoScript());
+      showToast('Đã copy demo script. Dán vào TikTok/Reels/Notion để dùng khi cần.');
+    } catch (err) {
+      showToast(`Chưa copy được demo script: ${err.message || err}`);
+    }
+  });
+
+  refreshDashboard().catch(() => {});
 })();

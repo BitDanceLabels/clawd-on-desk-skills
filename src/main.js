@@ -200,9 +200,11 @@ const CHAT_SESSION_ID = `desk-${Date.now().toString(36)}-${Math.random().toStrin
 const CHAT_AUTH_SERVER_URL = (process.env.BUMBEE_DESK_AUTH_URL || process.env.TOKEN_ADMIN_URL || "https://gateway.bumbee.asia/bumbee-desk-token-admin").replace(/\/$/, "");
 const VOCAB_DB_PATH = path.join(app.getPath("userData"), "bumbee-english-vocab.json");
 const DONATION_SETTINGS_PATH = path.join(app.getPath("userData"), "settings.json");
+const VOCAB_METRICS_PATH = path.join(app.getPath("userData"), "vocab-metrics.json");
 const EVENTS_SOCK_PATH = path.join(app.getPath("userData"), "events.sock");
 const EVENTS_JSONL_PATH = path.join(app.getPath("userData"), "events.jsonl");
 const DEFAULT_DONATION_URL = "https://bitdancegroup.com/bumbee-vocab-tinder/checkout";
+const DONATION_STATUS_URL = (process.env.BUMBEE_DONATION_STATUS_URL || "https://bitdancegroup.com/payment/bumbee/status").replace(/\/$/, "");
 const PROXYCLI_CHAT_URL = (process.env.BUMBEE_PROXYCLI_CHAT_URL || process.env.PROXYCLI_CHAT_URL || process.env.OPENAI_BASE_URL || "").replace(/\/$/, "");
 const PROXYCLI_API_KEY = process.env.BUMBEE_PROXYCLI_API_KEY || process.env.PROXYCLI_API_KEY || process.env.OPENAI_API_KEY || "";
 const PROXYCLI_MODEL = process.env.BUMBEE_PROXYCLI_MODEL || process.env.PROXYCLI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -1599,24 +1601,84 @@ async function gradeVocabReview(payload = {}) {
     emitSemanticEvent("vocab.word.mastered", { word: expected || task.word || "" });
   }
   const sync = await syncStudioAfterVocabChange();
-  return { ok: true, correct, hint, word: expected, sm2: nextSm2, page: result.path, sync };
+  return { ok: true, correct, hint, word: expected, sm2: nextSm2, page: result.path, sync, dashboard: getVocabDashboard() };
+}
+
+function getVocabDashboard() {
+  const metrics = require("./vocab-metrics");
+  const library = require("./vocab-library").listLibrary();
+  return metrics.buildDashboard(library, metrics.loadMetrics(VOCAB_METRICS_PATH));
 }
 
 async function openBumbeeDonate() {
   const { shell } = require("electron");
+  const metrics = require("./vocab-metrics");
   const creator = loadDonationSettings().creator_donation_url;
   const checkedCreator = validateDonationUrl(creator);
+  metrics.recordSupportClick(VOCAB_METRICS_PATH);
   if (checkedCreator.ok && checkedCreator.url) {
     await shell.openExternal(checkedCreator.url);
-    return { ok: true, url: checkedCreator.url, source: "creator" };
+    return {
+      ok: true,
+      url: checkedCreator.url,
+      source: "creator",
+      dashboard: getVocabDashboard(),
+      message: "Bumbee đã mở link ủng hộ riêng của bạn. Sau khi khách thanh toán, bạn có thể kiểm tra đơn trong dashboard.",
+    };
   }
   try {
     await shell.openExternal(DEFAULT_DONATION_URL);
-    return { ok: true, url: DEFAULT_DONATION_URL, source: "bitdancegroup" };
+    return {
+      ok: true,
+      url: DEFAULT_DONATION_URL,
+      source: "bitdancegroup",
+      dashboard: getVocabDashboard(),
+      message: "Bumbee đã mở checkout BitDance. Nếu khách thanh toán xong, dùng nút kiểm tra đơn để xác nhận và ghi event donation.",
+    };
   } catch (err) {
     const fallback = "https://buymeacoffee.com/chrispham";
     await shell.openExternal(fallback);
-    return { ok: false, fallback: true, url: fallback, error: err.message };
+    return {
+      ok: false,
+      fallback: true,
+      url: fallback,
+      error: err.message,
+      dashboard: getVocabDashboard(),
+      message: "Checkout BitDance chưa mở được nên Bumbee chuyển sang Buy Me a Coffee fallback.",
+    };
+  }
+}
+
+async function checkDonationStatus(payload = {}) {
+  const metrics = require("./vocab-metrics");
+  const orderId = String(payload.order_id || payload.orderId || "").trim();
+  if (!orderId) return { ok: false, error: "missing_order_id", dashboard: getVocabDashboard() };
+  metrics.recordDonationCheck(VOCAB_METRICS_PATH);
+  const url = new URL(DONATION_STATUS_URL);
+  url.searchParams.set("order_id", orderId);
+  try {
+    const res = await fetch(url.toString(), { method: "GET" });
+    if (!res.ok) throw new Error(`donation_status_http_${res.status}`);
+    const status = metrics.normalizeDonationStatus(await res.json());
+    status.order_id = status.order_id || orderId;
+    if (status.confirmed) {
+      const recorded = metrics.recordConfirmedDonation(VOCAB_METRICS_PATH, status.order_id);
+      emitSemanticEvent("business.donation.confirmed", {
+        order_id: status.order_id,
+        amount_vnd: status.amount_vnd,
+        donor_name: status.donor_name,
+      });
+      if (recorded.firstDonation) {
+        emitSemanticEvent("business.first_donation", {
+          order_id: status.order_id,
+          amount_vnd: status.amount_vnd,
+        });
+      }
+      return { ...status, dashboard: getVocabDashboard() };
+    }
+    return { ...status, dashboard: getVocabDashboard() };
+  } catch (err) {
+    return { ok: false, error: err.message, dashboard: getVocabDashboard() };
   }
 }
 
@@ -2716,6 +2778,8 @@ function createWindow() {
   ipcMain.handle("vocab:review-tasks", () => getVocabReviewTasks());
   ipcMain.handle("vocab:grade", (_event, payload) => gradeVocabReview(payload));
   ipcMain.handle("vocab:list", () => require("./vocab-library").listLibrary());
+  ipcMain.handle("vocab:dashboard", () => getVocabDashboard());
+  ipcMain.handle("vocab:donation-status", (_event, payload) => checkDonationStatus(payload));
   ipcMain.handle("vocab:open-settings", () => {
     openDonationSettings();
     return { ok: true };
