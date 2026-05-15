@@ -110,4 +110,46 @@ function listLibrary() {
   return all.sort((a, b) => (b.captured_at || '').localeCompare(a.captured_at || ''));
 }
 
-module.exports = { upsertWord, listLibrary, pagePath, VAULT_ROOT };
+/**
+ * Compute consecutive-day streak from kept-word captured_at timestamps.
+ * Streak = number of consecutive days ending today (or yesterday if no kept
+ * word today yet) in which the user kept >= 1 word.
+ *
+ * @param {Array<{captured_at?: string, status?: string}>} [library]
+ * @param {Date} [now]
+ * @returns {{ days: number, last_day: string | null, today_count: number }}
+ */
+function getStreakDays(library, now = new Date()) {
+  const lib = library || listLibrary();
+  const dayBuckets = new Set();
+  let todayCount = 0;
+  const todayKey = ymd(now);
+
+  for (const w of lib) {
+    if (w.status === 'skipped') continue;
+    if (!w.captured_at) continue;
+    const d = new Date(w.captured_at);
+    if (Number.isNaN(d.getTime())) continue;
+    const key = ymd(d);
+    dayBuckets.add(key);
+    if (key === todayKey) todayCount += 1;
+  }
+
+  // Walk back from today (or yesterday if today empty), counting consecutive days.
+  let cursor = new Date(now);
+  if (!dayBuckets.has(todayKey)) cursor.setDate(cursor.getDate() - 1);
+  let days = 0;
+  let lastDay = null;
+  while (dayBuckets.has(ymd(cursor))) {
+    if (lastDay === null) lastDay = ymd(cursor); // most-recent day in the streak
+    days += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return { days, last_day: lastDay, today_count: todayCount };
+}
+
+function ymd(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+module.exports = { upsertWord, listLibrary, pagePath, getStreakDays, VAULT_ROOT };

@@ -105,3 +105,58 @@ test('sm2.dueWords filters by next_review_at', () => {
 
 // ---- settings-donation URL validator (renderer-only, requires DOM globals stub) ----
 // Skip these in Node since the module references `document`. Re-test in browser context.
+
+// ---- vocab-library streak counter ----
+
+const { getStreakDays } = require('../src/vocab-library');
+
+test('getStreakDays returns 0 for empty library', () => {
+  const r = getStreakDays([]);
+  assert.equal(r.days, 0);
+  assert.equal(r.last_day, null);
+});
+
+test('getStreakDays counts consecutive recent days ending today', () => {
+  const now = new Date('2026-05-15T10:00:00Z');
+  const lib = [
+    { word: 'a', status: 'kept', captured_at: '2026-05-13T08:00:00Z' },
+    { word: 'b', status: 'kept', captured_at: '2026-05-14T08:00:00Z' },
+    { word: 'c', status: 'kept', captured_at: '2026-05-15T07:00:00Z' },
+  ];
+  const r = getStreakDays(lib, now);
+  assert.equal(r.days, 3);
+  assert.equal(r.last_day, '2026-05-15');
+  assert.equal(r.today_count, 1);
+});
+
+test('getStreakDays counts back from yesterday when today empty', () => {
+  const now = new Date('2026-05-15T10:00:00Z');
+  const lib = [
+    { word: 'a', status: 'kept', captured_at: '2026-05-13T08:00:00Z' },
+    { word: 'b', status: 'kept', captured_at: '2026-05-14T08:00:00Z' },
+  ];
+  const r = getStreakDays(lib, now);
+  assert.equal(r.days, 2);
+  assert.equal(r.last_day, '2026-05-14');
+  assert.equal(r.today_count, 0);
+});
+
+test('getStreakDays stops at first gap', () => {
+  const now = new Date('2026-05-15T10:00:00Z');
+  const lib = [
+    { word: 'a', status: 'kept', captured_at: '2026-05-10T08:00:00Z' }, // gap
+    { word: 'b', status: 'kept', captured_at: '2026-05-14T08:00:00Z' },
+    { word: 'c', status: 'kept', captured_at: '2026-05-15T08:00:00Z' },
+  ];
+  const r = getStreakDays(lib, now);
+  assert.equal(r.days, 2); // 14 + 15 only
+});
+
+test('getStreakDays ignores skipped words', () => {
+  const now = new Date('2026-05-15T10:00:00Z');
+  const lib = [
+    { word: 'a', status: 'skipped', captured_at: '2026-05-15T08:00:00Z' },
+  ];
+  const r = getStreakDays(lib, now);
+  assert.equal(r.days, 0);
+});
