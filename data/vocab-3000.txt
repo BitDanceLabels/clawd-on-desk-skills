@@ -1,0 +1,5 @@
+# Bumbee Vocab Tinder stop list
+# This file should contain the first 3000 most-common English words, one per line.
+# Source: https://github.com/first20hours/google-10000-english (MIT)
+# Phase 2 Day 1 task: download 20k.txt and `head -3000` into this file.
+# Until that vendor step runs, vocab-extractor.js falls back to a small inline stop list of ~120 common words.

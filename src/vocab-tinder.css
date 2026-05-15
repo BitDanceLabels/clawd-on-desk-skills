@@ -1,0 +1,145 @@
+/* Bumbee Vocab Tinder — Phase 2 minimal styles */
+
+:root {
+  --bg: #0d0f12;
+  --bg-elev: #161a1f;
+  --bg-card: #1c2128;
+  --fg: #e8ecf1;
+  --fg-dim: #9aa3ad;
+  --brand: #f4c842;
+  --keep: #4ade80;
+  --skip: #f87171;
+  --known: #60a5fa;
+  --line: #232830;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+body { display: flex; flex-direction: column; min-height: 100vh; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.logo { font-weight: 600; }
+.topbar nav { display: flex; gap: 4px; }
+.tab {
+  background: transparent;
+  color: var(--fg-dim);
+  border: 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.tab:hover { color: var(--fg); }
+.tab-active { background: var(--bg-card); color: var(--fg); }
+
+main { flex: 1; padding: 24px; max-width: 720px; width: 100%; margin: 0 auto; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.paste-box label { display: block; margin-bottom: 8px; color: var(--fg-dim); font-size: 14px; }
+.paste-box textarea {
+  width: 100%;
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  font: inherit;
+  resize: vertical;
+}
+.btn-primary {
+  background: var(--brand);
+  color: #1a1300;
+  border: 0;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.card-stack { margin-top: 28px; text-align: center; }
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 32px 24px;
+  margin: 0 auto;
+  max-width: 480px;
+  text-align: left;
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+.card.swipe-keep   { transform: translateX(120%) rotate(8deg); opacity: 0; }
+.card.swipe-skip   { transform: translateX(-120%) rotate(-8deg); opacity: 0; }
+.card.swipe-known  { transform: translateY(-120%); opacity: 0; }
+
+.card-word { font-size: 36px; font-weight: 700; margin-bottom: 6px; }
+.card-ipa { color: var(--fg-dim); margin-bottom: 14px; font-style: italic; }
+.card-context {
+  background: rgba(244, 200, 66, 0.08);
+  border-left: 3px solid var(--brand);
+  padding: 12px 14px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  line-height: 1.45;
+}
+.card-meta { color: var(--fg-dim); font-size: 13px; }
+.card-source { color: var(--fg); }
+
+.hints { margin-top: 20px; display: flex; gap: 12px; justify-content: center; }
+.hint {
+  font-size: 13px; color: var(--fg-dim);
+  border: 1px solid var(--line);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.progress { margin-top: 10px; color: var(--fg-dim); font-size: 13px; }
+
+.empty-state { text-align: center; color: var(--fg-dim); padding: 40px 16px; }
+
+#review-queue, #library-list { margin-top: 16px; }
+.review-task {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.review-task input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg-card);
+  color: var(--fg);
+  font: inherit;
+}
+.library-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between;
+}
+.library-row:hover { background: var(--bg-elev); }
+.library-row .status-mastered { color: var(--keep); }
+.library-row .status-kept { color: var(--brand); }
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: 12px 18px;
+  text-align: center;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+footer a { color: var(--brand); text-decoration: none; margin: 0 6px; }

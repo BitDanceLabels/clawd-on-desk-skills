@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bumbee Vocab Tinder</title>
+  <link rel="stylesheet" href="vocab-tinder.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="logo">🐝 Bumbee Vocab Tinder</span>
+    <nav>
+      <button class="tab tab-active" data-tab="swipe">Vuốt</button>
+      <button class="tab" data-tab="review">Ôn tập</button>
+      <button class="tab" data-tab="library">Thư viện</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Tab: Swipe new words -->
+    <section id="tab-swipe" class="tab-panel active">
+      <div class="paste-box">
+        <label for="paste">Dán bài tiếng Anh (article, README, email...):</label>
+        <textarea id="paste" rows="4" placeholder="Paste any English text here..."></textarea>
+        <button id="extract-btn" class="btn-primary">Lọc từ khó</button>
+      </div>
+
+      <div id="card-stack" class="card-stack" hidden>
+        <div id="card" class="card">
+          <div class="card-word">—</div>
+          <div class="card-ipa">—</div>
+          <div class="card-context">—</div>
+          <div class="card-meta">thấy ở: <span class="card-source">—</span></div>
+        </div>
+        <div class="hints">
+          <span class="hint">J = giữ (right)</span>
+          <span class="hint">K = bỏ (left)</span>
+          <span class="hint">L = đã biết (up)</span>
+        </div>
+        <div class="progress">
+          <span id="card-progress">0 / 0</span>
+        </div>
+      </div>
+
+      <div id="empty-state" class="empty-state" hidden>
+        <p>🎉 Hết thẻ — quay lại tab Ôn tập hoặc dán bài mới.</p>
+      </div>
+    </section>
+
+    <!-- Tab: SM-2 review -->
+    <section id="tab-review" class="tab-panel">
+      <h2>Ôn tập hôm nay</h2>
+      <div id="review-queue"></div>
+      <div id="review-empty" class="empty-state">
+        <p>Hôm nay chưa có từ đến hạn ôn — quay lại tab Vuốt.</p>
+      </div>
+    </section>
+
+    <!-- Tab: Library browse -->
+    <section id="tab-library" class="tab-panel">
+      <h2>Thư viện từ vựng của bạn</h2>
+      <div id="library-list"></div>
+    </section>
+  </main>
+
+  <footer>
+    <a href="#" id="open-settings">⚙️ Settings</a>
+    ·
+    <a href="#" id="open-donate">☕ Ủng hộ Bumbee</a>
+  </footer>
+
+  <script src="vocab-tinder.js"></script>
+</body>
+</html>
