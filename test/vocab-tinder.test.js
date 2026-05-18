@@ -213,3 +213,23 @@ test('phase runtime seeds business loop and scene fixture', () => {
   assert.equal(fs.existsSync(path.join(root, 'content-inbox', '2026-05-18.json')), true);
   assert.equal(fs.existsSync(path.join(root, 'scenes', 'sample-scene', 'scene.config.json')), true);
 });
+
+test('phase runtime seeds the full system test surface', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bumbee-full-phase-'));
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'bumbee-user-data-'));
+  const seeded = phaseRuntime.seedFullSystem(userData, root, new Date('2026-05-18T09:00:00Z'));
+  assert.equal(seeded.connectors.count >= 8, true);
+  assert.equal(seeded.skills.count >= 10, true);
+  assert.equal(seeded.portfolio.count, 5);
+  assert.equal(seeded.actions.count >= 4, true);
+  assert.equal(seeded.gatewayDryRun.count >= 3, true);
+  assert.equal(fs.existsSync(path.join(root, '08-connectors', 'connectors.json')), true);
+  assert.equal(fs.existsSync(path.join(root, '04-skills', 'gateway-skill-map.json')), true);
+  assert.equal(fs.existsSync(path.join(root, '07-actions', 'action-queue.json')), true);
+  assert.equal(fs.existsSync(path.join(root, '07-actions', 'phase-gateway-dry-run.json')), true);
+  assert.equal(fs.existsSync(path.join(root, 'business-ops', '2026-05-18', 'B0-idea-engine.md')), true);
+  assert.equal(fs.existsSync(path.join(root, '03-projects', 'bumbee-money', 'PROJECT.work.md')), true);
+});

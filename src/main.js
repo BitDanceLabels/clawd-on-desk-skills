@@ -2835,13 +2835,27 @@ function createWindow() {
   ipcMain.handle("phase:seed-all", () => {
     const runtime = require("./phase-runtime");
     const router = require("./bumbee-event-router");
-    const seeded = {
-      business: runtime.seedBusinessLoop(),
-      scene: runtime.seedScene(),
-      caps: runtime.costCaps(app.getPath("userData")),
-      router: router.ensureDefaultRouter(EVENT_ROUTER_PATH),
-    };
+    const seeded = runtime.seedFullSystem(app.getPath("userData"));
+    seeded.router = router.ensureDefaultRouter(EVENT_ROUTER_PATH);
     return { ok: true, seeded, status: runtime.phaseStatus(app.getPath("userData")) };
+  });
+  ipcMain.handle("phase:gateway-dry-run", () => {
+    const runtime = require("./phase-runtime");
+    const result = runtime.seedGatewayDryRun();
+    emitSemanticEvent("digest.money_todo.ready", {
+      item_count: result.count,
+      source: "phase-hub-gateway-dry-run",
+    });
+    return result;
+  });
+  ipcMain.handle("phase:seed-business-artifacts", () => {
+    const runtime = require("./phase-runtime");
+    const result = runtime.seedBusinessArtifacts();
+    emitSemanticEvent("business.video.render.done", {
+      source: "phase-hub-business-artifact-fixture",
+      dry_run: true,
+    });
+    return result;
   });
   ipcMain.handle("phase:emit-event", (_event, payload) => emitSemanticEvent(payload?.type || "digest.money_todo.ready", payload?.payload || {}));
   ipcMain.handle("phase:manual-activity", (_event, payload) => {

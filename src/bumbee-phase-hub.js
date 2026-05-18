@@ -66,6 +66,16 @@
   document.getElementById('openVision').addEventListener('click', () => {
     window.bumbeePhaseAPI.openVision();
   });
+  document.getElementById('seedBusiness').addEventListener('click', async () => {
+    const result = await window.bumbeePhaseAPI.seedBusinessArtifacts();
+    write(result);
+    await refresh();
+  });
+  document.getElementById('gatewayDryRun').addEventListener('click', async () => {
+    const result = await window.bumbeePhaseAPI.gatewayDryRun();
+    write(result);
+    await refresh();
+  });
 
   const chips = document.getElementById('eventChips');
   chips.innerHTML = events.map(event => `<button class="secondary" data-event="${event}">${event}</button>`).join('');
