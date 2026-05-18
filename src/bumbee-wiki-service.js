@@ -1209,6 +1209,49 @@ module.exports = function initBumbeeWikiService(opts = {}) {
   return { start, ensureFolder, setupStudio, syncStudio, studioDashboard, newStudioProject, runWorkers, approveAction, runGatewayAction, registerApp, syncOnce, ask, updates, status };
 };
 
+function getExecutionHistory(root, limit = 20) {
+  const log = readExecutionLog(root);
+  const sorted = log.executions.slice().sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+  return sorted.slice(0, limit);
+}
+
+async function runRawGatewaySkill(root, skillName, inputData, options = {}) {
+  ensureStudioTemplate(root);
+  const baseUrl = options.gatewayBaseUrl || "https://gateway.bumbee.asia";
+  const endpoint = `${baseUrl}/api/studio/runs`;
+  const payload = { skill_name: skillName, input_data: inputData, dry_run: options.dryRun === true };
+  const log = readExecutionLog(root);
+  const execution = {
+    id: `raw:${skillName}:${Date.now()}`,
+    type: "raw_skill",
+    skill_name: skillName,
+    endpoint,
+    dry_run: options.dryRun === true,
+    payload,
+    status: options.dryRun === true ? "ready_for_gateway" : "executing",
+    created_at: new Date().toISOString(),
+  };
+  try {
+    if (options.dryRun !== true) {
+      execution.response = await postJson(endpoint, payload, {
+        headers: options.gatewayToken ? { Authorization: `Bearer ${options.gatewayToken}` } : {},
+      });
+      execution.status = "executed";
+    }
+    log.executions.push(execution);
+    writeExecutionLog(root, log);
+    return { ok: true, execution };
+  } catch (err) {
+    execution.status = "failed";
+    execution.error = err.message;
+    const status = err.statusCode || err.status || 0;
+    execution.error_category = status === 401 || status === 403 ? "auth_error" : status >= 500 ? "server_error" : status >= 400 ? "skill_error" : "network_error";
+    log.executions.push(execution);
+    writeExecutionLog(root, log);
+    return { ok: false, error: err.message, execution };
+  }
+}
+
 module.exports.listSyncableFiles = listSyncableFiles;
 module.exports.makeSyncKey = makeSyncKey;
 module.exports.ensureStudioTemplate = ensureStudioTemplate;
@@ -1217,3 +1260,5 @@ module.exports.createStudioProject = createStudioProject;
 module.exports.runStudioWorkers = runStudioWorkers;
 module.exports.approveStudioAction = approveStudioAction;
 module.exports.executeStudioGatewayAction = executeStudioGatewayAction;
+module.exports.getExecutionHistory = getExecutionHistory;
+module.exports.runRawGatewaySkill = runRawGatewaySkill;

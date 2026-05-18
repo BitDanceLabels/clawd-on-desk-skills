@@ -354,6 +354,9 @@ window.electronAPI.onEyeMove((dx, dy) => {
     return;
   }
   applyEyeMove(effectiveDx, dy);
+  if (window.ClawdSkinManager && !window.ClawdSkinManager.isSvgActive()) {
+    window.ClawdSkinManager.dispatchEyeMove(effectiveDx, dy);
+  }
 });
 
 // --- Wake from doze (smooth eye opening) ---

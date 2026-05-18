@@ -43,6 +43,8 @@
         }
       ],
       "category": "public.app-category.entertainment",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "LSUIElement": true,
         "NSCameraUsageDescription": "Bumbee Chat uses the camera when you choose to attach a snapshot to a message.",

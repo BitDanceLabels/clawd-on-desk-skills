@@ -142,8 +142,31 @@
 
   window.addEventListener("resize", fitModelToStage);
 
+  function eyeMove(dx, dy) {
+    if (!model) return;
+    try {
+      model.focus(
+        canvasContainer.clientWidth / 2 + dx * (canvasContainer.clientWidth / 6),
+        canvasContainer.clientHeight / 2 + dy * (canvasContainer.clientHeight / 6)
+      );
+    } catch {}
+  }
+
+  function playReaction(svgFile, durationMs = 2800) {
+    if (!model) return;
+    const name = String(svgFile || "");
+    if (name.includes("error") || name.includes("annoyed")) {
+      startMotion("error");
+    } else if (name.includes("happy") || name.includes("wake")) {
+      startMotion("attention");
+    } else {
+      startMotion("notification");
+    }
+    setTimeout(() => startMotion("idle"), Math.max(700, durationMs));
+  }
+
   window.ClawdLive2DRenderer = {
     isAvailable, load, startMotion, setExpression, unload,
-    fit: fitModelToStage,
+    fit: fitModelToStage, eyeMove, playReaction,
   };
 })();

@@ -123,5 +123,52 @@
     write(result);
   });
 
+  // Gateway Live Execute
+  document.getElementById('gatewayExecuteLive').addEventListener('click', async () => {
+    const result = await window.bumbeePhaseAPI.gatewayExecuteLive({ actionId: 'latest' });
+    write(result);
+    await refresh();
+  });
+
+  // Business Ops Pipeline
+  async function refreshPipeline() {
+    const status = await window.bumbeePhaseAPI.pipelineStatus();
+    const el = document.getElementById('pipelineStatus');
+    const steps = ['B0', 'B2', 'B3_5', 'B4', 'B6_5'];
+    el.innerHTML = steps.map(s => {
+      const st = status[s] || {};
+      const color = st.status === 'done' ? '#7fffd4' : st.status === 'blocked' ? '#ffaa44' : st.status === 'failed' ? '#ff6666' : '#888';
+      return `<span style="display:inline-block;margin:2px 6px 2px 0;padding:3px 8px;border-radius:4px;font-size:11px;background:rgba(255,255,255,0.06);border:1px solid ${color};color:${color}">${s}: ${st.status || 'pending'}</span>`;
+    }).join('');
+  }
+  document.getElementById('pipelineRunFull').addEventListener('click', async () => { write(await window.bumbeePhaseAPI.pipelineRunFull()); await refreshPipeline(); });
+  document.getElementById('pipelineRunB0').addEventListener('click', async () => { write(await window.bumbeePhaseAPI.pipelineRunStep('B0')); await refreshPipeline(); });
+  document.getElementById('pipelineRunB2').addEventListener('click', async () => { write(await window.bumbeePhaseAPI.pipelineRunStep('B2')); await refreshPipeline(); });
+  document.getElementById('pipelineApprove').addEventListener('click', async () => { write(await window.bumbeePhaseAPI.pipelineApprove()); await refreshPipeline(); });
+  document.getElementById('pipelineRunB4').addEventListener('click', async () => { write(await window.bumbeePhaseAPI.pipelineRunStep('B4')); await refreshPipeline(); });
+  document.getElementById('pipelineRunB6_5').addEventListener('click', async () => { write(await window.bumbeePhaseAPI.pipelineRunStep('B6_5')); await refreshPipeline(); });
+
+  // Vision Auto-Capture
+  const visionBtn = document.getElementById('visionToggle');
+  const visionStatusEl = document.getElementById('visionCaptureStatus');
+  async function refreshVisionStatus() {
+    const st = await window.bumbeePhaseAPI.visionStatus();
+    visionStatusEl.textContent = st.running ? `Running — ${st.captureCount} captures, last: ${st.lastCaptureTime || '—'}` : 'Stopped';
+    visionBtn.textContent = st.running ? 'Stop Vision Capture' : 'Start Vision Capture';
+  }
+  visionBtn.addEventListener('click', async () => {
+    const st = await window.bumbeePhaseAPI.visionStatus();
+    if (st.running) { await window.bumbeePhaseAPI.visionStopCapture(); }
+    else { await window.bumbeePhaseAPI.visionStartCapture(); }
+    await refreshVisionStatus();
+  });
+
+  // Scene Viewer
+  document.getElementById('openSceneViewer').addEventListener('click', () => {
+    window.bumbeePhaseAPI.openSceneViewer();
+  });
+
   refresh().catch(err => write({ ok: false, error: err.message || String(err) }));
+  refreshPipeline().catch(() => {});
+  refreshVisionStatus().catch(() => {});
 })();

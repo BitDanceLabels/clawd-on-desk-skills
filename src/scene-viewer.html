@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bumbee 3D Scene Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0e14; color: #effff9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+#canvas-container { width: 100%; height: 100%; position: relative; }
+canvas { display: block; width: 100%; height: 100%; }
+#hud { position: absolute; top: 12px; left: 12px; z-index: 10; }
+#hud h3 { font-size: 13px; color: #bbfff0; margin-bottom: 6px; }
+.checkpoint-list { list-style: none; }
+.checkpoint-list li { padding: 4px 10px; margin: 2px 0; background: rgba(48, 200, 140, 0.12); border: 1px solid rgba(108, 255, 198, 0.2); border-radius: 6px; font-size: 11px; cursor: pointer; transition: background 0.15s; }
+.checkpoint-list li:hover { background: rgba(48, 200, 140, 0.28); }
+.checkpoint-list li.active { background: rgba(48, 224, 177, 0.3); border-color: rgba(108, 255, 198, 0.5); }
+#info { position: absolute; bottom: 12px; left: 12px; font-size: 10px; color: rgba(200, 255, 240, 0.5); }
+#loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #0a0e14; font-size: 14px; color: #7fffd4; z-index: 20; }
+</style>
+</head>
+<body>
+<div id="canvas-container">
+  <canvas id="scene-canvas"></canvas>
+  <div id="hud"><h3 id="scene-title">Scene Viewer</h3><ul class="checkpoint-list" id="cp-list"></ul></div>
+  <div id="info">WASD to move • Mouse to look • Scroll to zoom • Click checkpoint to jump</div>
+  <div id="loading">Loading scene...</div>
+</div>
+<script src="renderer-bundles/vrm.bundle.js"></script>
+<script>
+(function() {
+  const { THREE, GLTFLoader, VRMLoaderPlugin, VRMUtils } = window.ClawdVRM;
+  const canvas = document.getElementById("scene-canvas");
+  const container = document.getElementById("canvas-container");
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a1520);
+  scene.fog = new THREE.FogExp2(0x0a1520, 0.04);
+
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+  camera.position.set(0, 2, 5);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambient);
+  const sun = new THREE.DirectionalLight(0xffeedd, 1.0);
+  sun.position.set(5, 10, 5);
+  sun.castShadow = true;
+  scene.add(sun);
+
+  const grid = new THREE.GridHelper(50, 50, 0x1a3a2a, 0x0d1f15);
+  scene.add(grid);
+
+  const clock = new THREE.Clock();
+  let character = null;
+  let checkpoints = [];
+  let moveState = { forward: false, backward: false, left: false, right: false };
+  let yaw = 0, pitch = 0;
+  let isPointerLocked = false;
+
+  function resize() {
+    const w = container.clientWidth || 1;
+    const h = container.clientHeight || 1;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  canvas.addEventListener("click", () => { if (!isPointerLocked) canvas.requestPointerLock(); });
+  document.addEventListener("pointerlockchange", () => { isPointerLocked = !!document.pointerLockElement; });
+  document.addEventListener("mousemove", (e) => {
+    if (!isPointerLocked) return;
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-1.2, Math.min(1.2, pitch));
+  });
+  canvas.addEventListener("wheel", (e) => {
+    camera.position.addScaledVector(camera.getWorldDirection(new THREE.Vector3()), -e.deltaY * 0.01);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.code === "KeyW") moveState.forward = true;
+    if (e.code === "KeyS") moveState.backward = true;
+    if (e.code === "KeyA") moveState.left = true;
+    if (e.code === "KeyD") moveState.right = true;
+  });
+  document.addEventListener("keyup", (e) => {
+    if (e.code === "KeyW") moveState.forward = false;
+    if (e.code === "KeyS") moveState.backward = false;
+    if (e.code === "KeyA") moveState.left = false;
+    if (e.code === "KeyD") moveState.right = false;
+  });
+
+  function tick() {
+    const dt = clock.getDelta();
+    const speed = 4 * dt;
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.y = 0; dir.normalize();
+    const right = new THREE.Vector3().crossVectors(dir, camera.up).normalize();
+    if (moveState.forward) camera.position.addScaledVector(dir, speed);
+    if (moveState.backward) camera.position.addScaledVector(dir, -speed);
+    if (moveState.left) camera.position.addScaledVector(right, -speed);
+    if (moveState.right) camera.position.addScaledVector(right, speed);
+
+    const euler = new THREE.Euler(pitch, yaw, 0, "YXZ");
+    camera.quaternion.setFromEuler(euler);
+
+    if (character?.update) character.update(dt);
+    renderer.render(scene, camera);
+    requestAnimationFrame(tick);
+  }
+  tick();
+
+  function jumpToCheckpoint(cp) {
+    camera.position.set(cp.position[0], cp.position[1] + 1.6, cp.position[2] + 3);
+    yaw = 0; pitch = -0.15;
+    document.querySelectorAll(".checkpoint-list li").forEach(li => li.classList.toggle("active", li.dataset.id === cp.id));
+  }
+
+  function renderCheckpoints(cps) {
+    const list = document.getElementById("cp-list");
+    list.innerHTML = "";
+    cps.forEach(cp => {
+      const li = document.createElement("li");
+      li.textContent = cp.label || cp.id;
+      li.dataset.id = cp.id;
+      li.addEventListener("click", () => jumpToCheckpoint(cp));
+      list.appendChild(li);
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0x7fffd4, emissive: 0x2a8a6a, transparent: true, opacity: 0.7 })
+      );
+      sphere.position.set(...cp.position);
+      scene.add(sphere);
+    });
+  }
+
+  async function loadGLB(url) {
+    const loader = new GLTFLoader();
+    return new Promise((resolve, reject) => {
+      loader.load(url, (gltf) => {
+        scene.add(gltf.scene);
+        resolve(gltf);
+      }, undefined, reject);
+    });
+  }
+
+  async function loadVRMCharacter(url) {
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRMLoaderPlugin(parser));
+    return new Promise((resolve, reject) => {
+      loader.load(url, (gltf) => {
+        const vrm = gltf.userData.vrm;
+        try { VRMUtils.removeUnnecessaryVertices(gltf.scene); } catch {}
+        try { VRMUtils.removeUnnecessaryJoints(gltf.scene); } catch {}
+        vrm.scene.rotation.y = Math.PI;
+        scene.add(vrm.scene);
+        character = vrm;
+        resolve(vrm);
+      }, undefined, reject);
+    });
+  }
+
+  window.sceneAPI.loadScene().then(async (config) => {
+    if (!config) { document.getElementById("loading").textContent = "No scene configured"; return; }
+    document.getElementById("scene-title").textContent = config.title || "Scene Viewer";
+    checkpoints = config.checkpoints || [];
+    renderCheckpoints(checkpoints);
+    if (config.scene_file) {
+      try { await loadGLB("file://" + config.scene_file); } catch (e) { console.warn("Scene load failed:", e); }
+    }
+    if (config.character_file) {
+      try { await loadVRMCharacter("file://" + config.character_file); } catch (e) { console.warn("Character load failed:", e); }
+    }
+    if (checkpoints.length) jumpToCheckpoint(checkpoints[0]);
+    document.getElementById("loading").style.display = "none";
+  }).catch(() => {
+    document.getElementById("loading").textContent = "Failed to load scene";
+  });
+})();
+</script>
+</body>
+</html>

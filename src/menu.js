@@ -409,6 +409,17 @@ module.exports = function initMenu(ctx) {
       },
       { type: "separator" },
       {
+        label: ctx.visionCaptureRunning?.() ? "👁 Vision Tracking: ON" : "👁 Vision Tracking: OFF",
+        type: "checkbox",
+        checked: !!ctx.visionCaptureRunning?.(),
+        click: () => {
+          if (ctx.toggleVisionCapture) ctx.toggleVisionCapture();
+          buildContextMenu();
+          buildTrayMenu();
+        },
+      },
+      { type: "separator" },
+      {
         label: t("bumbeeStatus"),
         click: () => {
           const { dialog } = require("electron");

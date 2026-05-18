@@ -25,4 +25,10 @@ contextBridge.exposeInMainWorld("bumbeeChat", {
   vocabReset: () => ipcRenderer.invoke("bumbee-vocab:reset"),
   vocabSettings: (payload) => ipcRenderer.invoke("bumbee-vocab:settings", payload),
   coachEvent: (payload) => ipcRenderer.send("bumbee-coach:event", payload),
+  visionCaptureNow: () => ipcRenderer.invoke("vision:capture-now"),
+  visionScreenContext: () => ipcRenderer.invoke("vision:screen-context"),
+  visionDwellSummary: () => ipcRenderer.invoke("vision:dwell-summary"),
+  visionStatus: () => ipcRenderer.invoke("vision:status"),
+  visionStartCapture: (opts) => ipcRenderer.invoke("vision:start-capture", opts),
+  visionStopCapture: () => ipcRenderer.invoke("vision:stop-capture"),
 });

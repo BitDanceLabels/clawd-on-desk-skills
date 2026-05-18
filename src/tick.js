@@ -103,6 +103,7 @@ function startMainTick() {
     const moved = lastCursorX !== null && (cursor.x !== lastCursorX || cursor.y !== lastCursorY);
     lastCursorX = cursor.x;
     lastCursorY = cursor.y;
+    recordDwellPosition(cursor.x, cursor.y);
 
     // Normal idle: mouse idle detection + sleep sequence
     if (idleNow) {
@@ -217,6 +218,30 @@ Object.defineProperty(startMainTick, '_mouseStillSince', {
   get() { return mouseStillSince; },
 });
 
-return { startMainTick, resetIdleTimer, cleanup, get _mouseStillSince() { return mouseStillSince; } };
+const DWELL_BUFFER_SIZE = 120;
+const DWELL_REGION_RADIUS = 40;
+const dwellBuffer = [];
+
+function recordDwellPosition(x, y) {
+  dwellBuffer.push({ x, y, t: Date.now() });
+  if (dwellBuffer.length > DWELL_BUFFER_SIZE) dwellBuffer.shift();
+}
+
+function getDwellInfo() {
+  if (dwellBuffer.length < 10) return null;
+  const latest = dwellBuffer[dwellBuffer.length - 1];
+  let count = 0;
+  for (let i = dwellBuffer.length - 1; i >= 0; i--) {
+    const p = dwellBuffer[i];
+    if (Math.abs(p.x - latest.x) < DWELL_REGION_RADIUS && Math.abs(p.y - latest.y) < DWELL_REGION_RADIUS) {
+      count++;
+    } else break;
+  }
+  if (count < 10) return null;
+  const oldest = dwellBuffer[dwellBuffer.length - count];
+  return { x: latest.x, y: latest.y, durationMs: latest.t - oldest.t, samples: count };
+}
+
+return { startMainTick, resetIdleTimer, cleanup, getDwellInfo, get _mouseStillSince() { return mouseStillSince; } };
 
 };

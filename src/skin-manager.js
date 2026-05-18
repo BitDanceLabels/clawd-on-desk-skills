@@ -101,5 +101,13 @@
     return false;
   }
 
-  window.ClawdSkinManager = { setSkin, getActiveSkin, isSvgActive, dispatchState, dispatchReaction };
+  function dispatchEyeMove(dx, dy) {
+    if (activeSkin.type === "live2d" && window.ClawdLive2DRenderer?.eyeMove) {
+      window.ClawdLive2DRenderer.eyeMove(dx, dy);
+    } else if (activeSkin.type === "vrm" && window.ClawdVRMRenderer?.eyeMove) {
+      window.ClawdVRMRenderer.eyeMove(dx, dy);
+    }
+  }
+
+  window.ClawdSkinManager = { setSkin, getActiveSkin, isSvgActive, dispatchState, dispatchReaction, dispatchEyeMove };
 })();

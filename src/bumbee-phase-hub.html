@@ -50,6 +50,28 @@
       <p>Tạo đủ artifact B0/B2/B3.5/B4/B6.5 và payload dry-run gửi qua Bumbee Gateway. Không tự publish.</p>
       <button id="seedBusiness" class="secondary">Seed Business Artifacts</button>
       <button id="gatewayDryRun" class="secondary">Prepare Gateway Dry Run</button>
+      <button id="gatewayExecuteLive" class="secondary">Gateway Live Execute</button>
+    </section>
+
+    <section class="panel">
+      <h2>Business Ops Pipeline</h2>
+      <p>B0→B2→B3.5→B4→B6.5 content pipeline. B3.5 yêu cầu founder duyệt trước khi tiếp.</p>
+      <div id="pipelineStatus"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button id="pipelineRunFull" class="secondary">Run Full Pipeline</button>
+        <button id="pipelineRunB0" class="secondary">Run B0</button>
+        <button id="pipelineRunB2" class="secondary">Run B2</button>
+        <button id="pipelineApprove" class="secondary">Approve B3.5</button>
+        <button id="pipelineRunB4" class="secondary">Run B4</button>
+        <button id="pipelineRunB6_5" class="secondary">Run B6.5</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Vision Auto-Capture</h2>
+      <p>Chụp màn hình định kỳ + theo dõi cursor dwell → ghi vào idea matrix.</p>
+      <div id="visionCaptureStatus" style="margin-bottom:8px;font-size:12px;color:#7fffd4">Stopped</div>
+      <button id="visionToggle" class="secondary">Start Vision Capture</button>
     </section>
 
     <section class="panel">
@@ -59,6 +81,7 @@
       <button id="openDonate" class="secondary">Open Payment Link</button>
       <button id="openDonationSettings" class="secondary">Donation Settings</button>
       <button id="syncStudio" class="secondary">Sync Studio To Wiki</button>
+      <button id="openSceneViewer" class="secondary">Open 3D Scene Viewer</button>
     </section>
 
     <section class="panel">

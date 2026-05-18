@@ -76,6 +76,7 @@
     if (currentVrm) {
       applyProceduralMotion(dt);
       applyExpressionMotion(dt);
+      applyLookAt(dt);
     }
     if (currentVrm && currentVrm.update) currentVrm.update(dt);
     renderer.render(scene, camera);
@@ -292,5 +293,36 @@
     clock = null;
   }
 
-  window.ClawdVRMRenderer = { isAvailable, load, startMotion, playReaction, unload };
+  let lookTargetX = 0;
+  let lookTargetY = 0;
+  let lookCurrentX = 0;
+  let lookCurrentY = 0;
+
+  function eyeMove(dx, dy) {
+    lookTargetX = Math.max(-1, Math.min(1, dx / 3));
+    lookTargetY = Math.max(-1, Math.min(1, dy / 3));
+  }
+
+  function applyLookAt(dt) {
+    const alpha = Math.min(1, dt * 6);
+    lookCurrentX += (lookTargetX - lookCurrentX) * alpha;
+    lookCurrentY += (lookTargetY - lookCurrentY) * alpha;
+    const headYaw = lookCurrentX * 0.25;
+    const headPitch = lookCurrentY * 0.15;
+    const head = getBone("head");
+    const baseHead = boneBases.get("head");
+    if (head && baseHead) {
+      head.rotation.y += headYaw;
+      head.rotation.x += headPitch;
+    }
+    if (currentVrm?.lookAt) {
+      currentVrm.lookAt.target = undefined;
+      try {
+        currentVrm.lookAt.applier?.applyYawPitch?.(lookCurrentX * 20, lookCurrentY * -15);
+      } catch {}
+    }
+  }
+
+
+  window.ClawdVRMRenderer = { isAvailable, load, startMotion, playReaction, unload, eyeMove };
 })();

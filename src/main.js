@@ -174,6 +174,7 @@ let visionWin;
 let vocabWin;
 let phaseHubWin;
 let donationSettingsWin;
+let sceneViewerWin;
 let chatAutoHideTimer = null;
 let chatActivityState = { typing: false, camera: false, voice: false, pending: false };
 let tray = null;
@@ -956,6 +957,58 @@ async function runBumbeeStudioGatewayAction(options) {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+}
+
+function showGatewayConfirmation(action, payload, endpoint) {
+  return new Promise((resolve) => {
+    const { BrowserWindow } = require("electron");
+    const confirmWin = new BrowserWindow({
+      width: 520, height: 480,
+      resizable: true, minimizable: false,
+      title: "Gateway Execution",
+      show: false,
+      backgroundColor: "#0b0f14",
+      alwaysOnTop: true,
+      webPreferences: {
+        preload: path.join(__dirname, "preload-gateway-confirm.js"),
+        contextIsolation: true, nodeIntegration: false, sandbox: false,
+      },
+    });
+    confirmWin.loadFile(path.join(__dirname, "gateway-confirm.html"));
+    let decided = false;
+    confirmWin.webContents.once("did-finish-load", () => {
+      const token = readTokenFile(getBumbeeTokenFilePath());
+      confirmWin.webContents.send("gateway-show", {
+        action, payload, endpoint,
+        skillName: payload?.skill_name || action?.type || "unknown",
+        tokenStatus: token ? "valid" : "missing",
+      });
+    });
+    confirmWin.once("ready-to-show", () => confirmWin.show());
+    ipcMain.once("gateway-decide", (_e, approved) => {
+      decided = true;
+      if (confirmWin && !confirmWin.isDestroyed()) confirmWin.close();
+      resolve({ approved });
+    });
+    ipcMain.once("gateway-confirm-height", (_e, h) => {
+      if (confirmWin && !confirmWin.isDestroyed()) confirmWin.setContentSize(520, Math.min(700, Math.max(320, h)));
+    });
+    confirmWin.on("closed", () => { if (!decided) resolve({ approved: false }); });
+  });
+}
+
+async function runBumbeeStudioGatewayActionLive(options) {
+  if (!_wiki) return { ok: false, error: "Bumbee Wiki service is not available yet" };
+  const payload = options || {};
+  const token = payload.gatewayToken || readTokenFile(getBumbeeTokenFilePath());
+  const baseUrl = payload.gatewayBaseUrl || process.env.BUMBEE_GATEWAY_URL || "https://gateway.bumbee.asia";
+  const dryResult = await _wiki.runGatewayAction({ ...payload, dryRun: true, gatewayToken: token, gatewayBaseUrl: baseUrl });
+  if (!dryResult.ok) return dryResult;
+  const { approved } = await showGatewayConfirmation(
+    dryResult.action, dryResult.execution?.payload, dryResult.execution?.endpoint || `${baseUrl}/api/studio/runs`
+  );
+  if (!approved) return { ok: false, cancelled: true };
+  return await _wiki.runGatewayAction({ ...payload, dryRun: false, confirm: true, gatewayToken: token, gatewayBaseUrl: baseUrl });
 }
 
 function getSmartStatusPayload() {
@@ -1925,6 +1978,32 @@ function openPhaseHub() {
   });
 }
 
+function openSceneViewer() {
+  if (sceneViewerWin && !sceneViewerWin.isDestroyed()) {
+    sceneViewerWin.show();
+    sceneViewerWin.focus();
+    return;
+  }
+  const primary = screen.getPrimaryDisplay().workArea;
+  sceneViewerWin = new BrowserWindow({
+    width: Math.min(1200, primary.width - 80),
+    height: Math.min(800, primary.height - 80),
+    minWidth: 800, minHeight: 600,
+    title: "Bumbee 3D Scene Viewer",
+    show: false,
+    backgroundColor: "#0a0e14",
+    webPreferences: {
+      preload: path.join(__dirname, "preload-scene.js"),
+      contextIsolation: true, nodeIntegration: false, sandbox: false,
+    },
+  });
+  sceneViewerWin.loadFile(path.join(__dirname, "scene-viewer.html"));
+  sceneViewerWin.once("ready-to-show", () => {
+    if (sceneViewerWin && !sceneViewerWin.isDestroyed()) sceneViewerWin.show();
+  });
+  sceneViewerWin.on("closed", () => { sceneViewerWin = null; });
+}
+
 function openDonationSettings() {
   if (donationSettingsWin && !donationSettingsWin.isDestroyed()) {
     donationSettingsWin.show();
@@ -2254,6 +2333,28 @@ const _tickCtx = {
 const _tick = require("./tick")(_tickCtx);
 const { startMainTick, resetIdleTimer } = _tick;
 
+// ── Vision Auto-Capture ──
+const _visionCapture = require("./vision-auto-capture")({
+  getStudioFolder: () => getBumbeeStudioFolderPath(),
+  getDwellInfo: () => _tick.getDwellInfo(),
+  screenWidth: () => {
+    const primary = screen.getPrimaryDisplay();
+    return primary ? primary.workAreaSize.width : 1920;
+  },
+  getActiveWindowTitle: () => {
+    const focused = BrowserWindow.getFocusedWindow();
+    return focused ? focused.getTitle() : null;
+  },
+  runGatewaySkill: async (skillName, inputData) => {
+    if (!_wiki) return null;
+    const wikiMod = require("./bumbee-wiki-service");
+    return wikiMod.runRawGatewaySkill(getBumbeeStudioFolderPath(), skillName, inputData, {
+      gatewayToken: readTokenFile(getBumbeeTokenFilePath()),
+      gatewayBaseUrl: process.env.BUMBEE_GATEWAY_URL || "https://gateway.bumbee.asia",
+    });
+  },
+});
+
 // ── Terminal focus — delegated to src/focus.js ──
 const _focus = require("./focus")({ _allowSetForeground });
 const { initFocusHelper, killFocusHelper, focusTerminalWindow, clearMacFocusCooldownTimer } = _focus;
@@ -2530,6 +2631,11 @@ const _menuCtx = {
   openBumbeeChat,
   openBumbeeVocab: openVocabTinder,
   openBumbeePhaseHub: openPhaseHub,
+  visionCaptureRunning: () => _visionCapture.isRunning(),
+  toggleVisionCapture: () => {
+    if (_visionCapture.isRunning()) _visionCapture.stop();
+    else _visionCapture.start();
+  },
 };
 const _menu = require("./menu")(_menuCtx);
 const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
@@ -2812,6 +2918,11 @@ function createWindow() {
   ipcMain.handle("bumbee-studio:run-workers", (_event, payload) => runBumbeeStudioWorkers(payload));
   ipcMain.handle("bumbee-studio:approve-action", (_event, payload) => approveBumbeeStudioAction(payload));
   ipcMain.handle("bumbee-studio:run-gateway-action", (_event, payload) => runBumbeeStudioGatewayAction(payload));
+  ipcMain.handle("gateway:execute-live", (_event, payload) => runBumbeeStudioGatewayActionLive(payload));
+  ipcMain.handle("bumbee-studio:execution-history", () => {
+    const wikiMod = require("./bumbee-wiki-service");
+    return wikiMod.getExecutionHistory(getBumbeeStudioFolderPath());
+  });
   ipcMain.handle("bumbee-wiki:status", () => _wiki ? { ok: true, ..._wiki.status() } : { ok: false, error: "Bumbee Wiki service is not available yet" });
   ipcMain.handle("bumbee-chat:vision-audio", (_event, payload) => transcribeVisionAudio(payload));
   ipcMain.handle("bumbee-vocab:list", () => listVocabItems());
@@ -2831,6 +2942,50 @@ function createWindow() {
     return { ok: true };
   });
   ipcMain.handle("vocab:open-donate", () => openBumbeeDonate());
+  ipcMain.handle("vision:start-capture", (_event, opts) => { _visionCapture.start(opts); return { ok: true }; });
+  ipcMain.handle("vision:stop-capture", () => { _visionCapture.stop(); return { ok: true }; });
+  ipcMain.handle("vision:status", () => _visionCapture.stats());
+  ipcMain.handle("vision:capture-now", () => _visionCapture.captureNow());
+  ipcMain.handle("vision:screen-context", () => _visionCapture.getScreenContext());
+  ipcMain.handle("vision:dwell-summary", () => _visionCapture.getDwellSummary());
+
+  // ── Business Ops Pipeline ──
+  const _pipeline = require("./business-ops-pipeline");
+  const _pipelineCtx = {
+    runGatewaySkill: async (skillName, inputData) => {
+      const wikiMod = require("./bumbee-wiki-service");
+      return wikiMod.runRawGatewaySkill(getBumbeeStudioFolderPath(), skillName, inputData, {
+        gatewayToken: readTokenFile(getBumbeeTokenFilePath()),
+        gatewayBaseUrl: process.env.BUMBEE_GATEWAY_URL || "https://gateway.bumbee.asia",
+      });
+    },
+  };
+  ipcMain.handle("pipeline:status", (_event, date) => _pipeline.getStepStatus(getBumbeeStudioFolderPath(), date));
+  ipcMain.handle("pipeline:run-step", (_event, { step, date }) => _pipeline.runStep(getBumbeeStudioFolderPath(), step, _pipelineCtx, date));
+  ipcMain.handle("pipeline:run-full", (_event, date) => _pipeline.runFullPipeline(getBumbeeStudioFolderPath(), _pipelineCtx, date));
+  ipcMain.handle("pipeline:approve", (_event, { date, reason }) => _pipeline.approvePipeline(getBumbeeStudioFolderPath(), date, reason));
+  ipcMain.handle("pipeline:reject", (_event, { date, reason }) => _pipeline.rejectPipeline(getBumbeeStudioFolderPath(), date, reason));
+
+  // ── Scene Viewer ──
+  ipcMain.handle("scene:load-config", () => {
+    const studioRoot = getBumbeeStudioFolderPath();
+    const configPath = path.join(studioRoot, "scenes", "sample-scene", "scene.config.json");
+    try { return JSON.parse(fs.readFileSync(configPath, "utf8")); } catch { return null; }
+  });
+  ipcMain.handle("scene:list", () => {
+    const studioRoot = getBumbeeStudioFolderPath();
+    const scenesDir = path.join(studioRoot, "scenes");
+    try {
+      return fs.readdirSync(scenesDir, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => {
+          const cfgPath = path.join(scenesDir, d.name, "scene.config.json");
+          try { const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8")); return { id: d.name, ...cfg }; } catch { return { id: d.name }; }
+        });
+    } catch { return []; }
+  });
+  ipcMain.handle("scene:open-viewer", () => { openSceneViewer(); return { ok: true }; });
+
   ipcMain.handle("phase:status", () => require("./phase-runtime").phaseStatus(app.getPath("userData")));
   ipcMain.handle("phase:seed-all", () => {
     const runtime = require("./phase-runtime");
@@ -3226,6 +3381,7 @@ if (!gotTheLock) {
     _server.cleanup();
     _state.cleanup();
     _tick.cleanup();
+    _visionCapture.cleanup();
     _mini.cleanup();
     _rabbit.cleanup();
     if (_codexMonitor) _codexMonitor.stop();

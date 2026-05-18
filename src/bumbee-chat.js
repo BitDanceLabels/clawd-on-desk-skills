@@ -207,6 +207,7 @@ const cameraBtn = document.getElementById("cameraBtn");
 const voiceBtn = document.getElementById("voiceBtn");
 const liveBtn = document.getElementById("liveBtn");
 const visionBtn = document.getElementById("visionBtn");
+const screenBtn = document.getElementById("screenBtn");
 const studioSetupBtn = document.getElementById("studioSetupBtn");
 const studioSyncBtn = document.getElementById("studioSyncBtn");
 const studioRefreshBtn = document.getElementById("studioRefreshBtn");
@@ -235,11 +236,13 @@ const VISION_AUDIO_SAMPLE_RATE = 16000;
 
 let cameraStream = null;
 let cameraStarting = false;
+let preferFrontCamera = false;
 let capturedFrame = null;
 let micStream = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let capturedAudio = null;
+let capturedScreenContext = null;
 let micAudioContext = null;
 let micSourceNode = null;
 let micProcessorNode = null;
@@ -963,7 +966,17 @@ async function sendPrompt(displayText) {
   let query = promptInput.value.trim();
   if (!query && capturedAudio) query = "Hãy nghe đoạn ghi âm này và trả lời bằng tiếng Việt như trợ lý công việc.";
   if (!query && capturedFrame) query = "Hãy xem ảnh camera này và trả lời bằng tiếng Việt.";
+  if (!query && capturedScreenContext) query = "Hãy xem màn hình tôi đang nhìn và cho biết tôi đang làm gì, có gợi ý gì không?";
   if (!query) return;
+
+  const screenKeywords = /màn hình|screen|đang nhìn|đang xem|đang làm gì|looking at|what.?am.?i|on my screen|tui đang|tôi đang|focus|con trỏ|cursor/i;
+  if (!capturedScreenContext && screenKeywords.test(query) && window.bumbeeChat.visionCaptureNow) {
+    try {
+      const ctx = await window.bumbeeChat.visionCaptureNow();
+      if (ctx) capturedScreenContext = ctx;
+    } catch {}
+  }
+
   const requestId = ++chatRequestId;
   promptInput.value = "";
   addMessage("user", displayText || query);
@@ -982,6 +995,15 @@ async function sendPrompt(displayText) {
       audio_data_url: capturedAudio.dataUrl,
       note: "Microphone recording included for multimodal gateways; text-only gateways may ignore it.",
     } : null,
+    screen: capturedScreenContext ? {
+      captured_at: capturedScreenContext.timestamp,
+      window_title: capturedScreenContext.windowTitle,
+      dwell_crop_base64: capturedScreenContext.dwellCropBase64 || null,
+      full_screen_base64: capturedScreenContext.fullScreenBase64 || null,
+      ai_analysis: capturedScreenContext.aiAnalysis || null,
+      recent_dwells: capturedScreenContext.recentDwells || [],
+      note: "Screen capture with cursor dwell analysis. AI should use this to understand user's current focus.",
+    } : null,
   };
 
   try {
@@ -997,6 +1019,8 @@ async function sendPrompt(displayText) {
     if (result.ok && !result.error) {
       capturedAudio = null;
       capturedFrame = null;
+      capturedScreenContext = null;
+      screenBtn.textContent = "Screen";
     }
   } catch (err) {
     if (requestId !== chatRequestId) return;
@@ -1023,9 +1047,16 @@ async function startCamera() {
     const selected = cameraDeviceSelect.value;
     const iphoneCamera = videoInputs.cameras.find((device) => /iphone|continuity/i.test(device.label || ""));
     const deviceId = selected || iphoneCamera?.deviceId || "";
-    const video = deviceId
-      ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      : { width: { ideal: 1280 }, height: { ideal: 720 } };
+    let video;
+    if (preferFrontCamera) {
+      video = deviceId
+        ? { deviceId: { exact: deviceId }, facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } };
+    } else {
+      video = deviceId
+        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : { width: { ideal: 1280 }, height: { ideal: 720 } };
+    }
     cameraStream = await getUserMediaWithTimeout({
       video,
       audio: false,
@@ -1791,6 +1822,15 @@ cameraBtn.addEventListener("click", () => {
   else startCamera();
 });
 captureBtn.addEventListener("click", captureFrame);
+document.getElementById("flipCameraBtn").addEventListener("click", async () => {
+  preferFrontCamera = !preferFrontCamera;
+  document.getElementById("flipCameraBtn").textContent = preferFrontCamera ? "Back" : "Front";
+  addMessage("system", `Switching to ${preferFrontCamera ? "front" : "back"} camera...`);
+  if (cameraStream) {
+    stopCamera();
+    await startCamera();
+  }
+});
 stopCameraBtn.addEventListener("click", stopCamera);
 
 voiceBtn.addEventListener("click", () => {
@@ -1802,6 +1842,26 @@ liveBtn.addEventListener("click", () => {
   if (voiceWanted || micStream) stopVoice({ send: false });
   if (liveActive) stopLiveMode();
   else startLiveMode();
+});
+screenBtn.addEventListener("click", async () => {
+  screenBtn.disabled = true;
+  screenBtn.textContent = "Capturing...";
+  try {
+    const ctx = await window.bumbeeChat.visionCaptureNow();
+    if (ctx) {
+      capturedScreenContext = ctx;
+      screenBtn.textContent = "Screen ✓";
+      addMessage("system", `Screen captured: ${ctx.windowTitle || "unknown window"}${ctx.aiAnalysis ? "\nAI: " + ctx.aiAnalysis : ""}`);
+    } else {
+      addMessage("system", "Screen capture failed — no screen source available.");
+      screenBtn.textContent = "Screen";
+    }
+  } catch (err) {
+    addMessage("system", `Screen capture error: ${err.message}`);
+    screenBtn.textContent = "Screen";
+  } finally {
+    screenBtn.disabled = false;
+  }
 });
 visionBtn.addEventListener("click", () => {
   window.bumbeeChat.openVision();

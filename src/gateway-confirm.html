@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --card-bg: linear-gradient(180deg, rgba(9, 27, 35, 0.92), rgba(14, 18, 30, 0.88));
+  --card-border: rgba(108, 255, 198, 0.14);
+  --text-primary: #effff9;
+  --header-color: #bbfff0;
+  --cmd-bg: rgba(3, 15, 22, 0.54);
+  --cmd-color: #c9fff3;
+  --approve-bg: rgba(48, 200, 140, 0.22);
+  --approve-border: rgba(48, 224, 177, 0.5);
+  --cancel-bg: rgba(255, 255, 255, 0.05);
+  --cancel-border: rgba(158, 255, 221, 0.14);
+}
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--text-primary); user-select: none; }
+.card { margin: 8px; padding: 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; backdrop-filter: blur(16px); box-shadow: 0 8px 20px rgba(0,0,0,0.28); }
+h2 { font-size: 13px; color: var(--header-color); margin-bottom: 10px; letter-spacing: 0.4px; }
+.meta { font-size: 11px; color: rgba(200, 255, 240, 0.65); margin-bottom: 4px; }
+.meta span { color: var(--cmd-color); }
+.token-status { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+.token-ok { background: rgba(48, 200, 140, 0.18); color: #7fffd4; }
+.token-missing { background: rgba(255, 100, 80, 0.18); color: #ff9080; }
+.payload-box { background: var(--cmd-bg); border: 1px solid rgba(111, 255, 213, 0.08); border-radius: 6px; padding: 10px; margin: 8px 0; max-height: 260px; overflow-y: auto; font-family: "SF Mono", "Fira Code", monospace; font-size: 11px; line-height: 1.5; color: var(--cmd-color); white-space: pre-wrap; word-break: break-all; }
+.payload-box::-webkit-scrollbar { width: 6px; }
+.payload-box::-webkit-scrollbar-thumb { background: rgba(126, 255, 211, 0.26); border-radius: 3px; }
+.buttons { display: flex; gap: 8px; margin-top: 12px; }
+.btn { flex: 1; padding: 9px 0; border-radius: 8px; border: 1px solid; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.15s; }
+.btn-approve { background: var(--approve-bg); border-color: var(--approve-border); color: #7fffd4; }
+.btn-approve:hover { background: rgba(48, 200, 140, 0.35); }
+.btn-cancel { background: var(--cancel-bg); border-color: var(--cancel-border); color: #d8fff4; }
+.btn-cancel:hover { background: rgba(255, 255, 255, 0.08); }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <h2>Gateway Execution Confirmation</h2>
+  <div class="meta">Skill: <span id="skill-name">—</span></div>
+  <div class="meta">Endpoint: <span id="endpoint">—</span></div>
+  <div id="token-el" class="token-status token-missing">No token</div>
+  <div class="payload-box" id="payload"></div>
+  <div class="buttons">
+    <button class="btn btn-approve" id="btn-approve">Approve &amp; Execute</button>
+    <button class="btn btn-cancel" id="btn-cancel">Cancel</button>
+  </div>
+</div>
+<script>
+window.gatewayAPI.onShowPayload((data) => {
+  document.getElementById("skill-name").textContent = data.skillName || data.action?.type || "unknown";
+  document.getElementById("endpoint").textContent = data.endpoint || "—";
+  const tel = document.getElementById("token-el");
+  if (data.tokenStatus === "valid") { tel.textContent = "Token OK"; tel.className = "token-status token-ok"; }
+  else { tel.textContent = "No token"; tel.className = "token-status token-missing"; }
+  document.getElementById("payload").textContent = JSON.stringify(data.payload, null, 2);
+  requestAnimationFrame(() => {
+    const h = document.getElementById("card").offsetHeight + 20;
+    window.gatewayAPI.reportHeight(h);
+  });
+});
+document.getElementById("btn-approve").addEventListener("click", () => window.gatewayAPI.decide(true));
+document.getElementById("btn-cancel").addEventListener("click", () => window.gatewayAPI.decide(false));
+</script>
+</body>
+</html>
