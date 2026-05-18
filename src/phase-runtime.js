@@ -42,7 +42,7 @@ function phaseStatus(userDataPath, studioRoot = DEFAULT_STUDIO_ROOT) {
     phase3_avatar_router: fs.existsSync(eventRouterPath) ? 'ready' : 'needs-init',
     phase4_business_loop: fs.existsSync(matrixPath) && fs.existsSync(inboxPath) ? 'ready' : 'needs-seed',
     phase5_scene_viewer: fs.existsSync(sceneConfigPath) ? 'ready' : 'needs-seed',
-    watcher_mode: 'manual-fixture-ready',
+    watcher_mode: 'vision-bumbee-ready-manual-fixture',
     files: { matrixPath, inboxPath, digestPath, sceneConfigPath, eventRouterPath, reactionLogPath },
   };
 }
@@ -84,7 +84,7 @@ function seedBusinessLoop(studioRoot = DEFAULT_STUDIO_ROOT, now = new Date()) {
     '',
     '- Gate: approve manually before public posting.',
     '- Safety: no third-party copyrighted screen content in demo footage.',
-    '- Fallback: post manually from phone if TikTok API is not approved.',
+    '- TikTok: manual posting by founder; no official TikTok API required for this workflow.',
     '',
   ].join('\n');
 

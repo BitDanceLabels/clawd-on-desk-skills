@@ -23,7 +23,7 @@
       ['Phase 3', 'Avatar router + emotion reaction log', data.phase3_avatar_router],
       ['Phase 4', 'Business content loop + inbox + dashboard', data.phase4_business_loop],
       ['Phase 5', 'Scene viewer config + walking-tour placeholder', data.phase5_scene_viewer],
-      ['Watcher', 'Manual fixture mode until native Apple Vision helper ships', data.watcher_mode],
+      ['Watcher', 'Vision Bumbee is available; manual fixture tests local idea-matrix writes', data.watcher_mode],
     ];
     phaseGrid.innerHTML = cards.map(([title, desc, state]) => {
       const ready = String(state).includes('ready');
