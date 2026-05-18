@@ -23,14 +23,20 @@ module.exports = function initVisionAutoCapture(ctx) {
   }
 
   function readInbox(filePath) {
-    try { return JSON.parse(fs.readFileSync(filePath, "utf8")); } catch { return []; }
+    try { return JSON.parse(fs.readFileSync(filePath, "utf8")); } catch { return null; }
   }
 
   function appendToInbox(entry) {
     const fp = getInboxPath();
-    const inbox = readInbox(fp);
-    inbox.push(entry);
-    fs.writeFileSync(fp, JSON.stringify(inbox, null, 2));
+    let data = readInbox(fp);
+    if (Array.isArray(data)) {
+      data.push(entry);
+    } else if (data && Array.isArray(data.items)) {
+      data.items.push(entry);
+    } else {
+      data = { date: new Date().toISOString().slice(0, 10), items: [entry] };
+    }
+    fs.writeFileSync(fp, JSON.stringify(data, null, 2));
   }
 
   async function captureScreen() {
