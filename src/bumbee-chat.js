@@ -208,6 +208,7 @@ const voiceBtn = document.getElementById("voiceBtn");
 const liveBtn = document.getElementById("liveBtn");
 const visionBtn = document.getElementById("visionBtn");
 const screenBtn = document.getElementById("screenBtn");
+const visionTrackBtn = document.getElementById("visionTrackBtn");
 const studioSetupBtn = document.getElementById("studioSetupBtn");
 const studioSyncBtn = document.getElementById("studioSyncBtn");
 const studioRefreshBtn = document.getElementById("studioRefreshBtn");
@@ -1843,6 +1844,34 @@ liveBtn.addEventListener("click", () => {
   if (liveActive) stopLiveMode();
   else startLiveMode();
 });
+async function refreshVisionTrackBtn() {
+  try {
+    const st = await window.bumbeeChat.visionStatus();
+    visionTrackBtn.textContent = st?.running ? "Vision Track: ON" : "Vision Track: OFF";
+  } catch {}
+}
+refreshVisionTrackBtn();
+
+visionTrackBtn.addEventListener("click", async () => {
+  visionTrackBtn.disabled = true;
+  try {
+    const st = await window.bumbeeChat.visionStatus();
+    if (st?.running) {
+      await window.bumbeeChat.visionStopCapture();
+      visionTrackBtn.textContent = "Vision Track: OFF";
+      addMessage("system", "Vision tracking stopped.");
+    } else {
+      await window.bumbeeChat.visionStartCapture();
+      visionTrackBtn.textContent = "Vision Track: ON";
+      addMessage("system", "Vision tracking started — capturing screen + cursor dwell every 30s.");
+    }
+  } catch (err) {
+    addMessage("system", `Vision track error: ${err.message}`);
+  } finally {
+    visionTrackBtn.disabled = false;
+  }
+});
+
 screenBtn.addEventListener("click", async () => {
   screenBtn.disabled = true;
   screenBtn.textContent = "Capturing...";
