@@ -172,6 +172,7 @@ let hitWin;  // input window — small opaque rect over hitbox, receives all poi
 let chatWin;
 let visionWin;
 let vocabWin;
+let phaseHubWin;
 let donationSettingsWin;
 let chatAutoHideTimer = null;
 let chatActivityState = { typing: false, camera: false, voice: false, pending: false };
@@ -203,6 +204,8 @@ const DONATION_SETTINGS_PATH = path.join(app.getPath("userData"), "settings.json
 const VOCAB_METRICS_PATH = path.join(app.getPath("userData"), "vocab-metrics.json");
 const EVENTS_SOCK_PATH = path.join(app.getPath("userData"), "events.sock");
 const EVENTS_JSONL_PATH = path.join(app.getPath("userData"), "events.jsonl");
+const EVENT_ROUTER_PATH = path.join(app.getPath("userData"), "event_router.json");
+const AVATAR_REACTIONS_PATH = path.join(app.getPath("userData"), "avatar-reactions.jsonl");
 const DEFAULT_DONATION_URL = "https://bitdancegroup.com/bumbee-vocab-tinder/checkout";
 const DONATION_STATUS_URL = (process.env.BUMBEE_DONATION_STATUS_URL || "https://bitdancegroup.com/payment/bumbee/status").replace(/\/$/, "");
 const PROXYCLI_CHAT_URL = (process.env.BUMBEE_PROXYCLI_CHAT_URL || process.env.PROXYCLI_CHAT_URL || process.env.OPENAI_BASE_URL || "").replace(/\/$/, "");
@@ -1330,6 +1333,14 @@ function emitSemanticEvent(type, payload = {}) {
     ts: new Date().toISOString(),
     payload: payload && typeof payload === "object" ? payload : { value: payload },
   };
+  try {
+    const router = require("./bumbee-event-router");
+    router.ensureDefaultRouter(EVENT_ROUTER_PATH);
+    const reactions = router.routeEvent(router.loadRouter(EVENT_ROUTER_PATH), event);
+    router.writeReactions(AVATAR_REACTIONS_PATH, reactions);
+  } catch (err) {
+    console.warn("Bumbee event router failed:", err.message);
+  }
   const line = `${JSON.stringify(event)}\n`;
   fs.mkdirSync(path.dirname(EVENTS_JSONL_PATH), { recursive: true });
   let fallbackWritten = false;
@@ -1878,6 +1889,39 @@ function openVocabTinder() {
   });
   vocabWin.on("closed", () => {
     vocabWin = null;
+  });
+}
+
+function openPhaseHub() {
+  if (phaseHubWin && !phaseHubWin.isDestroyed()) {
+    phaseHubWin.show();
+    phaseHubWin.focus();
+    return;
+  }
+
+  const primary = screen.getPrimaryDisplay().workArea;
+  phaseHubWin = new BrowserWindow({
+    width: Math.min(1120, Math.max(900, primary.width - 120)),
+    height: Math.min(820, Math.max(650, primary.height - 120)),
+    minWidth: 820,
+    minHeight: 600,
+    title: "Bumbee Phase Hub",
+    show: false,
+    backgroundColor: "#0b0f14",
+    webPreferences: {
+      preload: path.join(__dirname, "preload-phase-hub.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  phaseHubWin.loadFile(path.join(__dirname, "bumbee-phase-hub.html"));
+  phaseHubWin.once("ready-to-show", () => {
+    if (phaseHubWin && !phaseHubWin.isDestroyed()) phaseHubWin.show();
+  });
+  phaseHubWin.on("closed", () => {
+    phaseHubWin = null;
   });
 }
 
@@ -2485,6 +2529,7 @@ const _menuCtx = {
   getWiki: () => _wiki,
   openBumbeeChat,
   openBumbeeVocab: openVocabTinder,
+  openBumbeePhaseHub: openPhaseHub,
 };
 const _menu = require("./menu")(_menuCtx);
 const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
@@ -2743,6 +2788,7 @@ function createWindow() {
   ipcMain.on("open-bumbee-chat", openBumbeeChat);
   ipcMain.on("open-bumbee-vision", openBumbeeVision);
   ipcMain.on("open-bumbee-vocab", openVocabTinder);
+  ipcMain.on("open-bumbee-phase-hub", openPhaseHub);
 
   ipcMain.on("show-session-menu", () => {
     popupMenuAt(Menu.buildFromTemplate(buildSessionSubmenu()));
@@ -2785,6 +2831,36 @@ function createWindow() {
     return { ok: true };
   });
   ipcMain.handle("vocab:open-donate", () => openBumbeeDonate());
+  ipcMain.handle("phase:status", () => require("./phase-runtime").phaseStatus(app.getPath("userData")));
+  ipcMain.handle("phase:seed-all", () => {
+    const runtime = require("./phase-runtime");
+    const router = require("./bumbee-event-router");
+    const seeded = {
+      business: runtime.seedBusinessLoop(),
+      scene: runtime.seedScene(),
+      caps: runtime.costCaps(app.getPath("userData")),
+      router: router.ensureDefaultRouter(EVENT_ROUTER_PATH),
+    };
+    return { ok: true, seeded, status: runtime.phaseStatus(app.getPath("userData")) };
+  });
+  ipcMain.handle("phase:emit-event", (_event, payload) => emitSemanticEvent(payload?.type || "digest.money_todo.ready", payload?.payload || {}));
+  ipcMain.handle("phase:manual-activity", (_event, payload) => {
+    const result = require("./phase-runtime").appendManualActivity(undefined, payload || {});
+    emitSemanticEvent("idea_matrix.entry.created", {
+      tag: payload?.tag || "co_hoi",
+      title: payload?.title || "Manual watcher signal",
+      priority_boost: !!payload?.priority_boost,
+    });
+    return result;
+  });
+  ipcMain.handle("phase:open-vocab", () => {
+    openVocabTinder();
+    return { ok: true };
+  });
+  ipcMain.handle("phase:open-vision", () => {
+    openBumbeeVision();
+    return { ok: true };
+  });
   ipcMain.handle("settings:donation:load", () => loadDonationSettings());
   ipcMain.handle("settings:donation:save", (_event, payload) => saveDonationSettings(payload));
   ipcMain.on("bumbee-coach:event", (_event, payload) => {
@@ -3141,6 +3217,8 @@ if (!gotTheLock) {
     if (hitWin && !hitWin.isDestroyed()) hitWin.destroy();
     if (chatWin && !chatWin.isDestroyed()) chatWin.destroy();
     if (visionWin && !visionWin.isDestroyed()) visionWin.destroy();
+    if (vocabWin && !vocabWin.isDestroyed()) vocabWin.destroy();
+    if (phaseHubWin && !phaseHubWin.isDestroyed()) phaseHubWin.destroy();
   });
 
   app.on("window-all-closed", () => {

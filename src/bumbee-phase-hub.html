@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Bumbee Phase Hub</title>
+  <link rel="stylesheet" href="bumbee-phase-hub.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">Bumbee Operating System</p>
+      <h1>Phase Hub</h1>
+      <p class="sub">Test một lượt Phase 3-5 bằng dữ liệu thật + scaffold an toàn.</p>
+    </div>
+    <button id="seedAll">Seed Full System</button>
+  </header>
+
+  <main>
+    <section class="grid" id="phaseGrid"></section>
+
+    <section class="panel">
+      <h2>Manual Watcher Signal</h2>
+      <p>Tạo một idea-matrix entry như MVP 6 mà không cần bật Apple Vision helper.</p>
+      <div class="form">
+        <input id="signalTitle" value="Cơ hội demo Vocab Tinder cho khách hàng học tiếng Anh" />
+        <select id="signalTag">
+          <option value="co_hoi">co_hoi</option>
+          <option value="contact">contact</option>
+          <option value="cong_viec">cong_viec</option>
+          <option value="cuoc_thi">cuoc_thi</option>
+        </select>
+        <button id="addSignal">Add Signal</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Event Router Test</h2>
+      <p>Emit event để kiểm tra avatar reaction log, business funnel và router Phase 3.</p>
+      <div class="chips" id="eventChips"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Open Tools</h2>
+      <button id="openVocab" class="secondary">Open Vocab Tinder</button>
+      <button id="openVision" class="secondary">Open Bumbee Vision</button>
+    </section>
+
+    <section class="panel">
+      <h2>Last Result</h2>
+      <pre id="output">Loading...</pre>
+    </section>
+  </main>
+
+  <script src="bumbee-phase-hub.js"></script>
+</body>
+</html>

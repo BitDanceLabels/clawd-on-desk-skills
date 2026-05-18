@@ -1,0 +1,115 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #121923;
+  --panel2: #172130;
+  --line: #263447;
+  --fg: #edf5ff;
+  --muted: #93a4b8;
+  --gold: #f2c14e;
+  --green: #58d68d;
+  --blue: #6bb7ff;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(242, 193, 78, 0.14), transparent 32%),
+    linear-gradient(135deg, #071018, #11141d 58%, #0d1512);
+  color: var(--fg);
+  font-family: ui-rounded, "SF Pro Rounded", "Avenir Next", system-ui, sans-serif;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 28px 32px 18px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 { margin: 0; font-size: 42px; letter-spacing: -0.04em; }
+h2 { margin: 0 0 10px; font-size: 18px; }
+.sub { margin: 8px 0 0; color: var(--muted); }
+
+button, input, select {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 14px;
+  color: var(--fg);
+  background: var(--panel2);
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  border-color: rgba(242, 193, 78, 0.55);
+  background: linear-gradient(135deg, #ffd86b, #f2a64e);
+  color: #191105;
+  font-weight: 800;
+}
+
+button.secondary {
+  background: var(--panel2);
+  color: var(--fg);
+  border-color: var(--line);
+}
+
+main { padding: 0 32px 34px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.card, .panel {
+  background: rgba(18, 25, 35, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+}
+
+.card { padding: 18px; min-height: 150px; }
+.card strong { display: block; font-size: 24px; margin-bottom: 8px; }
+.card p { color: var(--muted); margin: 0 0 14px; line-height: 1.45; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(107, 183, 255, 0.14);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+.badge.ready { color: var(--green); background: rgba(88, 214, 141, 0.14); }
+
+.panel { padding: 18px; margin-top: 14px; }
+.panel p { margin: 0 0 12px; color: var(--muted); }
+.form { display: grid; grid-template-columns: 1fr 140px auto; gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { font-size: 13px; padding: 8px 10px; }
+pre {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #c9e6ff;
+}
+
+@media (max-width: 920px) {
+  header { flex-direction: column; align-items: flex-start; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form { grid-template-columns: 1fr; }
+}

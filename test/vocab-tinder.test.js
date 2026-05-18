@@ -110,6 +110,8 @@ test('sm2.dueWords filters by next_review_at', () => {
 
 const { getStreakDays } = require('../src/vocab-library');
 const metrics = require('../src/vocab-metrics');
+const router = require('../src/bumbee-event-router');
+const phaseRuntime = require('../src/phase-runtime');
 
 test('getStreakDays returns 0 for empty library', () => {
   const r = getStreakDays([]);
@@ -183,4 +185,31 @@ test('normalizeDonationStatus accepts common paid states', () => {
   assert.equal(metrics.normalizeDonationStatus({ state: 'sale', order_id: 'S00007' }).confirmed, true);
   assert.equal(metrics.normalizeDonationStatus({ payment_state: 'paid', order_id: 'S00008' }).confirmed, true);
   assert.equal(metrics.normalizeDonationStatus({ state: 'draft', order_id: 'S00009' }).confirmed, false);
+});
+
+// ---- phase hub / event router ----
+
+test('event router maps business.first_donation to avatar reactions', () => {
+  const reactions = router.routeEvent(router.DEFAULT_ROUTER, {
+    type: 'business.first_donation',
+    ts: '2026-05-18T09:00:00.000Z',
+    payload: { order_id: 'S00007' },
+  });
+  assert.equal(reactions.length >= 3, true);
+  assert.equal(reactions.some(item => item.tool === 'set_emotion' && item.args.emotion === 'proud'), true);
+  assert.equal(reactions.some(item => item.tool === 'show_particle' && item.args.kind === 'heart'), true);
+});
+
+test('phase runtime seeds business loop and scene fixture', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bumbee-phase-'));
+  const business = phaseRuntime.seedBusinessLoop(root, new Date('2026-05-18T09:00:00Z'));
+  const scene = phaseRuntime.seedScene(root);
+  assert.equal(business.ok, true);
+  assert.equal(scene.ok, true);
+  assert.equal(fs.existsSync(path.join(root, 'content-matrix', '2026-05-18', 'scripts.md')), true);
+  assert.equal(fs.existsSync(path.join(root, 'content-inbox', '2026-05-18.json')), true);
+  assert.equal(fs.existsSync(path.join(root, 'scenes', 'sample-scene', 'scene.config.json')), true);
 });
