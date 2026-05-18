@@ -2857,6 +2857,12 @@ function createWindow() {
     });
     return result;
   });
+  ipcMain.handle("phase:sync-studio", async () => syncBumbeeStudio({ force: true }));
+  ipcMain.handle("phase:open-donate", () => openBumbeeDonate());
+  ipcMain.handle("phase:open-donation-settings", () => {
+    openDonationSettings();
+    return { ok: true };
+  });
   ipcMain.handle("phase:emit-event", (_event, payload) => emitSemanticEvent(payload?.type || "digest.money_todo.ready", payload?.payload || {}));
   ipcMain.handle("phase:manual-activity", (_event, payload) => {
     const result = require("./phase-runtime").appendManualActivity(undefined, payload || {});

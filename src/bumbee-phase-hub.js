@@ -35,6 +35,21 @@
         </article>
       `;
     }).join('');
+    renderInventory(data.inventory || []);
+  }
+
+  function renderInventory(items) {
+    const list = document.getElementById('featureList');
+    list.innerHTML = items.map(item => `
+      <article class="feature-row">
+        <div>
+          <strong>${item.name}</strong>
+          <small>${item.surface}</small>
+        </div>
+        <span class="status status-${String(item.status).replace(/_/g, '-')}">${item.status}</span>
+        <small>${item.evidence}</small>
+      </article>
+    `).join('');
   }
 
   async function refresh() {
@@ -65,6 +80,19 @@
   });
   document.getElementById('openVision').addEventListener('click', () => {
     window.bumbeePhaseAPI.openVision();
+  });
+  document.getElementById('openDonate').addEventListener('click', async () => {
+    const result = await window.bumbeePhaseAPI.openDonate();
+    write(result);
+  });
+  document.getElementById('openDonationSettings').addEventListener('click', async () => {
+    const result = await window.bumbeePhaseAPI.openDonationSettings();
+    write(result);
+  });
+  document.getElementById('syncStudio').addEventListener('click', async () => {
+    const result = await window.bumbeePhaseAPI.syncStudio();
+    write(result);
+    await refresh();
   });
   document.getElementById('seedBusiness').addEventListener('click', async () => {
     const result = await window.bumbeePhaseAPI.seedBusinessArtifacts();

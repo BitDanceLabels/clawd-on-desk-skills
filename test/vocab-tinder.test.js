@@ -233,3 +233,16 @@ test('phase runtime seeds the full system test surface', () => {
   assert.equal(fs.existsSync(path.join(root, 'business-ops', '2026-05-18', 'B0-idea-engine.md')), true);
   assert.equal(fs.existsSync(path.join(root, '03-projects', 'bumbee-money', 'PROJECT.work.md')), true);
 });
+
+test('phase runtime exposes the feature inventory for user-facing status', () => {
+  const items = phaseRuntime.featureInventory('/tmp/bumbee-studio-test');
+  const ids = items.map(item => item.id).sort();
+  assert.ok(ids.includes('vocab-tinder'));
+  assert.ok(ids.includes('vision-bumbee'));
+  assert.ok(ids.includes('avatar-4d'));
+  assert.ok(ids.includes('payment'));
+  assert.ok(ids.includes('workers'));
+  assert.ok(ids.includes('studio-template'));
+  assert.equal(items.find(item => item.id === 'vocab-tinder').status, 'live');
+  assert.equal(items.find(item => item.id === 'avatar-4d').status, 'scaffold');
+});

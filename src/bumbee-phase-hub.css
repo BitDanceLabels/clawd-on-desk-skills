@@ -98,6 +98,34 @@ main { padding: 0 32px 34px; }
 .panel { padding: 18px; margin-top: 14px; }
 .panel p { margin: 0 0 12px; color: var(--muted); }
 .form { display: grid; grid-template-columns: 1fr 140px auto; gap: 10px; }
+.feature-list {
+  display: grid;
+  gap: 10px;
+}
+.feature-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) 110px 1.4fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid rgba(107, 183, 255, 0.16);
+  border-radius: 16px;
+  background: rgba(7, 16, 24, 0.46);
+}
+.feature-row strong { display: block; margin-bottom: 4px; }
+.feature-row small { color: var(--muted); line-height: 1.4; }
+.status {
+  display: inline-flex;
+  justify-content: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.status-live, .status-live-safe { color: var(--green); background: rgba(88, 214, 141, 0.14); }
+.status-partial, .status-mapped { color: var(--blue); background: rgba(107, 183, 255, 0.14); }
+.status-scaffold { color: var(--gold); background: rgba(242, 193, 78, 0.14); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chips button { font-size: 13px; padding: 8px 10px; }
 .file-grid {
@@ -126,5 +154,6 @@ pre {
   header { flex-direction: column; align-items: flex-start; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .file-grid { grid-template-columns: 1fr; }
+  .feature-row { grid-template-columns: 1fr; }
   .form { grid-template-columns: 1fr; }
 }

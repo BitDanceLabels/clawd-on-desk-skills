@@ -50,7 +50,76 @@ function phaseStatus(userDataPath, studioRoot = DEFAULT_STUDIO_ROOT) {
     phase5_scene_viewer: fs.existsSync(sceneConfigPath) ? 'ready' : 'needs-seed',
     watcher_mode: 'vision-bumbee-ready-manual-fixture',
     files: { matrixPath, inboxPath, digestPath, sceneConfigPath, eventRouterPath, reactionLogPath },
+    inventory: featureInventory(studioRoot),
   };
+}
+
+function featureInventory(studioRoot = DEFAULT_STUDIO_ROOT) {
+  return [
+    {
+      id: 'vocab-tinder',
+      name: 'Tinder tiếng Anh',
+      status: 'live',
+      surface: 'Bumbee Hub -> Open Vocab Tinder',
+      evidence: 'Extractor, swipe UI, SM-2 review, markdown vocab library, donation dashboard.',
+    },
+    {
+      id: 'vision-bumbee',
+      name: 'Vision theo dõi / mic / realtime helper',
+      status: 'partial',
+      surface: 'Phase Hub -> Open Bumbee Vision',
+      evidence: 'Vision service opens and voice hooks exist; live screen-to-idea-matrix automation still needs deeper integration.',
+    },
+    {
+      id: 'avatar-4d',
+      name: 'Nhân vật 3D/4D + emotion event router',
+      status: 'scaffold',
+      surface: 'Phase Hub -> Event Router Test',
+      evidence: 'Semantic events map to avatar reactions in local log; real GLB/MCP renderer is next integration.',
+    },
+    {
+      id: 'payment',
+      name: 'Link thanh toán / donation Bumbee',
+      status: 'live',
+      surface: 'Vocab Tinder footer + Donation Settings',
+      evidence: 'BitDance Odoo checkout and creator donate URL allow-list are wired.',
+    },
+    {
+      id: 'workers',
+      name: 'Worker / trợ lý / action queue',
+      status: 'live-safe',
+      surface: 'Bumbee Chat -> Studio tab',
+      evidence: 'Tags create action queue; safe workers write output; sensitive gateway actions require approval.',
+    },
+    {
+      id: 'studio-template',
+      name: 'Bumbee Studio thiết kế sẵn',
+      status: 'live',
+      surface: studioRoot,
+      evidence: 'Obsidian vault, project templates, connector center, gateway skill map, business ops files are seeded and synced.',
+    },
+    {
+      id: 'business-ops',
+      name: 'Bumbee money / content / publisher workflow',
+      status: 'scaffold',
+      surface: 'business-ops/<today>, content-inbox, daily-dashboard',
+      evidence: 'B0/B2/B3.5/B4/B6.5 files and gateway dry-run payloads exist; manual posting remains by design.',
+    },
+    {
+      id: 'gateway-skills',
+      name: 'Gateway skills / MCP / Higgsfield / Codex skills',
+      status: 'mapped',
+      surface: '04-skills/gateway-skill-map.json',
+      evidence: '14 skill names mapped to /api/studio/runs; live execution requires approval per action.',
+    },
+    {
+      id: 'scene-3d',
+      name: '3D scene / game walking tour',
+      status: 'scaffold',
+      surface: 'scenes/sample-scene/scene.config.json',
+      evidence: 'Scene config and viewer mockup exist; real .splat/.glb generation is next integration.',
+    },
+  ];
 }
 
 function seedBusinessLoop(studioRoot = DEFAULT_STUDIO_ROOT, now = new Date()) {
@@ -501,6 +570,7 @@ module.exports = {
   seedActionQueue,
   seedGatewayDryRun,
   seedFullSystem,
+  featureInventory,
   appendManualActivity,
   costCaps,
 };
