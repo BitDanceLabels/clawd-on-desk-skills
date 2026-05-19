@@ -119,7 +119,8 @@
       {
         "provider": "github",
         "owner": "BitDanceLabels",
-        "repo": "clawd-on-desk-skills"
+        "repo": "clawd-on-desk-skills",
+        "private": true
       }
     ]
   },

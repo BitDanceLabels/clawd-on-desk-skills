@@ -5,8 +5,32 @@ const https = require("https");
 const { app, dialog, shell, Notification } = require("electron");
 
 const isMac = process.platform === "darwin";
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+function loadGithubToken() {
+  if (process.env.GH_TOKEN) return process.env.GH_TOKEN;
+  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+  const candidates = [
+    path.join(os.homedir(), ".clawd", "github-token"),
+    path.join(os.homedir(), ".config", "clawd", "github-token"),
+  ];
+  for (const fp of candidates) {
+    try {
+      const token = fs.readFileSync(fp, "utf8").trim();
+      if (token) return token;
+    } catch {}
+  }
+  return null;
+}
 
 module.exports = function initUpdater(ctx) {
+
+const ghToken = loadGithubToken();
+if (ghToken && !process.env.GH_TOKEN) {
+  process.env.GH_TOKEN = ghToken;
+}
 
 let _autoUpdater = null;
 function getAutoUpdater() {
@@ -15,7 +39,7 @@ function getAutoUpdater() {
       _autoUpdater = require("electron-updater").autoUpdater;
       _autoUpdater.autoDownload = false;
       _autoUpdater.autoInstallOnAppQuit = true;
-      ctx.updateLog("Auto-updater initialized successfully");
+      ctx.updateLog(`Auto-updater initialized (GH_TOKEN: ${ghToken ? "present" : "missing — private repo updates won't work"})`);
     } catch (err) {
       const errMsg = `electron-updater load failed: ${err.message}`;
       console.warn("Clawd:", errMsg);
@@ -197,14 +221,19 @@ function compareVersions(v1, v2) {
 }
 
 // Fetch latest release version from GitHub API (10s timeout)
+function getGithubToken() {
+  return process.env.GH_TOKEN || process.env.GITHUB_TOKEN || null;
+}
+
 function fetchLatestVersion() {
   return new Promise((resolve, reject) => {
+    const headers = { 'User-Agent': 'Clawd-on-Desk' };
+    const token = getGithubToken();
+    if (token) headers['Authorization'] = `token ${token}`;
     const options = {
       hostname: 'api.github.com',
       path: '/repos/BitDanceLabels/clawd-on-desk-skills/releases/latest',
-      headers: {
-        'User-Agent': 'Clawd-on-Desk'
-      }
+      headers,
     };
 
     const req = https.get(options, (res) => {
