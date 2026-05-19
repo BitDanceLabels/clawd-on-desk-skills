@@ -145,12 +145,43 @@ module.exports = function initIntelligentLayer(opts) {
   const config = opts || {};
   const gatewayUrl = (config.gatewayUrl || process.env.GATEWAY_URL || "https://gateway.bumbee.asia").replace(/\/$/, "");
   const enabled = config.enabled !== false && (process.env.SMART_LAYER_ENABLE !== "0");
-  // Endpoint backend chat — co the override qua env.
   const chatEndpoint = config.chatEndpoint || process.env.SMART_CHAT_ENDPOINT || "/clawdbot/bumbee-desk/v1/chat/completions";
   const chatModel = config.chatModel || process.env.SMART_CHAT_MODEL || "clawdbot";
   const chatAuth = resolveChatAuthToken(config);
   const chatAuthToken = chatAuth.token;
   const bumbeeWiki = config.bumbeeWiki || null;
+
+  const proxycliUrl = (config.proxycliUrl || "").replace(/\/$/, "");
+  const proxycliApiKey = config.proxycliApiKey || "";
+  const proxycliModel = config.proxycliModel || "gpt-4o-mini";
+
+  async function proxycliChat(prompt, system, context) {
+    if (!proxycliUrl) return null;
+    const endpoint = proxycliUrl.endsWith("/chat/completions") ? proxycliUrl : `${proxycliUrl}/chat/completions`;
+    const contextObj = context && typeof context === "object" ? context : {};
+    const camera = contextObj.camera || null;
+    const screen = contextObj.screen || null;
+    const userContent = [{ type: "text", text: prompt }];
+    if (camera?.image_data_url) {
+      userContent.push({ type: "image_url", image_url: { url: camera.image_data_url } });
+    }
+    if (screen?.dwell_crop_base64) {
+      userContent.push({ type: "image_url", image_url: { url: screen.dwell_crop_base64 } });
+    } else if (screen?.full_screen_base64) {
+      userContent.push({ type: "image_url", image_url: { url: screen.full_screen_base64 } });
+    }
+    const payload = {
+      model: proxycliModel,
+      messages: [
+        ...(system ? [{ role: "system", content: system }] : []),
+        { role: "user", content: userContent.length > 1 ? userContent : prompt },
+      ],
+      stream: false,
+    };
+    const headers = { "Content-Type": "application/json" };
+    if (proxycliApiKey) headers.Authorization = `Bearer ${proxycliApiKey}`;
+    return fetch(endpoint, { method: "POST", body: payload, timeout: 30_000, headers });
+  }
 
   async function gatewayChat(prompt, system, mode, context) {
     return gatewayChatToEndpoint(chatEndpoint, prompt, system, mode, context);
@@ -270,9 +301,16 @@ module.exports = function initIntelligentLayer(opts) {
           source: { type: "wiktionary", word: wikt.word, lang: "en" },
         };
       }
-      // fallback gateway: dich + giai thich
+      // fallback: ProxyCLI first, then gateway
+      const sys = "Bạn là trợ lý học tiếng Anh cho người Việt. Trả lời ngắn gọn bằng tiếng Việt có dấu, kèm nghĩa tiếng Việt và 1 ví dụ.";
+      if (proxycliUrl) {
+        try {
+          const data = await proxycliChat(query, sys, context);
+          const answer = extractAnswer(data);
+          if (answer) return { mode: "english", answer, source: { type: "proxycli", model: proxycliModel } };
+        } catch {}
+      }
       try {
-        const sys = "Bạn là trợ lý học tiếng Anh cho người Việt. Trả lời ngắn gọn bằng tiếng Việt có dấu, kèm nghĩa tiếng Việt và 1 ví dụ.";
         const { data, endpoint } = await gatewayChatWithFallback(query, sys, mode, context);
         return {
           mode: "english",
@@ -280,14 +318,25 @@ module.exports = function initIntelligentLayer(opts) {
           source: { type: "gateway", endpoint },
         };
       } catch (e) {
-        return { mode: "english", error: `Wiktionary không có từ này; gateway lỗi: ${e.message}` };
+        return { mode: "english", error: `Wiktionary không có từ này; chat lỗi: ${e.message}` };
       }
     }
 
-    // work / general → forward gateway
+    // work / general → try ProxyCLI first (fast), fallback gateway
     const sys = mode === "work"
       ? "Bạn là trợ lý công việc thông minh. Luôn trả lời bằng tiếng Việt có dấu đầy đủ, ngắn gọn, đưa ra các bước làm việc rõ ràng."
       : "Bạn là trợ lý chung thông minh. Luôn trả lời bằng tiếng Việt có dấu đầy đủ, ngắn gọn và chính xác.";
+
+    if (proxycliUrl) {
+      try {
+        const data = await proxycliChat(query, sys, context);
+        const answer = extractAnswer(data);
+        if (answer) return { mode, answer, source: { type: "proxycli", model: proxycliModel } };
+      } catch (e) {
+        // ProxyCLI failed, fall through to gateway
+      }
+    }
+
     const fullPrompt = context ? `${query}\n\nContext: ${typeof context === "string" ? context : JSON.stringify(context)}` : query;
     const gatewayPrompt = chatEndpoint === "/bumbee/chat" ? query : fullPrompt;
     try {
@@ -298,7 +347,7 @@ module.exports = function initIntelligentLayer(opts) {
         source: { type: "gateway", endpoint },
       };
     } catch (e) {
-      return { mode, error: `Gateway chat thất bại: ${e.message}` };
+      return { mode, error: `Chat thất bại: ${e.message}` };
     }
   }
 
@@ -326,6 +375,7 @@ module.exports = function initIntelligentLayer(opts) {
       chatModel,
       authenticated: !!chatAuthToken,
       authSource: chatAuthToken ? chatAuth.source : null,
+      proxycli: proxycliUrl ? { url: proxycliUrl, model: proxycliModel, hasKey: !!proxycliApiKey } : null,
     };
   }
 

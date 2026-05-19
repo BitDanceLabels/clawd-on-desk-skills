@@ -209,9 +209,9 @@ const EVENT_ROUTER_PATH = path.join(app.getPath("userData"), "event_router.json"
 const AVATAR_REACTIONS_PATH = path.join(app.getPath("userData"), "avatar-reactions.jsonl");
 const DEFAULT_DONATION_URL = "https://bitdancegroup.com/bumbee-vocab-tinder/checkout";
 const DONATION_STATUS_URL = (process.env.BUMBEE_DONATION_STATUS_URL || "https://bitdancegroup.com/payment/bumbee/status").replace(/\/$/, "");
-const PROXYCLI_CHAT_URL = (process.env.BUMBEE_PROXYCLI_CHAT_URL || process.env.PROXYCLI_CHAT_URL || process.env.OPENAI_BASE_URL || "").replace(/\/$/, "");
-const PROXYCLI_API_KEY = process.env.BUMBEE_PROXYCLI_API_KEY || process.env.PROXYCLI_API_KEY || process.env.OPENAI_API_KEY || "";
-const PROXYCLI_MODEL = process.env.BUMBEE_PROXYCLI_MODEL || process.env.PROXYCLI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
+const PROXYCLI_CHAT_URL = (process.env.BUMBEE_PROXYCLI_CHAT_URL || process.env.PROXYCLI_CHAT_URL || process.env.OPENAI_BASE_URL || "https://gateway.bumbee.asia/v1").replace(/\/$/, "");
+const PROXYCLI_API_KEY = process.env.BUMBEE_PROXYCLI_API_KEY || process.env.PROXYCLI_API_KEY || process.env.OPENAI_API_KEY || "bumbee-proxy-key-2024";
+const PROXYCLI_MODEL = process.env.BUMBEE_PROXYCLI_MODEL || process.env.PROXYCLI_MODEL || process.env.OPENAI_MODEL || "claude-haiku-4-5-20251001";
 const DONATION_ALLOWED_HOSTS = [
   /^buymeacoffee\.com$/i,
   /^(www\.)?ko-fi\.com$/i,
@@ -713,6 +713,9 @@ function initBumbeeSmartLayer() {
   _smart = require("./intelligent-layer")({
     chatAuthTokenFile: getBumbeeTokenFilePath(),
     bumbeeWiki: _wiki,
+    proxycliUrl: PROXYCLI_CHAT_URL,
+    proxycliApiKey: PROXYCLI_API_KEY,
+    proxycliModel: PROXYCLI_MODEL,
   });
 }
 
