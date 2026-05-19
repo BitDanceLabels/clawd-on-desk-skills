@@ -239,7 +239,7 @@ module.exports = function initIntelligentLayer(opts) {
         }
       }
       const result = await wikiSummary(query);
-      if (!result) return { mode: "wiki", answer: `Khong tim thay bai Wikipedia cho: "${query}"` };
+      if (!result) return { mode: "wiki", answer: `Không tìm thấy bài Wikipedia cho: "${query}"` };
       if (result.error) return { mode: "wiki", error: result.error };
       return {
         mode: "wiki",
@@ -272,7 +272,7 @@ module.exports = function initIntelligentLayer(opts) {
       }
       // fallback gateway: dich + giai thich
       try {
-        const sys = "Ban la tro ly hoc tieng Anh cho nguoi Viet. Tra loi ngan gon, kem nghia tieng Viet va 1 vi du.";
+        const sys = "Bạn là trợ lý học tiếng Anh cho người Việt. Trả lời ngắn gọn bằng tiếng Việt có dấu, kèm nghĩa tiếng Việt và 1 ví dụ.";
         const { data, endpoint } = await gatewayChatWithFallback(query, sys, mode, context);
         return {
           mode: "english",
@@ -280,14 +280,14 @@ module.exports = function initIntelligentLayer(opts) {
           source: { type: "gateway", endpoint },
         };
       } catch (e) {
-        return { mode: "english", error: `Wiktionary khong co tu nay; gateway loi: ${e.message}` };
+        return { mode: "english", error: `Wiktionary không có từ này; gateway lỗi: ${e.message}` };
       }
     }
 
     // work / general → forward gateway
     const sys = mode === "work"
-      ? "Ban la tro ly cong viec. Tra loi tieng Viet, ngan gon, dua ra cac buoc lam viec ro rang."
-      : "Ban la tro ly chung. Tra loi tieng Viet ngan gon va chinh xac.";
+      ? "Bạn là trợ lý công việc thông minh. Luôn trả lời bằng tiếng Việt có dấu đầy đủ, ngắn gọn, đưa ra các bước làm việc rõ ràng."
+      : "Bạn là trợ lý chung thông minh. Luôn trả lời bằng tiếng Việt có dấu đầy đủ, ngắn gọn và chính xác.";
     const fullPrompt = context ? `${query}\n\nContext: ${typeof context === "string" ? context : JSON.stringify(context)}` : query;
     const gatewayPrompt = chatEndpoint === "/bumbee/chat" ? query : fullPrompt;
     try {
@@ -298,7 +298,7 @@ module.exports = function initIntelligentLayer(opts) {
         source: { type: "gateway", endpoint },
       };
     } catch (e) {
-      return { mode, error: `Gateway chat that bai: ${e.message}` };
+      return { mode, error: `Gateway chat thất bại: ${e.message}` };
     }
   }
 

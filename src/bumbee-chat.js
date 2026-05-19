@@ -1007,13 +1007,17 @@ async function sendPrompt(displayText) {
     } : null,
   };
 
+  const thinkingEl = addMessage("assistant", "Bumbee đang suy nghĩ...");
+  thinkingEl.classList.add("thinking");
+
   try {
     const result = await withTimeout(window.bumbeeChat.send({
       mode: modeSelect.value,
       query,
       context,
     }), 60_000, "Bumbee response timeout");
-    if (requestId !== chatRequestId) return;
+    if (requestId !== chatRequestId) { thinkingEl.remove(); return; }
+    thinkingEl.remove();
     const answer = result.answer || result.error || "No response.";
     addMessage(result.ok && !result.error ? "assistant" : "system", answer);
     if (result.ok && !result.error) speak(answer);
@@ -1024,7 +1028,8 @@ async function sendPrompt(displayText) {
       screenBtn.textContent = "Screen";
     }
   } catch (err) {
-    if (requestId !== chatRequestId) return;
+    if (requestId !== chatRequestId) { thinkingEl.remove(); return; }
+    thinkingEl.remove();
     addMessage("system", `Chat failed: ${err.message}`);
   } finally {
     if (requestId === chatRequestId) setBusy(false);
