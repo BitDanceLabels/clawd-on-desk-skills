@@ -1734,7 +1734,7 @@ function blobToDataUrl(blob) {
   });
 }
 
-sendBtn.addEventListener("click", sendPrompt);
+sendBtn.addEventListener("click", () => sendPrompt());
 chatTabBtn.addEventListener("click", () => setActiveTab("chat"));
 studioTabBtn.addEventListener("click", () => setActiveTab("studio"));
 learnTabBtn.addEventListener("click", () => setActiveTab("learn"));
