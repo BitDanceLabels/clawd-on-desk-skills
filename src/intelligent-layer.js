@@ -301,51 +301,30 @@ module.exports = function initIntelligentLayer(opts) {
           source: { type: "wiktionary", word: wikt.word, lang: "en" },
         };
       }
-      // fallback: ProxyCLI first, then gateway
+      // ProxyCLI for English learning
       const sys = "Bạn là trợ lý học tiếng Anh cho người Việt. Trả lời ngắn gọn bằng tiếng Việt có dấu, kèm nghĩa tiếng Việt và 1 ví dụ.";
-      if (proxycliUrl) {
-        try {
-          const data = await proxycliChat(query, sys, context);
-          const answer = extractAnswer(data);
-          if (answer) return { mode: "english", answer, source: { type: "proxycli", model: proxycliModel } };
-        } catch {}
-      }
+      if (!proxycliUrl) return { mode: "english", error: "ProxyCLI chưa được cấu hình." };
       try {
-        const { data, endpoint } = await gatewayChatWithFallback(query, sys, mode, context);
-        return {
-          mode: "english",
-          answer: extractAnswer(data) || JSON.stringify(data).slice(0, 500),
-          source: { type: "gateway", endpoint },
-        };
+        const data = await proxycliChat(query, sys, context);
+        const answer = extractAnswer(data);
+        if (answer) return { mode: "english", answer, source: { type: "proxycli", model: proxycliModel } };
+        return { mode: "english", error: `Wiktionary không có từ này.` };
       } catch (e) {
-        return { mode: "english", error: `Wiktionary không có từ này; chat lỗi: ${e.message}` };
+        return { mode: "english", error: `Chat lỗi: ${e.message}` };
       }
     }
 
-    // work / general → try ProxyCLI first (fast), fallback gateway
+    // work / general → ProxyCLI (chat), gateway chỉ dùng cho skills/MCP
     const sys = mode === "work"
       ? "Bạn là trợ lý công việc thông minh. Luôn trả lời bằng tiếng Việt có dấu đầy đủ, ngắn gọn, đưa ra các bước làm việc rõ ràng."
       : "Bạn là trợ lý chung thông minh. Luôn trả lời bằng tiếng Việt có dấu đầy đủ, ngắn gọn và chính xác.";
 
-    if (proxycliUrl) {
-      try {
-        const data = await proxycliChat(query, sys, context);
-        const answer = extractAnswer(data);
-        if (answer) return { mode, answer, source: { type: "proxycli", model: proxycliModel } };
-      } catch (e) {
-        // ProxyCLI failed, fall through to gateway
-      }
-    }
-
-    const fullPrompt = context ? `${query}\n\nContext: ${typeof context === "string" ? context : JSON.stringify(context)}` : query;
-    const gatewayPrompt = chatEndpoint === "/bumbee/chat" ? query : fullPrompt;
+    if (!proxycliUrl) return { mode, error: "ProxyCLI chưa được cấu hình." };
     try {
-      const { data, endpoint } = await gatewayChatWithFallback(gatewayPrompt, sys, mode, context);
-      return {
-        mode,
-        answer: extractAnswer(data) || JSON.stringify(data).slice(0, 500),
-        source: { type: "gateway", endpoint },
-      };
+      const data = await proxycliChat(query, sys, context);
+      const answer = extractAnswer(data);
+      if (answer) return { mode, answer, source: { type: "proxycli", model: proxycliModel } };
+      return { mode, error: "Không nhận được phản hồi từ AI." };
     } catch (e) {
       return { mode, error: `Chat thất bại: ${e.message}` };
     }
