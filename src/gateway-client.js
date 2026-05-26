@@ -21,6 +21,12 @@ const ROUTES = [
   { name: "clawd_wiki_status",       method: "GET",  gateway_path: "/v1/clawd/wiki/status",   upstream_path: "/wiki/status" },
   { name: "clawd_wiki_sync",         method: "POST", gateway_path: "/v1/clawd/wiki/sync",     upstream_path: "/wiki/sync" },
   { name: "clawd_wiki_ask",          method: "POST", gateway_path: "/v1/clawd/wiki/ask",      upstream_path: "/wiki/ask" },
+  // Knowledge store
+  { name: "clawd_wiki_push",         method: "POST", gateway_path: "/v1/clawd/wiki/push",     upstream_path: "/wiki/push" },
+  { name: "clawd_wiki_entries",      method: "GET",  gateway_path: "/v1/clawd/wiki/entries",  upstream_path: "/wiki/entries" },
+  { name: "clawd_wiki_clear",        method: "POST", gateway_path: "/v1/clawd/wiki/clear",    upstream_path: "/wiki/clear" },
+  // Skills UI
+  { name: "clawd_skills_ui",         method: "GET",  gateway_path: "/v1/clawd/skills-ui",     upstream_path: "/skills-ui" },
 ];
 
 function postJson(url, payload, timeoutMs) {

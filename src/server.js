@@ -46,6 +46,267 @@ const {
   writeRuntimeConfig,
 } = require("../hooks/server-config");
 
+// ── Skills HTML UI builder ─────────────────────────────────────────────────
+const CATEGORY_BADGE = {
+  payments:  { bg: "#1a3a2a", color: "#63f2a5", icon: "💳" },
+  security:  { bg: "#3a1a1a", color: "#f26363", icon: "🔒" },
+  marketing: { bg: "#2a2a3a", color: "#a563f2", icon: "📣" },
+  project:   { bg: "#1a2a3a", color: "#63b5f2", icon: "📋" },
+  creative:  { bg: "#3a2a1a", color: "#f2c063", icon: "🎨" },
+  infra:     { bg: "#1a3a3a", color: "#63f2f2", icon: "⚙️" },
+  dev:       { bg: "#2a1a3a", color: "#c063f2", icon: "💻" },
+  learning:  { bg: "#2a3a1a", color: "#a5f263", icon: "📚" },
+  higgsfield:{ bg: "#3a1a2a", color: "#f263a5", icon: "🎬" },
+  general:   { bg: "#2a2a2a", color: "#aaaaaa", icon: "📌" },
+};
+
+function buildSkillsHtml(skills, wikiCount) {
+  const byCategory = {};
+  for (const s of skills) {
+    const cat = s.category || "general";
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(s);
+  }
+
+  const categoryCards = Object.entries(byCategory).map(([cat, items]) => {
+    const badge = CATEGORY_BADGE[cat] || CATEGORY_BADGE.general;
+    const skillCards = items.map(s => `
+      <div class="skill-card" data-name="${escHtml(s.name)}" data-cat="${escHtml(cat)}">
+        <div class="skill-header">
+          <span class="skill-name">${escHtml(s.name)}</span>
+          <span class="skill-badge" style="background:${badge.bg};color:${badge.color}">${badge.icon} ${escHtml(cat)}</span>
+        </div>
+        <p class="skill-desc">${escHtml((s.description || "").slice(0, 200))}</p>
+        <div class="skill-footer">
+          <span class="skill-slug">${escHtml(s.slug || s.name)}</span>
+          <button class="btn-trigger" onclick="triggerSkill('${escHtml(s.name)}')">▶ Run</button>
+        </div>
+      </div>`).join("");
+    return `
+      <div class="cat-section">
+        <h3 class="cat-title">${badge.icon} ${escHtml(cat)} <span class="cat-count">${items.length}</span></h3>
+        <div class="skill-grid">${skillCards}</div>
+      </div>`;
+  }).join("");
+
+  const emptyMsg = skills.length === 0
+    ? `<div class="empty-state">
+        <div style="font-size:48px;margin-bottom:16px">📭</div>
+        <div>Chưa có skill nào được load.</div>
+        <div style="opacity:.6;margin-top:8px">Kiểm tra <code>BUMBEE_SKILLS_DIR</code> hoặc thư mục skills của bạn.</div>
+      </div>` : categoryCards;
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bumbee Skills — ${skills.length} skills</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0d0d0d;--panel:#161616;--line:#222;--text:#e0e0e0;--muted:#666;--accent:#63f2a5;--red:#f26363;--font:'SF Mono','Fira Code','Consolas',monospace}
+  body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:16px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+  .logo{font-size:24px}
+  .header-title{font-size:18px;font-weight:600;color:var(--accent)}
+  .header-meta{font-size:12px;color:var(--muted);margin-left:auto;display:flex;gap:16px;align-items:center}
+  .badge-count{background:#1a3a2a;color:var(--accent);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+  .wiki-count{background:#1a1a3a;color:#63b5f2;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+  .search-bar{background:var(--bg);border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:8px;font-size:13px;width:280px;outline:none;transition:border .2s}
+  .search-bar:focus{border-color:var(--accent)}
+  main{max-width:1200px;margin:0 auto;padding:24px}
+  .wiki-push-box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:28px}
+  .wiki-push-box h2{font-size:14px;color:var(--accent);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .push-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .push-form input,.push-form textarea,.push-form select{background:var(--bg);border:1px solid var(--line);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;font-family:inherit;outline:none;transition:border .2s}
+  .push-form input:focus,.push-form textarea:focus,.push-form select:focus{border-color:var(--accent)}
+  .push-form textarea{grid-column:1/-1;height:80px;resize:vertical}
+  .push-form .push-row{grid-column:1/-1;display:flex;gap:10px;align-items:center}
+  .btn-push{background:var(--accent);color:#0d0d0d;border:none;padding:9px 22px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s}
+  .btn-push:hover{opacity:.85}
+  .btn-push:disabled{opacity:.4;cursor:not-allowed}
+  .push-status{font-size:12px;color:var(--muted);margin-left:8px}
+  .push-status.ok{color:var(--accent)}
+  .push-status.err{color:var(--red)}
+  .cat-section{margin-bottom:32px}
+  .cat-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .cat-count{background:var(--line);color:var(--muted);padding:2px 8px;border-radius:12px;font-size:11px;font-weight:400}
+  .skill-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .skill-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;transition:border-color .2s,transform .1s;display:flex;flex-direction:column;gap:10px}
+  .skill-card:hover{border-color:#444;transform:translateY(-1px)}
+  .skill-card.hidden{display:none}
+  .skill-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .skill-name{font-size:13px;font-weight:600;color:var(--text);font-family:var(--font);word-break:break-all}
+  .skill-badge{font-size:10px;padding:2px 8px;border-radius:12px;white-space:nowrap;flex-shrink:0}
+  .skill-desc{font-size:12px;color:var(--muted);line-height:1.5;flex:1}
+  .skill-footer{display:flex;align-items:center;justify-content:space-between;margin-top:auto}
+  .skill-slug{font-size:10px;color:#444;font-family:var(--font)}
+  .btn-trigger{background:#1a3a2a;color:var(--accent);border:1px solid #2a5a3a;padding:4px 12px;border-radius:5px;font-size:11px;cursor:pointer;transition:background .15s;font-weight:600}
+  .btn-trigger:hover{background:#2a5a3a}
+  .empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+  .wiki-entries-box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:32px}
+  .wiki-entries-box h2{font-size:14px;color:#63b5f2;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .entry-list{display:flex;flex-direction:column;gap:8px}
+  .entry-item{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+  .entry-item-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .entry-title{font-size:13px;font-weight:600;color:var(--text)}
+  .entry-cat{font-size:10px;color:#63b5f2;background:#1a1a3a;padding:1px 7px;border-radius:10px}
+  .entry-date{font-size:10px;color:var(--muted);margin-left:auto}
+  .entry-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+  .entry-tag{font-size:10px;color:var(--muted);background:var(--line);padding:1px 6px;border-radius:8px}
+  .entry-content{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;white-space:pre-wrap;max-height:80px;overflow:hidden;position:relative}
+  .entry-content.expanded{max-height:none}
+  .entries-empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
+  footer{text-align:center;padding:24px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);margin-top:40px}
+  @media(max-width:600px){.push-form{grid-template-columns:1fr}.header-meta{display:none}.skill-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">🐝</span>
+  <span class="header-title">Bumbee Skills</span>
+  <div class="header-meta">
+    <span class="badge-count">${skills.length} skills</span>
+    <span class="wiki-count">📚 ${wikiCount} entries</span>
+    <input class="search-bar" type="text" placeholder="🔍 Tìm skill..." id="searchInput" oninput="filterSkills(this.value)">
+  </div>
+</header>
+<main>
+
+  <!-- Wiki Push Box -->
+  <div class="wiki-push-box">
+    <h2>💾 Lưu kiến thức → Wiki</h2>
+    <div class="push-form">
+      <input type="text" id="pushTitle" placeholder="Tiêu đề (vd: Higgsfield Soul CLI commands)">
+      <select id="pushCategory">
+        <option value="general">📌 general</option>
+        <option value="research">🔬 research</option>
+        <option value="skill">⚡ skill</option>
+        <option value="workflow">🔄 workflow</option>
+        <option value="tool">🛠 tool</option>
+        <option value="higgsfield">🎬 higgsfield</option>
+        <option value="ai">🤖 ai</option>
+        <option value="config">⚙️ config</option>
+        <option value="note">📝 note</option>
+        <option value="reference">📖 reference</option>
+      </select>
+      <textarea id="pushContent" placeholder="Nội dung, ghi chú, lệnh CLI, kết quả nghiên cứu...&#10;Ví dụ: higgsfield soul-id create --soul-2 --image photo.jpg → returns ref_id dùng cho generate"></textarea>
+      <div class="push-row">
+        <input type="text" id="pushTags" placeholder="Tags (cách nhau bởi dấu phẩy): higgsfield, cli, video">
+        <button class="btn-push" onclick="pushKnowledge()" id="btnPush">💾 Lưu</button>
+        <span class="push-status" id="pushStatus"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Skills list -->
+  <div id="skillsContainer">${emptyMsg}</div>
+
+  <!-- Wiki Entries -->
+  <div class="wiki-entries-box" id="entriesBox">
+    <h2>📚 Knowledge Entries <button class="btn-trigger" onclick="loadEntries()" style="font-size:11px;margin-left:8px">Refresh</button></h2>
+    <div id="entriesList"><div class="entries-empty">Bấm Refresh để load entries...</div></div>
+  </div>
+</main>
+<footer>Bumbee on Desk — Skills &amp; Wiki Knowledge Store • <a href="/health" style="color:#444">health</a> • <a href="/wiki/entries" style="color:#444">API</a></footer>
+
+<script>
+const PORT = location.port || 23333;
+const BASE = location.origin;
+
+function escHtml(s){ const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+
+function filterSkills(q) {
+  q = q.toLowerCase().trim();
+  document.querySelectorAll('.skill-card').forEach(card => {
+    const name = card.dataset.name.toLowerCase();
+    const cat = card.dataset.cat.toLowerCase();
+    card.classList.toggle('hidden', q && !name.includes(q) && !cat.includes(q));
+  });
+}
+
+async function triggerSkill(name) {
+  const r = await fetch(BASE + '/skills/trigger', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ skill: name })
+  });
+  const j = await r.json();
+  alert(j.ok ? '✅ Triggered: ' + name : '❌ Error: ' + (j.error || 'unknown'));
+}
+
+async function pushKnowledge() {
+  const title = document.getElementById('pushTitle').value.trim();
+  const content = document.getElementById('pushContent').value.trim();
+  const category = document.getElementById('pushCategory').value;
+  const tagsRaw = document.getElementById('pushTags').value.trim();
+  const tags = tagsRaw ? tagsRaw.split(',').map(t=>t.trim()).filter(Boolean) : [];
+  const status = document.getElementById('pushStatus');
+  const btn = document.getElementById('btnPush');
+  if (!title && !content) { status.textContent = '⚠️ Cần nhập title hoặc content'; status.className='push-status err'; return; }
+  btn.disabled = true; status.textContent = 'Đang lưu...'; status.className='push-status';
+  try {
+    const r = await fetch(BASE + '/wiki/push', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ title, content, category, tags, source: 'skills-ui' })
+    });
+    const j = await r.json();
+    if (j.ok) {
+      status.textContent = '✅ Đã lưu! ID: ' + j.id.slice(0,8) + '...';
+      status.className = 'push-status ok';
+      document.getElementById('pushTitle').value = '';
+      document.getElementById('pushContent').value = '';
+      document.getElementById('pushTags').value = '';
+      loadEntries();
+    } else {
+      status.textContent = '❌ ' + (j.error || 'Error');
+      status.className = 'push-status err';
+    }
+  } catch(e) {
+    status.textContent = '❌ ' + e.message;
+    status.className = 'push-status err';
+  }
+  btn.disabled = false;
+}
+
+async function loadEntries() {
+  const el = document.getElementById('entriesList');
+  el.innerHTML = '<div class="entries-empty">Loading...</div>';
+  try {
+    const r = await fetch(BASE + '/wiki/entries?limit=30');
+    const j = await r.json();
+    if (!j.ok || !j.entries.length) {
+      el.innerHTML = '<div class="entries-empty">Chưa có entries nào. Hãy lưu kiến thức đầu tiên! 💡</div>';
+      return;
+    }
+    el.innerHTML = j.entries.map(e => {
+      const date = new Date(e.created_at).toLocaleString('vi-VN');
+      const tags = (e.tags||[]).map(t=>'<span class="entry-tag">#'+escHtml(t)+'</span>').join('');
+      const preview = (e.content||'').slice(0,200);
+      return '<div class="entry-item">'
+        + '<div class="entry-item-header"><span class="entry-title">'+escHtml(e.title)+'</span><span class="entry-cat">'+escHtml(e.category)+'</span><span class="entry-date">'+date+'</span></div>'
+        + (tags ? '<div class="entry-tags">'+tags+'</div>' : '')
+        + (preview ? '<div class="entry-content">'+escHtml(preview)+(e.content.length>200?'…':'')+'</div>' : '')
+        + '</div>';
+    }).join('');
+  } catch(e) { el.innerHTML = '<div class="entries-empty">Error: '+e.message+'</div>'; }
+}
+
+// Auto-load entries on page load
+loadEntries();
+</script>
+</body>
+</html>`;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 module.exports = function initServer(ctx) {
 
 let httpServer = null;
@@ -431,6 +692,64 @@ function startHttpServer() {
           jsonResponse(res, 500, { ok: false, error: e.message });
         }
       });
+
+    // ── Wiki Knowledge Store ──────────────────────────────────────────────
+    } else if (req.method === "POST" && req.url === "/wiki/push") {
+      readJson(req, 256 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.wikiStore) return jsonResponse(res, 503, { ok: false, error: "wiki store not available" });
+        const title = typeof data.title === "string" ? data.title.trim() : "";
+        const content = typeof data.content === "string" ? data.content.trim() : "";
+        if (!title && !content) return jsonResponse(res, 400, { ok: false, error: "missing title or content" });
+        try {
+          const record = ctx.wikiStore.add({
+            title: title || "(untitled)",
+            content,
+            category: data.category,
+            tags: data.tags,
+            source: data.source || "api",
+            session_id: data.session_id,
+            meta: data.meta,
+          });
+          jsonResponse(res, 201, { ok: true, id: record.id, created_at: record.created_at });
+        } catch (e) {
+          jsonResponse(res, 500, { ok: false, error: e.message });
+        }
+      });
+
+    } else if (req.method === "GET" && (req.url === "/wiki/entries" || req.url.startsWith("/wiki/entries?"))) {
+      if (!ctx.wikiStore) return jsonResponse(res, 503, { ok: false, error: "wiki store not available" });
+      const qp = new URLSearchParams(req.url.includes("?") ? req.url.split("?")[1] : "");
+      try {
+        const entries = ctx.wikiStore.list({
+          category: qp.get("category") || undefined,
+          tag: qp.get("tag") || undefined,
+          search: qp.get("q") || undefined,
+          limit: qp.get("limit") || 50,
+          offset: qp.get("offset") || 0,
+        });
+        jsonResponse(res, 200, { ok: true, count: entries.length, total: ctx.wikiStore.count(), entries });
+      } catch (e) {
+        jsonResponse(res, 500, { ok: false, error: e.message });
+      }
+
+    } else if (req.method === "POST" && req.url === "/wiki/clear") {
+      if (!ctx.wikiStore) return jsonResponse(res, 503, { ok: false, error: "wiki store not available" });
+      try {
+        const result = ctx.wikiStore.clear();
+        jsonResponse(res, 200, { ok: true, ...result });
+      } catch (e) {
+        jsonResponse(res, 500, { ok: false, error: e.message });
+      }
+
+    // ── Skills HTML UI ────────────────────────────────────────────────────
+    } else if (req.method === "GET" && req.url === "/skills-ui") {
+      const skills = ctx.skills ? ctx.skills.list() : [];
+      const wikiCount = ctx.wikiStore ? ctx.wikiStore.count() : 0;
+      const html = buildSkillsHtml(skills, wikiCount);
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      res.end(html);
+
     } else {
       res.writeHead(404);
       res.end();

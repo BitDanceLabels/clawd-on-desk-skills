@@ -716,6 +716,8 @@ function initBumbeeSmartLayer() {
     proxycliUrl: PROXYCLI_CHAT_URL,
     proxycliApiKey: PROXYCLI_API_KEY,
     proxycliModel: PROXYCLI_MODEL,
+    userName: "anh Nhựt",
+    studioDir: getBumbeeStudioFolderPath(),
   });
 }
 
@@ -873,6 +875,7 @@ async function verifyBumbeeLoginCode(payload) {
     fs.writeFileSync(tokenPath, String(result.token).trim(), { mode: 0o600 });
     try { fs.chmodSync(tokenPath, 0o600); } catch {}
     reloadBumbeeSmartLayer();
+    setChatUserId(email); // Switch chat history to this user
     return { ok: true, email, tokenFile: tokenPath, expires_at: result.expires_at || null };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -882,6 +885,7 @@ async function verifyBumbeeLoginCode(payload) {
 function logoutBumbeeChat() {
   try { fs.unlinkSync(getBumbeeTokenFilePath()); } catch {}
   reloadBumbeeSmartLayer();
+  setChatUserId("local");
   return { ok: true };
 }
 
@@ -1039,6 +1043,242 @@ function getSessionPayload() {
     host: s.host || null,
     headless: !!s.headless,
   }));
+}
+
+// ── Local Agent Dispatch (Codex / Claude Code) ──
+const { spawn } = require("child_process");
+const _localAgentProcesses = new Map(); // taskId → { proc, output, status, agent }
+
+function findLocalAgent() {
+  const candidates = {
+    codex: [
+      process.env.CODEX_PATH,
+      path.join(os.homedir(), ".local", "bin", "codex"),
+      "/usr/local/bin/codex",
+    ].filter(Boolean),
+    claude: [
+      process.env.CLAUDE_CODE_PATH,
+      path.join(os.homedir(), ".claude", "bin", "claude"),
+      "/usr/local/bin/claude",
+      // VS Code extension bundled binary (find latest version)
+      ...(() => {
+        try {
+          const extDir = path.join(os.homedir(), ".vscode", "extensions");
+          const dirs = fs.readdirSync(extDir).filter(d => d.startsWith("anthropic.claude-code-")).sort().reverse();
+          return dirs.map(d => path.join(extDir, d, "resources", "native-binary", "claude"));
+        } catch { return []; }
+      })(),
+      // Claude desktop app
+      path.join(os.homedir(), "Library", "Application Support", "Claude", "claude-code-vm"),
+    ].filter(Boolean),
+  };
+  const found = {};
+  for (const [name, paths] of Object.entries(candidates)) {
+    for (const p of paths) {
+      try { if (fs.statSync(p).isFile()) { found[name] = p; break; } } catch {}
+    }
+  }
+  return found;
+}
+
+async function dispatchLocalAgent(payload) {
+  const { agent, prompt, cwd } = payload || {};
+  if (!prompt) return { ok: false, error: "missing prompt" };
+  const agents = findLocalAgent();
+  const agentName = agent || (agents.codex ? "codex" : agents.claude ? "claude" : null);
+  if (!agentName || !agents[agentName]) return { ok: false, error: `${agentName || "No AI agent"} not found on this machine` };
+
+  const taskId = `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const agentPath = agents[agentName];
+  const files = Array.isArray(payload.files) ? payload.files : [];
+  const args = agentName === "codex"
+    ? ["exec", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", ...files.flatMap(f => ["-i", f]), prompt]
+    : ["--print", "--dangerously-skip-permissions", ...files.flatMap(f => ["--add-dir", path.dirname(f)]), prompt];
+  const workDir = cwd || process.cwd();
+
+  return new Promise((resolve) => {
+    let output = "";
+    let status = "running";
+    const proc = spawn(agentPath, args, {
+      cwd: workDir,
+      env: { ...process.env, TERM: "dumb" },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 300_000,
+    });
+
+    _localAgentProcesses.set(taskId, { proc, output: "", status: "running", agent: agentName, prompt, cwd: workDir, startedAt: Date.now() });
+
+    proc.stdout.on("data", (d) => {
+      output += d.toString();
+      const entry = _localAgentProcesses.get(taskId);
+      if (entry) entry.output = output;
+    });
+    proc.stderr.on("data", (d) => {
+      output += d.toString();
+      const entry = _localAgentProcesses.get(taskId);
+      if (entry) entry.output = output;
+    });
+    proc.on("close", (code) => {
+      status = code === 0 ? "done" : "error";
+      const entry = _localAgentProcesses.get(taskId);
+      if (entry) { entry.status = status; entry.output = output; entry.exitCode = code; }
+      // Notify chat window
+      if (chatWin && !chatWin.isDestroyed()) {
+        chatWin.webContents.send("local-agent:update", { taskId, status, output: output.slice(-2000), agent: agentName });
+      }
+    });
+    proc.on("error", (err) => {
+      status = "error";
+      output += `\nProcess error: ${err.message}`;
+      const entry = _localAgentProcesses.get(taskId);
+      if (entry) { entry.status = status; entry.output = output; }
+    });
+
+    resolve({ ok: true, taskId, agent: agentName, cwd: workDir, status: "running" });
+  });
+}
+
+function getLocalAgentStatus(taskId) {
+  if (taskId) {
+    const entry = _localAgentProcesses.get(taskId);
+    if (!entry) return { ok: false, error: "task not found" };
+    return { ok: true, taskId, agent: entry.agent, status: entry.status, output: entry.output.slice(-3000), cwd: entry.cwd };
+  }
+  // List all
+  const tasks = [];
+  for (const [id, e] of _localAgentProcesses) {
+    tasks.push({ taskId: id, agent: e.agent, status: e.status, prompt: (e.prompt || "").slice(0, 100), cwd: e.cwd, startedAt: e.startedAt });
+  }
+  return { ok: true, tasks };
+}
+
+function stopLocalAgent(taskId) {
+  const entry = _localAgentProcesses.get(taskId);
+  if (!entry) return { ok: false, error: "task not found" };
+  if (entry.status !== "running") return { ok: true, status: entry.status };
+  try { entry.proc.kill("SIGTERM"); } catch {}
+  entry.status = "stopped";
+  return { ok: true, status: "stopped" };
+}
+
+// ── Multi-session Chat State (persisted to disk, per-user) ──
+const CHAT_HISTORY_DIR = path.join(app.getPath("userData"), "chat-history");
+const _chatSessions = new Map();
+const MAX_CHAT_SESSIONS = 20;
+const MAX_MESSAGES_PER_SESSION = 500;
+let _chatUserId = "local"; // default for non-logged-in users
+
+function getChatHistoryPath() {
+  const safeId = String(_chatUserId || "local").replace(/[^a-zA-Z0-9._@-]/g, "_").slice(0, 80);
+  return path.join(CHAT_HISTORY_DIR, `${safeId}.json`);
+}
+
+function setChatUserId(email) {
+  const newId = email || "local";
+  if (newId === _chatUserId) return;
+  saveChatHistory(); // save current user first
+  _chatSessions.clear();
+  _chatUserId = newId;
+  loadChatHistory();
+}
+
+function loadChatHistory() {
+  try { fs.mkdirSync(CHAT_HISTORY_DIR, { recursive: true }); } catch {}
+  try {
+    const raw = JSON.parse(fs.readFileSync(getChatHistoryPath(), "utf8"));
+    if (raw && typeof raw === "object") {
+      for (const [key, session] of Object.entries(raw)) {
+        if (session && Array.isArray(session.messages)) {
+          session.messages = session.messages.slice(-MAX_MESSAGES_PER_SESSION);
+          _chatSessions.set(key, session);
+        }
+      }
+    }
+  } catch {}
+  if (!_chatSessions.has("default")) {
+    _chatSessions.set("default", { messages: [], mode: "general", createdAt: Date.now(), title: "Chat 1" });
+  }
+}
+
+function saveChatHistory() {
+  try {
+    fs.mkdirSync(CHAT_HISTORY_DIR, { recursive: true });
+    const data = {};
+    for (const [key, s] of _chatSessions) {
+      data[key] = { ...s, messages: (s.messages || []).slice(-MAX_MESSAGES_PER_SESSION) };
+    }
+    fs.writeFileSync(getChatHistoryPath(), JSON.stringify(data));
+  } catch (err) {
+    console.warn("Clawd: failed to save chat history:", err.message);
+  }
+}
+
+function saveChatHistoryDebounced() {
+  if (saveChatHistoryDebounced._timer) clearTimeout(saveChatHistoryDebounced._timer);
+  saveChatHistoryDebounced._timer = setTimeout(saveChatHistory, 2000);
+}
+
+loadChatHistory();
+
+function getChatSessionKey(key) { return key || "default"; }
+
+function ensureChatSession(key) {
+  const k = getChatSessionKey(key);
+  if (!_chatSessions.has(k)) {
+    if (_chatSessions.size >= MAX_CHAT_SESSIONS) {
+      return { ok: false, error: `Max ${MAX_CHAT_SESSIONS} sessions reached` };
+    }
+    _chatSessions.set(k, { messages: [], mode: "general", createdAt: Date.now(), title: `Chat ${_chatSessions.size + 1}` });
+    saveChatHistoryDebounced();
+  }
+  return { ok: true, session: _chatSessions.get(k), key: k };
+}
+
+function listChatSessions() {
+  const list = [];
+  for (const [key, s] of _chatSessions) {
+    list.push({ key, title: s.title, mode: s.mode, messageCount: (s.messages || []).length, createdAt: s.createdAt });
+  }
+  return { ok: true, sessions: list };
+}
+
+function createChatSession(payload) {
+  const key = `s-${Date.now().toString(36)}`;
+  const title = payload?.title || `Chat ${_chatSessions.size + 1}`;
+  if (_chatSessions.size >= MAX_CHAT_SESSIONS) return { ok: false, error: `Max ${MAX_CHAT_SESSIONS} sessions` };
+  _chatSessions.set(key, { messages: [], mode: payload?.mode || "general", createdAt: Date.now(), title });
+  saveChatHistoryDebounced();
+  return { ok: true, key, title };
+}
+
+function closeChatSession(key) {
+  if (key === "default") return { ok: false, error: "cannot close default session" };
+  _chatSessions.delete(key);
+  saveChatHistoryDebounced();
+  return { ok: true };
+}
+
+function renameChatSession(key, newTitle) {
+  const s = _chatSessions.get(key);
+  if (!s) return { ok: false, error: "session not found" };
+  s.title = String(newTitle || "").trim().slice(0, 60) || s.title;
+  saveChatHistoryDebounced();
+  return { ok: true, title: s.title };
+}
+
+function appendChatMessage(sessionKey, role, content) {
+  const k = getChatSessionKey(sessionKey);
+  const s = _chatSessions.get(k);
+  if (!s) return;
+  s.messages.push({ role, content, ts: Date.now() });
+  if (s.messages.length > MAX_MESSAGES_PER_SESSION) s.messages = s.messages.slice(-MAX_MESSAGES_PER_SESSION);
+  saveChatHistoryDebounced();
+}
+
+function getChatSessionMessages(sessionKey) {
+  const k = getChatSessionKey(sessionKey);
+  const s = _chatSessions.get(k);
+  return { ok: true, key: k, messages: s ? s.messages : [] };
 }
 
 async function sendBumbeeChat(payload) {
@@ -2362,6 +2602,9 @@ const _visionCapture = require("./vision-auto-capture")({
 const _focus = require("./focus")({ _allowSetForeground });
 const { initFocusHelper, killFocusHelper, focusTerminalWindow, clearMacFocusCooldownTimer } = _focus;
 
+// ── Wiki Knowledge Store ──────────────────────────────────────────────────
+const _wikiStore = require("./wiki-store");
+
 // ── HTTP server — delegated to src/server.js ──
 const _serverCtx = {
   get autoStartWithClaude() { return autoStartWithClaude; },
@@ -2371,6 +2614,7 @@ const _serverCtx = {
   get PASSTHROUGH_TOOLS() { return PASSTHROUGH_TOOLS; },
   get STATE_SVGS() { return STATE_SVGS; },
   get sessions() { return sessions; },
+  wikiStore: _wikiStore,
   setState,
   updateSession,
   resolvePermissionEntry,
@@ -2472,6 +2716,55 @@ function showExternalNotification({ sessionId, title, message, level, timeoutMs 
     console.warn("Clawd: failed to show external notification:", e.message);
   }
 }
+
+// ── Save Knowledge prompt (triggered after Stop event) ───────────────────
+// Track session working durations to decide if worth prompting
+const _sessionWorkStartAt = new Map();
+const SAVE_KNOWLEDGE_MIN_WORKING_MS = 45 * 1000; // only prompt if session worked 45s+
+const SAVE_KNOWLEDGE_COOLDOWN_MS = 5 * 60 * 1000; // don't prompt twice in 5 min
+let _lastSaveKnowledgePromptAt = 0;
+
+function onSessionStop(sessionId) {
+  const startedAt = _sessionWorkStartAt.get(sessionId);
+  _sessionWorkStartAt.delete(sessionId);
+  if (!startedAt) return;
+  const workingMs = Date.now() - startedAt;
+  if (workingMs < SAVE_KNOWLEDGE_MIN_WORKING_MS) return; // session quá ngắn
+  if (Date.now() - _lastSaveKnowledgePromptAt < SAVE_KNOWLEDGE_COOLDOWN_MS) return; // vừa nhắc rồi
+  if (doNotDisturb || hideBubbles) return;
+  _lastSaveKnowledgePromptAt = Date.now();
+  // Delay 1.5s cho attention animation chạy xong rồi mới nhắc
+  setTimeout(() => {
+    try {
+      const port = getHookServerPort();
+      showExternalNotification({
+        sessionId: "save-knowledge",
+        title: "💾 Lưu kiến thức hôm nay?",
+        message: `Vừa làm việc ${Math.round(workingMs / 60000)}p. Mở Skills UI để push notes:\nlocalhost:${port}/skills-ui`,
+        level: "info",
+        timeoutMs: 15000,
+      });
+    } catch (e) {
+      console.warn("Clawd: failed to show save-knowledge prompt:", e.message);
+    }
+  }, 1500);
+}
+
+// Patch updateSession để track session working time + trigger Stop prompt
+const _originalUpdateSession = updateSession;
+function updateSessionWithKnowledgeTrack(sessionId, state, event, ...rest) {
+  // Track khi session bắt đầu working
+  if ((state === "working" || state === "thinking") && !_sessionWorkStartAt.has(sessionId)) {
+    _sessionWorkStartAt.set(sessionId, Date.now());
+  }
+  // Trigger save prompt khi Stop
+  if (event === "Stop" || event === "PostCompact") {
+    onSessionStop(sessionId);
+  }
+  return _originalUpdateSession(sessionId, state, event, ...rest);
+}
+// Monkey-patch serverCtx to use the wrapped version
+_serverCtx.updateSession = updateSessionWithKnowledgeTrack;
 
 // Expose to server context
 _serverCtx.showExternalNotification = showExternalNotification;
@@ -2908,6 +3201,37 @@ function createWindow() {
   ipcMain.on("permission-decide", (event, behavior) => _perm.handleDecide(event, behavior));
   ipcMain.handle("bumbee-chat:send", (_event, payload) => sendBumbeeChat(payload));
   ipcMain.on("bumbee-chat:activity", (_event, payload) => updateBumbeeChatActivity(payload));
+  // Multi-session chat (persisted)
+  ipcMain.handle("bumbee-chat:list-sessions", () => listChatSessions());
+  ipcMain.handle("bumbee-chat:create-session", (_event, payload) => createChatSession(payload));
+  ipcMain.handle("bumbee-chat:close-session", (_event, key) => closeChatSession(key));
+  ipcMain.handle("bumbee-chat:save-message", (_event, sessionKey, role, content) => {
+    appendChatMessage(sessionKey, role, content);
+    return { ok: true };
+  });
+  ipcMain.handle("bumbee-chat:get-messages", (_event, sessionKey) => getChatSessionMessages(sessionKey));
+  ipcMain.handle("bumbee-chat:rename-session", (_event, key, title) => renameChatSession(key, title));
+  // Save pasted/dropped file to temp and return path for agent use
+  ipcMain.handle("bumbee-chat:save-attachment", async (_event, payload) => {
+    try {
+      const { name, dataUrl, mimeType } = payload || {};
+      if (!dataUrl) return { ok: false, error: "no data" };
+      const attachDir = path.join(app.getPath("userData"), "chat-attachments");
+      fs.mkdirSync(attachDir, { recursive: true });
+      const safeName = String(name || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+      const filePath = path.join(attachDir, `${Date.now()}-${safeName}`);
+      const base64 = String(dataUrl).split(",")[1] || "";
+      fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
+      return { ok: true, filePath, name: safeName, mimeType };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  // Local agent dispatch
+  ipcMain.handle("local-agent:dispatch", (_event, payload) => dispatchLocalAgent(payload));
+  ipcMain.handle("local-agent:status", (_event, taskId) => getLocalAgentStatus(taskId));
+  ipcMain.handle("local-agent:stop", (_event, taskId) => stopLocalAgent(taskId));
+  ipcMain.handle("local-agent:find", () => ({ ok: true, agents: findLocalAgent() }));
   ipcMain.handle("bumbee-chat:status", () => getSmartStatusPayload());
   ipcMain.handle("bumbee-chat:sessions", () => ({ ok: true, sessions: getSessionPayload() }));
   ipcMain.handle("bumbee-chat:login-request", (_event, payload) => requestBumbeeLoginCode(payload));
