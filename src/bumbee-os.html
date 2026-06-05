@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' file: data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bumbee OS</title>
+  <link rel="stylesheet" href="bumbee-os.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Bumbee On Desk</p>
+        <h1>Bumbee Black Box Magic</h1>
+        <p class="lead">Owner guide, social publisher, English trailer learning, and safe gateway readiness in one local-first dashboard.</p>
+      </div>
+      <div class="hero-actions">
+        <button id="seedDemoBtn" type="button">Seed demo</button>
+        <button id="refreshBtn" type="button" class="secondary">Refresh</button>
+      </div>
+    </header>
+
+    <section class="status-grid" id="statusGrid"></section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Owner guide</p>
+          <h2>Connect the working system</h2>
+        </div>
+      </div>
+      <div class="guide-grid">
+        <article>
+          <strong>Workspace sources</strong>
+          <p>Folder links, Obsidian, Notion MCP, Codex, Claude, Worker CLI, Goose CLI.</p>
+        </article>
+        <article>
+          <strong>Business stack</strong>
+          <p>Jira/Plane for tasks, Wiki for knowledge, Odoo for CRM and opportunities.</p>
+        </article>
+        <article>
+          <strong>Guardrails</strong>
+          <p>No live publish, payment, camera, microphone, or customer data change without owner approval.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="split">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Users + team setup</p>
+            <h2>Owner/customer profile</h2>
+          </div>
+        </div>
+        <form id="profileForm" class="form">
+          <input id="profileName" placeholder="Display name">
+          <select id="profileRole">
+            <option value="owner">Owner</option>
+            <option value="manager">Manager</option>
+            <option value="agent_operator">Agent operator</option>
+            <option value="customer_viewer">Customer viewer</option>
+          </select>
+          <input id="profileWorkspace" placeholder="Workspace or company">
+          <textarea id="profileSources" rows="3" placeholder="Data sources: folder, Obsidian, Notion MCP, Odoo..."></textarea>
+          <button type="submit">Save profile</button>
+        </form>
+        <div id="profileList" class="list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Publisher setup</p>
+            <h2>Publishing profile</h2>
+          </div>
+        </div>
+        <form id="publisherForm" class="form">
+          <input id="publisherName" placeholder="Publisher name">
+          <input id="publisherPlatforms" placeholder="Platforms: BitDanceGroup, Wiki, Telegram, TikTok...">
+          <input id="publisherAudience" placeholder="Audience">
+          <input id="publisherTone" placeholder="Tone">
+          <button type="submit">Save publisher</button>
+        </form>
+        <div id="publisherList" class="list"></div>
+      </article>
+    </section>
+
+    <section class="split">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Social publisher</p>
+            <h2>Draft a work item</h2>
+          </div>
+        </div>
+        <form id="workForm" class="form">
+          <input id="workTitle" placeholder="Work title or idea">
+          <select id="workType">
+            <option value="idea">Idea</option>
+            <option value="article">Article</option>
+            <option value="video">Video</option>
+            <option value="skill">Skill</option>
+            <option value="demo">Demo</option>
+          </select>
+          <textarea id="workNote" rows="4" placeholder="Draft note, audience, hook, or CTA"></textarea>
+          <button type="submit">Save draft</button>
+        </form>
+        <div id="workList" class="list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">English trailer mode</p>
+            <h2>Daily clip study</h2>
+          </div>
+        </div>
+        <form id="clipForm" class="form">
+          <input id="clipTitle" placeholder="Clip title">
+          <input id="clipUrl" placeholder="YouTube URL or local note">
+          <input id="clipTopic" placeholder="Topic: leadership, interview, product...">
+          <textarea id="clipTranscript" rows="4" placeholder="Paste transcript/subtitle segment here"></textarea>
+          <button type="submit">Save clip</button>
+        </form>
+        <div class="vocab-row">
+          <input id="vocabWord" placeholder="Vocabulary or phrase">
+          <input id="vocabMeaning" placeholder="Meaning / note">
+          <button id="addVocabBtn" type="button">Add vocab</button>
+        </div>
+        <div id="clipList" class="list"></div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Readiness</p>
+          <h2>What can run now</h2>
+        </div>
+      </div>
+      <div class="readiness">
+        <div><span>Owner guide</span><strong>Ready</strong></div>
+        <div><span>Publisher</span><strong>Draft + review</strong></div>
+        <div><span>English trailer</span><strong>Local-first</strong></div>
+        <div><span>Gateway</span><strong>Metadata ready</strong></div>
+        <div><span>Odoo handoff</span><strong>Schema ready</strong></div>
+        <div><span>SePay wallet</span><strong>Waiting docs</strong></div>
+      </div>
+      <div class="split compact">
+        <article>
+          <h3>Packages</h3>
+          <div id="packageList" class="list"></div>
+        </article>
+        <article>
+          <h3>Integrations</h3>
+          <div id="integrationList" class="list"></div>
+        </article>
+      </div>
+      <div class="action-row">
+        <button id="queueReviewBtn" type="button" class="secondary">Queue owner review</button>
+        <button id="exportSqlBtn" type="button" class="secondary">Export SQL dump</button>
+      </div>
+      <div id="actionList" class="list"></div>
+      <pre id="rawOutput">Loading...</pre>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">SePay sandbox</p>
+          <h2>VietQR payment intent</h2>
+        </div>
+      </div>
+      <form id="sepayForm" class="form payment-form">
+        <select id="sepayEnvironment">
+          <option value="sandbox">Sandbox</option>
+          <option value="production">Production config</option>
+        </select>
+        <input id="sepayBank" placeholder="Bank code, e.g. Vietcombank, MBBank, VietinBank">
+        <input id="sepayAccount" placeholder="Account number or VA">
+        <input id="sepayName" placeholder="Account holder name">
+        <input id="sepayAmount" type="number" min="1000" step="1000" placeholder="Amount VND">
+        <input id="sepayDescription" placeholder="Payment code / order invoice number">
+        <button type="submit">Create QR intent</button>
+      </form>
+      <div id="paymentList" class="list"></div>
+    </section>
+  </main>
+  <script src="bumbee-os.js"></script>
+</body>
+</html>

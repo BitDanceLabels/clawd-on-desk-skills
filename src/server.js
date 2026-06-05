@@ -597,6 +597,72 @@ function startHttpServer() {
         clawdbot: ctx.clawdbot ? ctx.clawdbot.status() : { connected: false },
         skills: ctx.skills ? ctx.skills.count() : 0,
         wiki: ctx.wiki ? ctx.wiki.status() : { enabled: false },
+        bumbee_os: ctx.bumbeeOsStore ? ctx.bumbeeOsStore.status() : { ok: false, enabled: false },
+      });
+    } else if (req.method === "GET" && req.url === "/bumbee-os/status") {
+      if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+      jsonResponse(res, 200, ctx.bumbeeOsStore.status());
+    } else if (req.method === "GET" && req.url === "/bumbee-os/data") {
+      if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+      jsonResponse(res, 200, ctx.bumbeeOsStore.list());
+    } else if (req.method === "POST" && req.url === "/bumbee-os/work") {
+      readJson(req, 128 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+        const result = ctx.bumbeeOsStore.addWorkItem(data || {});
+        jsonResponse(res, result.ok ? 201 : 400, result);
+      });
+    } else if (req.method === "POST" && req.url === "/bumbee-os/clip") {
+      readJson(req, 256 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+        const result = ctx.bumbeeOsStore.addClip(data || {});
+        jsonResponse(res, result.ok ? 201 : 400, result);
+      });
+    } else if (req.method === "POST" && req.url === "/bumbee-os/vocab") {
+      readJson(req, 128 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+        const result = ctx.bumbeeOsStore.addVocabulary(data || {});
+        jsonResponse(res, result.ok ? 201 : 400, result);
+      });
+    } else if (req.method === "POST" && req.url === "/bumbee-os/user-profile") {
+      readJson(req, 128 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+        const result = ctx.bumbeeOsStore.addUserProfile(data || {});
+        jsonResponse(res, result.ok ? 201 : 400, result);
+      });
+    } else if (req.method === "POST" && req.url === "/bumbee-os/publisher-profile") {
+      readJson(req, 128 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+        const result = ctx.bumbeeOsStore.addPublisherProfile(data || {});
+        jsonResponse(res, result.ok ? 201 : 400, result);
+      });
+    } else if (req.method === "POST" && req.url === "/bumbee-os/action") {
+      readJson(req, 128 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+        const result = ctx.bumbeeOsStore.queueAction(data || {});
+        jsonResponse(res, result.ok ? 201 : 400, result);
+      });
+    } else if (req.method === "GET" && req.url === "/bumbee-os/sql-dump") {
+      if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+      jsonResponse(res, 200, ctx.bumbeeOsStore.exportSqlDump());
+    } else if (req.method === "POST" && req.url === "/bumbee-os/sepay/payment-intent") {
+      readJson(req, 128 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { ok: false, error: err.message });
+        if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { ok: false, error: "Bumbee OS store not available" });
+        const result = ctx.bumbeeOsStore.createSepayPaymentIntent(data || {});
+        jsonResponse(res, result.ok ? 201 : 400, result);
+      });
+    } else if (req.method === "POST" && req.url === "/bumbee-os/sepay/webhook") {
+      readJson(req, 256 * 1024, (err, data) => {
+        if (err) return jsonResponse(res, 400, { success: false, error: err.message });
+        if (!ctx.bumbeeOsStore) return jsonResponse(res, 503, { success: false, error: "Bumbee OS store not available" });
+        const result = ctx.bumbeeOsStore.recordSepayNotification(data || {});
+        jsonResponse(res, result.ok ? 200 : 400, { success: result.ok, ...result });
       });
     } else if (req.method === "POST" && req.url === "/notification") {
       readJson(req, 64 * 1024, (err, data) => {

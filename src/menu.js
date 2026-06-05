@@ -116,6 +116,7 @@ const i18n = {
     characterEmpty: "(none yet — drop files in folder)",
     bumbee: "Bumbee Hub",
     bumbeeOpenChat: "Open Bumbee Chat…",
+    bumbeeOpenOs: "Open Bumbee OS…",
     bumbeeOpenVocab: "Open Vocab Tinder…",
     bumbeeOpenPhaseHub: "Open Phase Hub…",
     bumbeeStatus: "Connection Status…",
@@ -192,6 +193,7 @@ const i18n = {
     characterVRM: "VRM 3D 角色",
     bumbee: "Bumbee 集成",
     bumbeeOpenChat: "打开 Bumbee 聊天…",
+    bumbeeOpenOs: "打开 Bumbee OS…",
     bumbeeOpenPhaseHub: "打开 Phase Hub…",
     bumbeeStatus: "连接状态…",
     bumbeeReloadSkills: "重载技能 ({n})",
@@ -391,6 +393,13 @@ module.exports = function initMenu(ctx) {
         enabled: typeof ctx.openBumbeeChat === "function",
         click: () => {
           if (ctx.openBumbeeChat) ctx.openBumbeeChat();
+        },
+      },
+      {
+        label: t("bumbeeOpenOs"),
+        enabled: typeof ctx.openBumbeeOs === "function",
+        click: () => {
+          if (ctx.openBumbeeOs) ctx.openBumbeeOs();
         },
       },
       {

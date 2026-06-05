@@ -173,6 +173,7 @@ let chatWin;
 let visionWin;
 let vocabWin;
 let phaseHubWin;
+let bumbeeOsWin;
 let donationSettingsWin;
 let sceneViewerWin;
 let chatAutoHideTimer = null;
@@ -2221,6 +2222,39 @@ function openPhaseHub() {
   });
 }
 
+function openBumbeeOs() {
+  if (bumbeeOsWin && !bumbeeOsWin.isDestroyed()) {
+    bumbeeOsWin.show();
+    bumbeeOsWin.focus();
+    return;
+  }
+
+  const primary = screen.getPrimaryDisplay().workArea;
+  bumbeeOsWin = new BrowserWindow({
+    width: Math.min(1180, Math.max(920, primary.width - 120)),
+    height: Math.min(840, Math.max(680, primary.height - 120)),
+    minWidth: 840,
+    minHeight: 620,
+    title: "Bumbee OS",
+    show: false,
+    backgroundColor: "#0b0f14",
+    webPreferences: {
+      preload: path.join(__dirname, "preload-bumbee-os.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  bumbeeOsWin.loadFile(path.join(__dirname, "bumbee-os.html"));
+  bumbeeOsWin.once("ready-to-show", () => {
+    if (bumbeeOsWin && !bumbeeOsWin.isDestroyed()) bumbeeOsWin.show();
+  });
+  bumbeeOsWin.on("closed", () => {
+    bumbeeOsWin = null;
+  });
+}
+
 function openSceneViewer() {
   if (sceneViewerWin && !sceneViewerWin.isDestroyed()) {
     sceneViewerWin.show();
@@ -2604,6 +2638,7 @@ const { initFocusHelper, killFocusHelper, focusTerminalWindow, clearMacFocusCool
 
 // ── Wiki Knowledge Store ──────────────────────────────────────────────────
 const _wikiStore = require("./wiki-store");
+const _bumbeeOsStore = require("./bumbee-os-store")(app.getPath("userData"));
 
 // ── HTTP server — delegated to src/server.js ──
 const _serverCtx = {
@@ -2615,6 +2650,7 @@ const _serverCtx = {
   get STATE_SVGS() { return STATE_SVGS; },
   get sessions() { return sessions; },
   wikiStore: _wikiStore,
+  bumbeeOsStore: _bumbeeOsStore,
   setState,
   updateSession,
   resolvePermissionEntry,
@@ -2927,6 +2963,7 @@ const _menuCtx = {
   openBumbeeChat,
   openBumbeeVocab: openVocabTinder,
   openBumbeePhaseHub: openPhaseHub,
+  openBumbeeOs,
   visionCaptureRunning: () => _visionCapture.isRunning(),
   toggleVisionCapture: () => {
     if (_visionCapture.isRunning()) _visionCapture.stop();
@@ -3191,6 +3228,7 @@ function createWindow() {
   ipcMain.on("open-bumbee-vision", openBumbeeVision);
   ipcMain.on("open-bumbee-vocab", openVocabTinder);
   ipcMain.on("open-bumbee-phase-hub", openPhaseHub);
+  ipcMain.on("open-bumbee-os", openBumbeeOs);
 
   ipcMain.on("show-session-menu", () => {
     popupMenuAt(Menu.buildFromTemplate(buildSessionSubmenu()));
@@ -3251,6 +3289,19 @@ function createWindow() {
     return wikiMod.getExecutionHistory(getBumbeeStudioFolderPath());
   });
   ipcMain.handle("bumbee-wiki:status", () => _wiki ? { ok: true, ..._wiki.status() } : { ok: false, error: "Bumbee Wiki service is not available yet" });
+  ipcMain.handle("bumbee-os:status", () => _bumbeeOsStore.status());
+  ipcMain.handle("bumbee-os:list", () => _bumbeeOsStore.list());
+  ipcMain.handle("bumbee-os:seed-demo", () => _bumbeeOsStore.seedDemo());
+  ipcMain.handle("bumbee-os:add-work-item", (_event, payload) => _bumbeeOsStore.addWorkItem(payload));
+  ipcMain.handle("bumbee-os:add-clip", (_event, payload) => _bumbeeOsStore.addClip(payload));
+  ipcMain.handle("bumbee-os:add-vocabulary", (_event, payload) => _bumbeeOsStore.addVocabulary(payload));
+  ipcMain.handle("bumbee-os:add-user-profile", (_event, payload) => _bumbeeOsStore.addUserProfile(payload));
+  ipcMain.handle("bumbee-os:add-publisher-profile", (_event, payload) => _bumbeeOsStore.addPublisherProfile(payload));
+  ipcMain.handle("bumbee-os:queue-action", (_event, payload) => _bumbeeOsStore.queueAction(payload));
+  ipcMain.handle("bumbee-os:create-sepay-payment-intent", (_event, payload) => _bumbeeOsStore.createSepayPaymentIntent(payload));
+  ipcMain.handle("bumbee-os:record-sepay-notification", (_event, payload) => _bumbeeOsStore.recordSepayNotification(payload));
+  ipcMain.handle("bumbee-os:export-sql-dump", () => _bumbeeOsStore.exportSqlDump());
+  ipcMain.handle("bumbee-os:update-settings", (_event, payload) => _bumbeeOsStore.updateSettings(payload));
   ipcMain.handle("bumbee-chat:vision-audio", (_event, payload) => transcribeVisionAudio(payload));
   ipcMain.handle("bumbee-vocab:list", () => listVocabItems());
   ipcMain.handle("bumbee-vocab:add", (_event, payload) => addVocabItems(payload));
@@ -3722,6 +3773,7 @@ if (!gotTheLock) {
     if (visionWin && !visionWin.isDestroyed()) visionWin.destroy();
     if (vocabWin && !vocabWin.isDestroyed()) vocabWin.destroy();
     if (phaseHubWin && !phaseHubWin.isDestroyed()) phaseHubWin.destroy();
+    if (bumbeeOsWin && !bumbeeOsWin.isDestroyed()) bumbeeOsWin.destroy();
   });
 
   app.on("window-all-closed", () => {

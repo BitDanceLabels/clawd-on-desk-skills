@@ -27,6 +27,18 @@ const ROUTES = [
   { name: "clawd_wiki_clear",        method: "POST", gateway_path: "/v1/clawd/wiki/clear",    upstream_path: "/wiki/clear" },
   // Skills UI
   { name: "clawd_skills_ui",         method: "GET",  gateway_path: "/v1/clawd/skills-ui",     upstream_path: "/skills-ui" },
+  // Bumbee OS local-first MVP
+  { name: "clawd_bumbee_os_status",  method: "GET",  gateway_path: "/v1/clawd/bumbee-os/status", upstream_path: "/bumbee-os/status" },
+  { name: "clawd_bumbee_os_data",    method: "GET",  gateway_path: "/v1/clawd/bumbee-os/data",   upstream_path: "/bumbee-os/data" },
+  { name: "clawd_bumbee_os_work",    method: "POST", gateway_path: "/v1/clawd/bumbee-os/work",   upstream_path: "/bumbee-os/work" },
+  { name: "clawd_bumbee_os_clip",    method: "POST", gateway_path: "/v1/clawd/bumbee-os/clip",   upstream_path: "/bumbee-os/clip" },
+  { name: "clawd_bumbee_os_vocab",   method: "POST", gateway_path: "/v1/clawd/bumbee-os/vocab",  upstream_path: "/bumbee-os/vocab" },
+  { name: "clawd_bumbee_os_user_profile", method: "POST", gateway_path: "/v1/clawd/bumbee-os/user-profile", upstream_path: "/bumbee-os/user-profile" },
+  { name: "clawd_bumbee_os_publisher_profile", method: "POST", gateway_path: "/v1/clawd/bumbee-os/publisher-profile", upstream_path: "/bumbee-os/publisher-profile" },
+  { name: "clawd_bumbee_os_action",  method: "POST", gateway_path: "/v1/clawd/bumbee-os/action", upstream_path: "/bumbee-os/action" },
+  { name: "clawd_bumbee_os_sql_dump", method: "GET", gateway_path: "/v1/clawd/bumbee-os/sql-dump", upstream_path: "/bumbee-os/sql-dump" },
+  { name: "clawd_bumbee_os_sepay_payment_intent", method: "POST", gateway_path: "/v1/clawd/bumbee-os/sepay/payment-intent", upstream_path: "/bumbee-os/sepay/payment-intent" },
+  { name: "clawd_bumbee_os_sepay_webhook", method: "POST", gateway_path: "/v1/clawd/bumbee-os/sepay/webhook", upstream_path: "/bumbee-os/sepay/webhook" },
 ];
 
 function postJson(url, payload, timeoutMs) {
