@@ -10,6 +10,9 @@
   const skillResearchList = document.getElementById("skillResearchList");
   const gatewayApiDraftList = document.getElementById("gatewayApiDraftList");
   const knowledgeSyncList = document.getElementById("knowledgeSyncList");
+  const workspaceList = document.getElementById("workspaceList");
+  const teamList = document.getElementById("teamList");
+  const opsDashboardList = document.getElementById("opsDashboardList");
   const workList = document.getElementById("workList");
   const clipList = document.getElementById("clipList");
   const profileList = document.getElementById("profileList");
@@ -34,6 +37,8 @@
       ["Jira drafts", counts.jiraDrafts || 0],
       ["Skill research", counts.skillResearchItems || 0],
       ["API drafts", counts.gatewayApiDrafts || 0],
+      ["Sources", counts.workspaceConnections || 0],
+      ["Team", counts.teamMembers || 0],
       ["Clips", counts.clips || 0],
       ["Vocab", counts.vocabulary || 0],
       ["Profiles", counts.userProfiles || 0],
@@ -57,6 +62,9 @@
     const skillResearchItems = data?.skillResearchItems || [];
     const gatewayApiDrafts = data?.gatewayApiDrafts || [];
     const knowledgeSyncPlans = data?.knowledgeSyncPlans || [];
+    const workspaces = data?.workspaceConnections || [];
+    const teamMembers = data?.teamMembers || [];
+    const opsDashboards = data?.opsDashboards || [];
     const messages = data?.companionMessages || [];
     const clips = data?.clips || [];
     const profiles = data?.userProfiles || [];
@@ -128,6 +136,30 @@
         <small>${(plan.targets || []).map(escapeHtml).join(", ")}</small>
       </article>
     `).join("") : `<article class="item"><strong>No knowledge sync plans</strong><small>Plan how new knowledge enters skills, wiki, and gateway.</small></article>`;
+
+    workspaceList.innerHTML = workspaces.length ? workspaces.slice(0, 10).map((item) => `
+      <article class="item">
+        <strong>${escapeHtml(item.name)}</strong>
+        <small>${escapeHtml(item.type)} · ${escapeHtml(item.status)} · ${escapeHtml(item.cadence)}</small>
+        <small>${escapeHtml(item.location)}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No work sources</strong><small>Add wiki, folder, Notion, Jira, Odoo, email, or platform source.</small></article>`;
+
+    teamList.innerHTML = teamMembers.length ? teamMembers.slice(0, 10).map((member) => `
+      <article class="item">
+        <strong>${escapeHtml(member.name)}</strong>
+        <small>${escapeHtml(member.role)} · ${escapeHtml(member.member_type)} · ${escapeHtml(member.status)}</small>
+        <small>${(member.work_sources || []).map(escapeHtml).join(", ")}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No team members</strong><small>Add staff, agents, workers, or customer contacts.</small></article>`;
+
+    opsDashboardList.innerHTML = opsDashboards.length ? opsDashboards.slice(0, 3).map((dashboard) => `
+      <article class="item">
+        <strong>${escapeHtml(dashboard.title)}</strong>
+        <small>${escapeHtml(dashboard.date)} · sources ${dashboard.metrics?.workspace_connections || 0} · team ${dashboard.metrics?.team_members || 0} · actions ${dashboard.metrics?.open_actions || 0}</small>
+        <small>Jira drafts ${dashboard.metrics?.jira_drafts || 0} · API drafts ${dashboard.metrics?.gateway_api_drafts || 0}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No ops dashboard yet</strong><small>Build dashboard after adding sources/team.</small></article>`;
 
     workList.innerHTML = works.length ? works.slice(0, 8).map((item) => `
       <article class="item">
@@ -277,6 +309,43 @@
     });
     rawOutput.textContent = JSON.stringify(result, null, 2);
     event.target.reset();
+    await refresh();
+  });
+
+  document.getElementById("workspaceForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const result = await window.bumbeeOsAPI.addWorkspaceConnection({
+      name: document.getElementById("workspaceName").value,
+      type: document.getElementById("workspaceType").value,
+      location: document.getElementById("workspaceLocation").value,
+      owner: document.getElementById("workspaceOwner").value,
+      notes: document.getElementById("workspaceNotes").value,
+      tags: ["daily_ops"],
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    event.target.reset();
+    await refresh();
+  });
+
+  document.getElementById("teamForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const workSources = document.getElementById("teamSources").value.split(",").map((item) => item.trim()).filter(Boolean);
+    const result = await window.bumbeeOsAPI.addTeamMember({
+      name: document.getElementById("teamName").value,
+      role: document.getElementById("teamRole").value,
+      member_type: document.getElementById("teamType").value,
+      email: document.getElementById("teamEmail").value,
+      work_sources: workSources,
+      owner_area: "daily_ops",
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    event.target.reset();
+    await refresh();
+  });
+
+  document.getElementById("buildOpsDashboardBtn").addEventListener("click", async () => {
+    const result = await window.bumbeeOsAPI.buildOpsDashboard();
+    rawOutput.textContent = JSON.stringify(result, null, 2);
     await refresh();
   });
 

@@ -3297,6 +3297,9 @@ function createWindow() {
   ipcMain.handle("bumbee-os:build-daily-digest", (_event, payload) => _bumbeeOsStore.buildDailyDigest(payload));
   ipcMain.handle("bumbee-os:companion-chat", (_event, payload) => _bumbeeOsStore.companionChat(payload));
   ipcMain.handle("bumbee-os:propose-capability-upgrade", (_event, payload) => _bumbeeOsStore.proposeCapabilityUpgrade(payload));
+  ipcMain.handle("bumbee-os:add-workspace-connection", (_event, payload) => _bumbeeOsStore.addWorkspaceConnection(payload));
+  ipcMain.handle("bumbee-os:add-team-member", (_event, payload) => _bumbeeOsStore.addTeamMember(payload));
+  ipcMain.handle("bumbee-os:build-ops-dashboard", (_event, payload) => _bumbeeOsStore.buildOpsDashboard(payload));
   ipcMain.handle("bumbee-os:add-clip", (_event, payload) => _bumbeeOsStore.addClip(payload));
   ipcMain.handle("bumbee-os:add-vocabulary", (_event, payload) => _bumbeeOsStore.addVocabulary(payload));
   ipcMain.handle("bumbee-os:add-user-profile", (_event, payload) => _bumbeeOsStore.addUserProfile(payload));

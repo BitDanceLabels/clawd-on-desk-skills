@@ -92,6 +92,55 @@
     <section class="panel">
       <div class="panel-head">
         <div>
+          <p class="eyebrow">Workspaces + team ops</p>
+          <h2>Daily sources and people dashboard</h2>
+        </div>
+        <button id="buildOpsDashboardBtn" type="button" class="secondary">Build dashboard</button>
+      </div>
+      <div class="split">
+        <article>
+          <form id="workspaceForm" class="form">
+            <input id="workspaceName" placeholder="Source name, e.g. Brain Ops Wiki">
+            <select id="workspaceType">
+              <option value="local_folder">Local folder</option>
+              <option value="wiki_url">Wiki URL</option>
+              <option value="notion">Notion</option>
+              <option value="email_report">Email report</option>
+              <option value="jira">Jira</option>
+              <option value="odoo_crm">Odoo CRM</option>
+              <option value="publisher">Publisher platform</option>
+              <option value="revenue">Revenue report</option>
+            </select>
+            <input id="workspaceLocation" placeholder="Path or URL">
+            <input id="workspaceOwner" placeholder="Owner/team">
+            <textarea id="workspaceNotes" rows="3" placeholder="What should Bumbee read or summarize from this source?"></textarea>
+            <button type="submit">Add source</button>
+          </form>
+          <div id="workspaceList" class="list"></div>
+        </article>
+        <article>
+          <form id="teamForm" class="form">
+            <input id="teamName" placeholder="Name">
+            <input id="teamRole" placeholder="Role / responsibility">
+            <select id="teamType">
+              <option value="human">Human</option>
+              <option value="agent">AI agent</option>
+              <option value="worker">Worker</option>
+              <option value="customer">Customer</option>
+            </select>
+            <input id="teamEmail" placeholder="Email">
+            <textarea id="teamSources" rows="3" placeholder="Work sources: Jira, Odoo, Notion, email report..."></textarea>
+            <button type="submit">Add person/agent</button>
+          </form>
+          <div id="teamList" class="list"></div>
+          <div id="opsDashboardList" class="list"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
           <p class="eyebrow">Owner guide</p>
           <h2>Connect the working system</h2>
         </div>

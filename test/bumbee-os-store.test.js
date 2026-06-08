@@ -213,3 +213,51 @@ test("Bumbee OS prepares skill research and gateway API capability upgrades", ()
   assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_skill_research_items/);
   assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_gateway_api_drafts/);
 });
+
+test("Bumbee OS stores workspace connectors, team members, and ops dashboard metrics", () => {
+  const dir = tmpDir();
+  const localWork = path.join(dir, "daily-work");
+  fs.mkdirSync(localWork, { recursive: true });
+  const store = createStore(dir);
+
+  const folder = store.addWorkspaceConnection({
+    name: "Daily work folder",
+    type: "local_folder",
+    location: localWork,
+    owner: "owner",
+  });
+  assert.equal(folder.ok, true);
+  assert.equal(folder.connection.status, "ready_to_scan");
+
+  const wiki = store.addWorkspaceConnection({
+    name: "Brain Ops Wiki",
+    type: "wiki_url",
+    location: "https://wiki.bumbee.asia/brain-ops",
+  });
+  assert.equal(wiki.connection.status, "api_or_mcp_connector_needed");
+
+  const member = store.addTeamMember({
+    name: "Sales Agent",
+    role: "Customer follow-up",
+    member_type: "agent",
+    work_sources: ["Jira", "Odoo CRM", "Email report"],
+  });
+  assert.equal(member.ok, true);
+  assert.equal(member.member.daily_report_expected, true);
+
+  const dashboard = store.buildOpsDashboard();
+  assert.equal(dashboard.ok, true);
+  assert.equal(dashboard.dashboard.metrics.workspace_connections, 2);
+  assert.equal(dashboard.dashboard.metrics.ready_local_sources, 1);
+  assert.equal(dashboard.dashboard.metrics.remote_connector_drafts, 1);
+  assert.equal(dashboard.dashboard.metrics.team_members, 1);
+
+  const data = store.list();
+  assert.equal(data.counts.workspaceConnections, 2);
+  assert.equal(data.counts.teamMembers, 1);
+  assert.equal(data.counts.opsDashboards, 1);
+
+  const dump = store.exportSqlDump();
+  assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_workspace_connections/);
+  assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_ops_dashboards/);
+});

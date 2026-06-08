@@ -13,6 +13,9 @@ const DEFAULT_DATA = {
   skillResearchItems: [],
   gatewayApiDrafts: [],
   knowledgeSyncPlans: [],
+  workspaceConnections: [],
+  teamMembers: [],
+  opsDashboards: [],
   companionMessages: [],
   clips: [],
   vocabulary: [],
@@ -45,6 +48,7 @@ const DEFAULT_DATA = {
       "~/Bumbee/bumbee-wiki",
       "/home/bumbee_workspace/awesome-bumbee-skills/bumbee-studio-idea/nhutpham-task",
     ],
+    defaultWorkspaceScanMode: "local_first_connector_drafts",
   },
 };
 
@@ -193,6 +197,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         skillResearchItems: Array.isArray(data.skillResearchItems) ? data.skillResearchItems : [],
         gatewayApiDrafts: Array.isArray(data.gatewayApiDrafts) ? data.gatewayApiDrafts : [],
         knowledgeSyncPlans: Array.isArray(data.knowledgeSyncPlans) ? data.knowledgeSyncPlans : [],
+        workspaceConnections: Array.isArray(data.workspaceConnections) ? data.workspaceConnections : [],
+        teamMembers: Array.isArray(data.teamMembers) ? data.teamMembers : [],
+        opsDashboards: Array.isArray(data.opsDashboards) ? data.opsDashboards : [],
         companionMessages: Array.isArray(data.companionMessages) ? data.companionMessages : [],
         clips: Array.isArray(data.clips) ? data.clips : [],
         vocabulary: Array.isArray(data.vocabulary) ? data.vocabulary : [],
@@ -230,6 +237,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         skillResearchItems: data.skillResearchItems.length,
         gatewayApiDrafts: data.gatewayApiDrafts.length,
         knowledgeSyncPlans: data.knowledgeSyncPlans.length,
+        workspaceConnections: data.workspaceConnections.length,
+        teamMembers: data.teamMembers.length,
+        opsDashboards: data.opsDashboards.length,
         companionMessages: data.companionMessages.length,
         clips: data.clips.length,
         vocabulary: data.vocabulary.length,
@@ -247,6 +257,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         ownerGuide: "ready_for_mvp",
         dailyCompanion: "local_digest_and_jira_drafts",
         capabilityLearning: "research_backlog_and_gateway_api_drafts",
+        workspaceOps: "local_sources_now_remote_connectors_draft",
         socialPublisher: "draft_and_review_queue",
         englishTrailer: "local_first",
         gatewayScan: "metadata_ready",
@@ -270,6 +281,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       skillResearchItems: data.skillResearchItems.slice(0, 100),
       gatewayApiDrafts: data.gatewayApiDrafts.slice(0, 100),
       knowledgeSyncPlans: data.knowledgeSyncPlans.slice(0, 100),
+      workspaceConnections: data.workspaceConnections.slice(0, 100),
+      teamMembers: data.teamMembers.slice(0, 100),
+      opsDashboards: data.opsDashboards.slice(0, 50),
       companionMessages: data.companionMessages.slice(0, 100),
       clips: data.clips.slice(0, 100),
       vocabulary: data.vocabulary.slice(0, 200),
@@ -658,6 +672,132 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     return { ok: true, workItem, skillResearchItems: skillItems, gatewayApiDrafts: apiDrafts, knowledgeSyncPlan: syncPlan, action };
   }
 
+  function addWorkspaceConnection(payload) {
+    const data = read();
+    const name = normalizeString(payload?.name, 180);
+    if (!name) return { ok: false, error: "missing workspace connection name" };
+    const type = normalizeString(payload?.type, 80) || "local_folder";
+    const location = normalizeString(payload?.location || payload?.url || payload?.path, 1000);
+    const now = new Date().toISOString();
+    const localTypes = new Set(["local_folder", "obsidian", "file_folder"]);
+    const isLocal = localTypes.has(type);
+    const normalizedPath = isLocal ? normalizePath(location) : "";
+    const exists = isLocal && normalizedPath ? fs.existsSync(normalizedPath) : false;
+    const connection = {
+      id: makeId("workspace"),
+      name,
+      type,
+      location,
+      normalized_path: normalizedPath,
+      scan_mode: isLocal ? "scan_local_files" : "connector_draft",
+      status: isLocal ? (exists ? "ready_to_scan" : "path_missing") : "api_or_mcp_connector_needed",
+      owner: normalizeString(payload?.owner, 120) || "owner",
+      cadence: normalizeString(payload?.cadence, 80) || "daily",
+      tags: normalizeArray(payload?.tags, 12, 40),
+      notes: normalizeString(payload?.notes, 1200),
+      created_at: now,
+      updated_at: now,
+    };
+    data.workspaceConnections.unshift(connection);
+    if (isLocal && normalizedPath && !data.settings.sourceFolders.includes(location)) {
+      data.settings.sourceFolders = Array.from(new Set([location, ...data.settings.sourceFolders])).slice(0, 12);
+    }
+    data.actionQueue.unshift({
+      id: makeId("action"),
+      title: `Review workspace connector: ${name}`,
+      action_type: "workspace_connector_review",
+      target_type: "workspace_connection",
+      target_id: connection.id,
+      priority: connection.status === "ready_to_scan" ? "normal" : "high",
+      status: "waiting_owner_review",
+      note: isLocal
+        ? `Local source ${connection.status}. Bumbee can include it in daily scans.`
+        : `Remote source stored as connector draft. Needs API/MCP credentials before live scan.`,
+      created_at: now,
+    });
+    write(data);
+    return { ok: true, connection };
+  }
+
+  function addTeamMember(payload) {
+    const data = read();
+    const name = normalizeString(payload?.name || payload?.display_name, 160);
+    if (!name) return { ok: false, error: "missing team member name" };
+    const now = new Date().toISOString();
+    const member = {
+      id: makeId("member"),
+      name,
+      role: normalizeString(payload?.role, 120) || "operator",
+      member_type: normalizeString(payload?.member_type, 80) || "human",
+      email: normalizeString(payload?.email, 180),
+      owner_area: normalizeString(payload?.owner_area, 180),
+      work_sources: normalizeArray(payload?.work_sources, 20, 200),
+      status: normalizeString(payload?.status, 80) || "active",
+      daily_report_expected: payload?.daily_report_expected !== false,
+      created_at: now,
+      updated_at: now,
+    };
+    data.teamMembers.unshift(member);
+    data.actionQueue.unshift({
+      id: makeId("action"),
+      title: `Setup daily reporting for ${name}`,
+      action_type: "team_reporting_setup",
+      target_type: "team_member",
+      target_id: member.id,
+      priority: "normal",
+      status: "waiting_owner_review",
+      note: "Map Jira/Odoo/email/reporting sources for this person or agent.",
+      created_at: now,
+    });
+    write(data);
+    return { ok: true, member };
+  }
+
+  function buildOpsDashboard(payload = {}) {
+    const data = read();
+    const now = new Date().toISOString();
+    const readyLocalSources = data.workspaceConnections.filter((item) => item.status === "ready_to_scan").length;
+    const remoteDraftSources = data.workspaceConnections.filter((item) => item.status === "api_or_mcp_connector_needed").length;
+    const activeMembers = data.teamMembers.filter((item) => item.status !== "inactive").length;
+    const waitingActions = data.actionQueue.filter((item) => item.status === "waiting_owner_review").length;
+    const dashboard = {
+      id: makeId("opsdash"),
+      date: now.slice(0, 10),
+      title: normalizeString(payload.title, 180) || `Bumbee daily ops dashboard ${now.slice(0, 10)}`,
+      metrics: {
+        workspace_connections: data.workspaceConnections.length,
+        ready_local_sources: readyLocalSources,
+        remote_connector_drafts: remoteDraftSources,
+        team_members: activeMembers,
+        open_actions: waitingActions,
+        jira_drafts: data.jiraDrafts.length,
+        skill_research_items: data.skillResearchItems.length,
+        gateway_api_drafts: data.gatewayApiDrafts.length,
+        payment_intents: data.paymentIntents.length,
+        paid_payment_intents: data.paymentIntents.filter((item) => item.status === "paid").length,
+      },
+      sections: [
+        {
+          name: "Work sources",
+          items: data.workspaceConnections.slice(0, 12).map((item) => `${item.name}: ${item.type} / ${item.status}`),
+        },
+        {
+          name: "Team and agents",
+          items: data.teamMembers.slice(0, 12).map((item) => `${item.name}: ${item.role} / ${item.member_type} / ${item.status}`),
+        },
+        {
+          name: "Review queue",
+          items: data.actionQueue.slice(0, 12).map((item) => `${item.priority}: ${item.title}`),
+        },
+      ],
+      status: "generated_local",
+      created_at: now,
+    };
+    data.opsDashboards.unshift(dashboard);
+    write(data);
+    return { ok: true, dashboard };
+  }
+
   function addClip(payload) {
     const data = read();
     const title = normalizeString(payload?.title, 180) || "Daily English clip";
@@ -858,6 +998,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       "CREATE TABLE IF NOT EXISTS bumbee_skill_research_items (id TEXT PRIMARY KEY, title TEXT, goal TEXT, source TEXT, status TEXT, priority TEXT, expected_output_json TEXT, tags_json TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_gateway_api_drafts (id TEXT PRIMARY KEY, name TEXT, method TEXT, path TEXT, purpose TEXT, auth_required INTEGER, status TEXT, request_schema_json TEXT, response_schema_json TEXT, risks_json TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_knowledge_sync_plans (id TEXT PRIMARY KEY, title TEXT, goal TEXT, sources_json TEXT, targets_json TEXT, cadence TEXT, status TEXT, created_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_workspace_connections (id TEXT PRIMARY KEY, name TEXT, type TEXT, location TEXT, normalized_path TEXT, scan_mode TEXT, status TEXT, owner TEXT, cadence TEXT, tags_json TEXT, notes TEXT, created_at TEXT, updated_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_team_members (id TEXT PRIMARY KEY, name TEXT, role TEXT, member_type TEXT, email TEXT, owner_area TEXT, work_sources_json TEXT, status TEXT, daily_report_expected INTEGER, created_at TEXT, updated_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_ops_dashboards (id TEXT PRIMARY KEY, date TEXT, title TEXT, metrics_json TEXT, sections_json TEXT, status TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_companion_messages (id TEXT PRIMARY KEY, role TEXT, message TEXT, source TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_clips (id TEXT PRIMARY KEY, title TEXT, source_type TEXT, source_url TEXT, local_path TEXT, speaker TEXT, topic TEXT, transcript TEXT, license_note TEXT, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_vocabulary (id TEXT PRIMARY KEY, clip_id TEXT, word_or_phrase TEXT, meaning_vi TEXT, meaning_en TEXT, example_sentence TEXT, timestamp_seconds INTEGER, category TEXT, review_status TEXT, created_at TEXT);",
@@ -889,6 +1032,15 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     }
     for (const plan of data.knowledgeSyncPlans) {
       lines.push(`INSERT OR REPLACE INTO bumbee_knowledge_sync_plans VALUES (${sqlQuote(plan.id)}, ${sqlQuote(plan.title)}, ${sqlQuote(plan.goal)}, ${sqlQuote(JSON.stringify(plan.sources || []))}, ${sqlQuote(JSON.stringify(plan.targets || []))}, ${sqlQuote(plan.cadence)}, ${sqlQuote(plan.status)}, ${sqlQuote(plan.created_at)});`);
+    }
+    for (const item of data.workspaceConnections) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_workspace_connections VALUES (${sqlQuote(item.id)}, ${sqlQuote(item.name)}, ${sqlQuote(item.type)}, ${sqlQuote(item.location)}, ${sqlQuote(item.normalized_path)}, ${sqlQuote(item.scan_mode)}, ${sqlQuote(item.status)}, ${sqlQuote(item.owner)}, ${sqlQuote(item.cadence)}, ${sqlQuote(JSON.stringify(item.tags || []))}, ${sqlQuote(item.notes)}, ${sqlQuote(item.created_at)}, ${sqlQuote(item.updated_at)});`);
+    }
+    for (const member of data.teamMembers) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_team_members VALUES (${sqlQuote(member.id)}, ${sqlQuote(member.name)}, ${sqlQuote(member.role)}, ${sqlQuote(member.member_type)}, ${sqlQuote(member.email)}, ${sqlQuote(member.owner_area)}, ${sqlQuote(JSON.stringify(member.work_sources || []))}, ${sqlQuote(member.status)}, ${member.daily_report_expected === false ? 0 : 1}, ${sqlQuote(member.created_at)}, ${sqlQuote(member.updated_at)});`);
+    }
+    for (const dashboard of data.opsDashboards) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_ops_dashboards VALUES (${sqlQuote(dashboard.id)}, ${sqlQuote(dashboard.date)}, ${sqlQuote(dashboard.title)}, ${sqlQuote(JSON.stringify(dashboard.metrics || {}))}, ${sqlQuote(JSON.stringify(dashboard.sections || []))}, ${sqlQuote(dashboard.status)}, ${sqlQuote(dashboard.created_at)});`);
     }
     for (const message of data.companionMessages) {
       lines.push(`INSERT OR REPLACE INTO bumbee_companion_messages VALUES (${sqlQuote(message.id)}, ${sqlQuote(message.role)}, ${sqlQuote(message.message)}, ${sqlQuote(message.source)}, ${sqlQuote(message.created_at)});`);
@@ -1083,6 +1235,72 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         created_at: now,
       });
     }
+    if (data.workspaceConnections.length === 0) {
+      const now = new Date().toISOString();
+      data.workspaceConnections.push(
+        {
+          id: makeId("workspace"),
+          name: "Bumbee Brain Ops Wiki",
+          type: "wiki_url",
+          location: "https://wiki.bumbee.asia/brain-ops",
+          normalized_path: "",
+          scan_mode: "connector_draft",
+          status: "api_or_mcp_connector_needed",
+          owner: "owner",
+          cadence: "daily",
+          tags: ["wiki", "brain_ops"],
+          notes: "Remote wiki source. Needs API/wiki connector before live scan.",
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          id: makeId("workspace"),
+          name: "Daily task folders",
+          type: "local_folder",
+          location: "/home/bumbee_workspace/awesome-bumbee-skills/bumbee-studio-idea/nhutpham-task",
+          normalized_path: "/home/bumbee_workspace/awesome-bumbee-skills/bumbee-studio-idea/nhutpham-task",
+          scan_mode: "scan_local_files",
+          status: fs.existsSync("/home/bumbee_workspace/awesome-bumbee-skills/bumbee-studio-idea/nhutpham-task") ? "ready_to_scan" : "path_missing",
+          owner: "owner",
+          cadence: "daily",
+          tags: ["local_folder", "task"],
+          notes: "Local folder scan source for owner notes, task docs, and daily work drafts.",
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          id: makeId("workspace"),
+          name: "BitDanceGroup Odoo CRM",
+          type: "odoo_crm",
+          location: "https://bitdancegroup.com",
+          normalized_path: "",
+          scan_mode: "connector_draft",
+          status: "api_or_mcp_connector_needed",
+          owner: "owner",
+          cadence: "daily",
+          tags: ["odoo", "crm", "revenue"],
+          notes: "Customer opportunities, revenue, products, and delivery status source.",
+          created_at: now,
+          updated_at: now,
+        },
+      );
+    }
+    if (data.teamMembers.length === 0) {
+      const now = new Date().toISOString();
+      data.teamMembers.push({
+        id: makeId("member"),
+        name: "Owner",
+        role: "CEO / operator",
+        member_type: "human",
+        email: "nhutpham@bitdancegroup.com",
+        owner_area: "Bumbee operations",
+        work_sources: ["Jira", "Notion", "Email report", "Odoo CRM", "Local folders"],
+        status: "active",
+        daily_report_expected: true,
+        created_at: now,
+        updated_at: now,
+      });
+    }
     write(data);
     return { ok: true, ...list() };
   }
@@ -1096,6 +1314,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     buildDailyDigest,
     companionChat,
     proposeCapabilityUpgrade,
+    addWorkspaceConnection,
+    addTeamMember,
+    buildOpsDashboard,
     addClip,
     addVocabulary,
     addUserProfile,
