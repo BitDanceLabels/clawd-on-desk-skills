@@ -26,6 +26,46 @@
     <section class="panel">
       <div class="panel-head">
         <div>
+          <p class="eyebrow">Daily companion</p>
+          <h2>Idea scan + Jira draft</h2>
+        </div>
+        <button id="dailyDigestBtn" type="button" class="secondary">Scan today</button>
+      </div>
+      <div class="companion-grid">
+        <article>
+          <form id="companionForm" class="form">
+            <textarea id="companionMessage" rows="5" placeholder="Nhập idea, note, việc cần Bumbee phân tích hoặc draft Jira task..."></textarea>
+            <button type="submit">Capture idea</button>
+          </form>
+          <div id="companionList" class="list"></div>
+        </article>
+        <article>
+          <div class="source-grid">
+            <input id="jiraProjectUrl" placeholder="Jira project URL">
+            <textarea id="sourceFolders" rows="3" placeholder="Source folders, one per line"></textarea>
+          </div>
+          <div class="action-row">
+            <button id="saveCompanionSettingsBtn" type="button" class="secondary">Save scan config</button>
+            <button id="queueDigestReviewBtn" type="button" class="secondary">Queue digest review</button>
+          </div>
+          <div id="digestList" class="list"></div>
+        </article>
+      </div>
+      <div class="split compact">
+        <article>
+          <h3>Idea inbox</h3>
+          <div id="ideaList" class="list"></div>
+        </article>
+        <article>
+          <h3>Jira drafts</h3>
+          <div id="jiraDraftList" class="list"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
           <p class="eyebrow">Owner guide</p>
           <h2>Connect the working system</h2>
         </div>

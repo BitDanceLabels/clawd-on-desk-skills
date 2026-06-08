@@ -116,6 +116,7 @@ textarea {
 .status-grid,
 .guide-grid,
 .split,
+.companion-grid,
 .readiness {
   display: grid;
   gap: 14px;
@@ -172,6 +173,15 @@ textarea {
 
 .split {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.companion-grid {
+  grid-template-columns: minmax(280px, 0.8fr) minmax(360px, 1.2fr);
+}
+
+.source-grid {
+  display: grid;
+  gap: 10px;
 }
 
 .form {
@@ -259,6 +269,7 @@ pre {
 @media (max-width: 880px) {
   .hero,
   .split,
+  .companion-grid,
   .guide-grid,
   .status-grid,
   .readiness {

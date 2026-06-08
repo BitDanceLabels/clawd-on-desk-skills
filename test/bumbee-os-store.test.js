@@ -143,3 +143,44 @@ test("Bumbee OS store creates SePay QR intents and records idempotent notificati
   });
   assert.equal(duplicate.notification.duplicate, true);
 });
+
+test("Bumbee OS companion captures ideas and prepares daily Jira drafts", () => {
+  const dir = tmpDir();
+  const sourceRoot = path.join(dir, "daily-notes");
+  fs.mkdirSync(sourceRoot, { recursive: true });
+  fs.writeFileSync(
+    path.join(sourceRoot, "owner-idea.md"),
+    [
+      "# Wiki trợ lý AI mỗi ngày",
+      "",
+      "Bumbee cần scan wiki, phân tích idea, tạo Jira draft và chờ chủ nhân duyệt. #IDEA #TICKET",
+      "Deadline gấp cho MVP làm việc mỗi ngày.",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const store = createStore(dir);
+  const chat = store.companionChat({
+    message: "Tui cần Bumbee chủ động nhắc việc và gom nháp thành task Jira.",
+  });
+  assert.equal(chat.ok, true);
+  assert.equal(store.list().counts.ideaNotes, 1);
+  assert.equal(store.list().counts.workItems, 1);
+  assert.equal(store.list().counts.actionQueue, 1);
+
+  const digest = store.buildDailyDigest({ sourceFolders: [sourceRoot], limit: 5, maxAgeHours: 24 });
+  assert.equal(digest.ok, true);
+  assert.equal(digest.digest.status, "waiting_owner_review");
+  assert.equal(digest.jiraDrafts.length >= 1, true);
+  assert.equal(digest.jiraDrafts[0].status, "draft_waiting_owner_review");
+  assert.match(digest.jiraDrafts[0].description, /No live publish/);
+
+  const data = store.list();
+  assert.equal(data.counts.dailyDigests, 1);
+  assert.equal(data.counts.jiraDrafts >= 1, true);
+  assert.equal(data.counts.companionMessages, 2);
+
+  const dump = store.exportSqlDump();
+  assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_daily_digests/);
+  assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_jira_drafts/);
+});

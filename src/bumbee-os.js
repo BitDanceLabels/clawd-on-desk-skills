@@ -3,6 +3,10 @@
 
   const statusGrid = document.getElementById("statusGrid");
   const rawOutput = document.getElementById("rawOutput");
+  const ideaList = document.getElementById("ideaList");
+  const digestList = document.getElementById("digestList");
+  const jiraDraftList = document.getElementById("jiraDraftList");
+  const companionList = document.getElementById("companionList");
   const workList = document.getElementById("workList");
   const clipList = document.getElementById("clipList");
   const profileList = document.getElementById("profileList");
@@ -22,6 +26,9 @@
     const counts = data?.counts || {};
     const cards = [
       ["Works", counts.workItems || 0],
+      ["Ideas", counts.ideaNotes || 0],
+      ["Digests", counts.dailyDigests || 0],
+      ["Jira drafts", counts.jiraDrafts || 0],
       ["Clips", counts.clips || 0],
       ["Vocab", counts.vocabulary || 0],
       ["Profiles", counts.userProfiles || 0],
@@ -39,6 +46,10 @@
 
   function renderLists(data) {
     const works = data?.workItems || [];
+    const ideas = data?.ideaNotes || [];
+    const digests = data?.dailyDigests || [];
+    const jiraDrafts = data?.jiraDrafts || [];
+    const messages = data?.companionMessages || [];
     const clips = data?.clips || [];
     const profiles = data?.userProfiles || [];
     const publishers = data?.publisherProfiles || [];
@@ -47,6 +58,45 @@
     const actions = data?.actionQueue || [];
     const payments = data?.paymentIntents || [];
     const paymentNotifications = data?.paymentNotifications || [];
+    const settings = data?.settings || {};
+
+    const jiraInput = document.getElementById("jiraProjectUrl");
+    const sourceInput = document.getElementById("sourceFolders");
+    if (jiraInput && document.activeElement !== jiraInput) jiraInput.value = settings.jiraProjectUrl || "";
+    if (sourceInput && document.activeElement !== sourceInput) sourceInput.value = (settings.sourceFolders || []).join("\n");
+
+    ideaList.innerHTML = ideas.length ? ideas.slice(0, 8).map((item) => `
+      <article class="item">
+        <strong>${escapeHtml(item.title)}</strong>
+        <small>${escapeHtml(item.priority)} · ${escapeHtml(item.status)} · ${escapeHtml(item.source)}</small>
+        <small>${escapeHtml((item.body || "").slice(0, 220))}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No captured ideas</strong><small>Use companion chat to capture owner notes.</small></article>`;
+
+    digestList.innerHTML = digests.length ? digests.slice(0, 5).map((digest) => `
+      <article class="item">
+        <strong>${escapeHtml(digest.title)}</strong>
+        <small>${escapeHtml(digest.date)} · ${digest.idea_count || 0} candidates · ${digest.created_jira_draft_ids?.length || 0} Jira drafts</small>
+        <small>${(digest.recommendations || []).slice(0, 2).map((rec) => `${escapeHtml(rec.priority)}: ${escapeHtml(rec.title)}`).join("<br>")}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No daily digest yet</strong><small>Scan local notes to prepare owner review.</small></article>`;
+
+    jiraDraftList.innerHTML = jiraDrafts.length ? jiraDrafts.slice(0, 8).map((draft) => `
+      <article class="item">
+        <strong>${escapeHtml(draft.title)}</strong>
+        <small>${escapeHtml(draft.issue_type)} · ${escapeHtml(draft.priority)} · due ${escapeHtml(draft.deadline_date)}</small>
+        <small>${escapeHtml((draft.description || "").slice(0, 220))}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No Jira drafts</strong><small>Daily scan creates draft tickets only, not live Jira issues.</small></article>`;
+
+    companionList.innerHTML = messages.length ? messages.slice(0, 6).map((message) => `
+      <article class="item">
+        <strong>${escapeHtml(message.role)}</strong>
+        <small>${escapeHtml(message.created_at)} · ${escapeHtml(message.source)}</small>
+        <small>${escapeHtml(message.message)}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No companion chat yet</strong><small>Capture an idea or note above.</small></article>`;
+
     workList.innerHTML = works.length ? works.slice(0, 8).map((item) => `
       <article class="item">
         <strong>${escapeHtml(item.title)}</strong>
@@ -130,6 +180,53 @@
   document.getElementById("refreshBtn").addEventListener("click", refresh);
   document.getElementById("seedDemoBtn").addEventListener("click", async () => {
     await window.bumbeeOsAPI.seedDemo();
+    await refresh();
+  });
+
+  document.getElementById("companionForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.getElementById("companionMessage").value;
+    const result = await window.bumbeeOsAPI.companionChat({
+      message,
+      source: "bumbee_os_daily_companion",
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    event.target.reset();
+    await refresh();
+  });
+
+  document.getElementById("dailyDigestBtn").addEventListener("click", async () => {
+    const folders = document.getElementById("sourceFolders").value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    const result = await window.bumbeeOsAPI.buildDailyDigest({
+      sourceFolders: folders,
+      limit: 10,
+      maxAgeHours: 168,
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    await refresh();
+  });
+
+  document.getElementById("saveCompanionSettingsBtn").addEventListener("click", async () => {
+    const folders = document.getElementById("sourceFolders").value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    const result = await window.bumbeeOsAPI.updateSettings({
+      jiraProjectUrl: document.getElementById("jiraProjectUrl").value,
+      sourceFolders: folders,
+      dailyIdeaScanEnabled: true,
+      companionMode: "daily_work_companion",
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    await refresh();
+  });
+
+  document.getElementById("queueDigestReviewBtn").addEventListener("click", async () => {
+    const result = await window.bumbeeOsAPI.queueAction({
+      title: "Review Bumbee daily companion digest",
+      action_type: "daily_digest_review",
+      target_type: "daily_digest",
+      priority: "high",
+      note: "Review idea inbox, daily digest, and Jira drafts before creating live tasks.",
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
     await refresh();
   });
 

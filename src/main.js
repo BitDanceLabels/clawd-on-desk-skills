@@ -3293,6 +3293,9 @@ function createWindow() {
   ipcMain.handle("bumbee-os:list", () => _bumbeeOsStore.list());
   ipcMain.handle("bumbee-os:seed-demo", () => _bumbeeOsStore.seedDemo());
   ipcMain.handle("bumbee-os:add-work-item", (_event, payload) => _bumbeeOsStore.addWorkItem(payload));
+  ipcMain.handle("bumbee-os:add-idea-note", (_event, payload) => _bumbeeOsStore.addIdeaNote(payload));
+  ipcMain.handle("bumbee-os:build-daily-digest", (_event, payload) => _bumbeeOsStore.buildDailyDigest(payload));
+  ipcMain.handle("bumbee-os:companion-chat", (_event, payload) => _bumbeeOsStore.companionChat(payload));
   ipcMain.handle("bumbee-os:add-clip", (_event, payload) => _bumbeeOsStore.addClip(payload));
   ipcMain.handle("bumbee-os:add-vocabulary", (_event, payload) => _bumbeeOsStore.addVocabulary(payload));
   ipcMain.handle("bumbee-os:add-user-profile", (_event, payload) => _bumbeeOsStore.addUserProfile(payload));
