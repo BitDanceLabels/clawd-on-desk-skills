@@ -184,3 +184,32 @@ test("Bumbee OS companion captures ideas and prepares daily Jira drafts", () => 
   assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_daily_digests/);
   assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_jira_drafts/);
 });
+
+test("Bumbee OS prepares skill research and gateway API capability upgrades", () => {
+  const store = createStore(tmpDir());
+  const result = store.proposeCapabilityUpgrade({
+    title: "Self-improving gateway skills",
+    goal: "Research new skills, add gateway API drafts, and sync knowledge into final skills after owner review.",
+    skills: ["notion daily journal skill", "gateway skill registry scanner"],
+    apis: ["skill research intake", "gateway api sync status"],
+    knowledge_sources: ["final-skills-mcps", "Bumbee Wiki"],
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.skillResearchItems.length, 2);
+  assert.equal(result.gatewayApiDrafts.length, 2);
+  assert.equal(result.knowledgeSyncPlan.status, "draft_waiting_owner_review");
+  assert.equal(result.action.status, "waiting_owner_review");
+  assert.equal(result.gatewayApiDrafts[0].auth_required, true);
+  assert.match(result.gatewayApiDrafts[0].path, /\/api\/bumbee\/capabilities\//);
+
+  const data = store.list();
+  assert.equal(data.counts.skillResearchItems, 2);
+  assert.equal(data.counts.gatewayApiDrafts, 2);
+  assert.equal(data.counts.knowledgeSyncPlans, 1);
+  assert.equal(data.counts.workItems, 1);
+
+  const dump = store.exportSqlDump();
+  assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_skill_research_items/);
+  assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_gateway_api_drafts/);
+});

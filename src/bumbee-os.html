@@ -66,6 +66,32 @@
     <section class="panel">
       <div class="panel-head">
         <div>
+          <p class="eyebrow">Capability lab</p>
+          <h2>Skills + gateway evolution</h2>
+        </div>
+      </div>
+      <div class="companion-grid">
+        <article>
+          <form id="capabilityForm" class="form">
+            <input id="capabilityTitle" placeholder="Capability title">
+            <textarea id="capabilityGoal" rows="4" placeholder="Hệ thống cần học thêm gì, skill/API nào nên bổ sung, dùng để vận hành thông minh hơn ra sao..."></textarea>
+            <input id="capabilitySkills" placeholder="Skills to research, comma separated">
+            <input id="capabilityApis" placeholder="Gateway APIs to draft, comma separated">
+            <textarea id="capabilitySources" rows="3" placeholder="Knowledge sources, one per line"></textarea>
+            <button type="submit">Prepare upgrade draft</button>
+          </form>
+        </article>
+        <article>
+          <div id="skillResearchList" class="list"></div>
+          <div id="gatewayApiDraftList" class="list"></div>
+          <div id="knowledgeSyncList" class="list"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
           <p class="eyebrow">Owner guide</p>
           <h2>Connect the working system</h2>
         </div>

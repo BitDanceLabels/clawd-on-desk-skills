@@ -5,11 +5,14 @@ const path = require("path");
 const crypto = require("crypto");
 
 const DEFAULT_DATA = {
-  version: 3,
+  version: 4,
   workItems: [],
   ideaNotes: [],
   dailyDigests: [],
   jiraDrafts: [],
+  skillResearchItems: [],
+  gatewayApiDrafts: [],
+  knowledgeSyncPlans: [],
   companionMessages: [],
   clips: [],
   vocabulary: [],
@@ -34,6 +37,7 @@ const DEFAULT_DATA = {
     sepayQrTemplate: "compact",
     companionMode: "daily_work_companion",
     dailyIdeaScanEnabled: true,
+    capabilityLearningEnabled: true,
     jiraProjectUrl: "https://jira.bumbee.asia/bumbee-on-desk/projects/2bc56e64-4b21-4d1d-9126-11daa3a1d543/issues/",
     notionDailyJournalUrl: "https://www.notion.so/BUMBEE-STUDIO-IDEA-HO-N-THI-N-IDEA-356f8cb9fada80eabfe6cb6edca893cc",
     sourceFolders: [
@@ -88,6 +92,8 @@ const DEFAULT_INTEGRATIONS = [
   { id: "int_sepay", name: "SePay", type: "payment", status: "sandbox_ready", mode: "secret_config_required" },
   { id: "int_sqlite", name: "SQLite Export", type: "database", status: "sql_dump_ready", mode: "export_only" },
   { id: "int_qdrant", name: "Qdrant Lite", type: "vector", status: "schema_ready", mode: "future_runtime" },
+  { id: "int_skill_research", name: "Skill Research Backlog", type: "learning", status: "draft_ready", mode: "owner_review_required" },
+  { id: "int_gateway_api_lab", name: "Gateway API Lab", type: "gateway", status: "draft_ready", mode: "no_live_deploy" },
 ];
 
 function clone(value) {
@@ -184,6 +190,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         ideaNotes: Array.isArray(data.ideaNotes) ? data.ideaNotes : [],
         dailyDigests: Array.isArray(data.dailyDigests) ? data.dailyDigests : [],
         jiraDrafts: Array.isArray(data.jiraDrafts) ? data.jiraDrafts : [],
+        skillResearchItems: Array.isArray(data.skillResearchItems) ? data.skillResearchItems : [],
+        gatewayApiDrafts: Array.isArray(data.gatewayApiDrafts) ? data.gatewayApiDrafts : [],
+        knowledgeSyncPlans: Array.isArray(data.knowledgeSyncPlans) ? data.knowledgeSyncPlans : [],
         companionMessages: Array.isArray(data.companionMessages) ? data.companionMessages : [],
         clips: Array.isArray(data.clips) ? data.clips : [],
         vocabulary: Array.isArray(data.vocabulary) ? data.vocabulary : [],
@@ -218,6 +227,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         ideaNotes: data.ideaNotes.length,
         dailyDigests: data.dailyDigests.length,
         jiraDrafts: data.jiraDrafts.length,
+        skillResearchItems: data.skillResearchItems.length,
+        gatewayApiDrafts: data.gatewayApiDrafts.length,
+        knowledgeSyncPlans: data.knowledgeSyncPlans.length,
         companionMessages: data.companionMessages.length,
         clips: data.clips.length,
         vocabulary: data.vocabulary.length,
@@ -234,6 +246,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       readiness: {
         ownerGuide: "ready_for_mvp",
         dailyCompanion: "local_digest_and_jira_drafts",
+        capabilityLearning: "research_backlog_and_gateway_api_drafts",
         socialPublisher: "draft_and_review_queue",
         englishTrailer: "local_first",
         gatewayScan: "metadata_ready",
@@ -254,6 +267,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       ideaNotes: data.ideaNotes.slice(0, 100),
       dailyDigests: data.dailyDigests.slice(0, 50),
       jiraDrafts: data.jiraDrafts.slice(0, 100),
+      skillResearchItems: data.skillResearchItems.slice(0, 100),
+      gatewayApiDrafts: data.gatewayApiDrafts.slice(0, 100),
+      knowledgeSyncPlans: data.knowledgeSyncPlans.slice(0, 100),
       companionMessages: data.companionMessages.slice(0, 100),
       clips: data.clips.slice(0, 100),
       vocabulary: data.vocabulary.slice(0, 200),
@@ -537,6 +553,111 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     return { ok: true, captured: ideaResult.idea, reply };
   }
 
+  function proposeCapabilityUpgrade(payload) {
+    const data = read();
+    const title = normalizeString(payload?.title, 180) || "Bumbee capability upgrade";
+    const goal = normalizeString(payload?.goal || payload?.description || payload?.note, 4000);
+    if (!goal) return { ok: false, error: "missing goal" };
+    const now = new Date().toISOString();
+    const requestedSkills = normalizeArray(payload?.skills || payload?.requested_skills, 12, 120);
+    const requestedApis = normalizeArray(payload?.apis || payload?.requested_apis, 12, 120);
+    const knowledgeSources = normalizeArray(payload?.knowledge_sources || payload?.sources, 20, 300);
+    const tags = Array.from(new Set(["capability_learning", "gateway", "skills", ...extractHashtags(`${title}\n${goal}`)])).slice(0, 12);
+
+    const skillItems = (requestedSkills.length ? requestedSkills : ["research new skill", "update final skill docs"]).map((skill) => ({
+      id: makeId("skillresearch"),
+      title: skill,
+      goal,
+      source: normalizeString(payload?.source, 160) || "bumbee_os_capability_upgrade",
+      status: "research_draft",
+      priority: estimatePriority(`${title}\n${goal}\n${skill}`),
+      expected_output: [
+        "SKILL.md or final-skill update proposal",
+        "Usage examples and guardrails",
+        "Test checklist before enabling in gateway",
+      ],
+      tags,
+      created_at: now,
+    }));
+
+    const apiDrafts = (requestedApis.length ? requestedApis : ["gateway capability registry endpoint"]).map((apiName) => ({
+      id: makeId("gatewayapi"),
+      name: apiName,
+      method: "POST",
+      path: `/api/bumbee/capabilities/${apiName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "new-capability"}`,
+      purpose: goal,
+      auth_required: true,
+      status: "draft_no_live_deploy",
+      request_schema: {
+        title: "string",
+        goal: "string",
+        sources: "string[]",
+        approval: "owner_required",
+      },
+      response_schema: {
+        ok: "boolean",
+        draft_id: "string",
+        next_review_action: "string",
+      },
+      risks: [
+        "Do not deploy gateway API until owner approves implementation.",
+        "Do not execute external write actions without explicit review.",
+      ],
+      created_at: now,
+    }));
+
+    const syncPlan = {
+      id: makeId("syncplan"),
+      title: `Knowledge sync plan: ${title}`,
+      goal,
+      sources: knowledgeSources.length ? knowledgeSources : data.settings.sourceFolders,
+      targets: [
+        "Bumbee OS local store",
+        "final-skills-mcps",
+        "Bumbee Wiki",
+        "Gateway capability registry draft",
+      ],
+      cadence: "daily_review_or_manual_scan",
+      status: "draft_waiting_owner_review",
+      created_at: now,
+    };
+
+    const workItem = {
+      id: makeId("work"),
+      title,
+      type: "capability_upgrade",
+      status: "draft",
+      channelDrafts: ["Bumbee Wiki", "Gateway API draft", "Final skills proposal", "Jira draft"],
+      tags,
+      owner_profile_id: "",
+      publisher_profile_id: "",
+      approval_required: true,
+      note: goal,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const action = {
+      id: makeId("action"),
+      title: `Review capability upgrade: ${title}`,
+      action_type: "capability_upgrade_review",
+      target_type: "capability_upgrade",
+      target_id: workItem.id,
+      priority: skillItems.some((item) => item.priority === "high") ? "high" : "normal",
+      status: "waiting_owner_review",
+      note: `${skillItems.length} skill research item(s), ${apiDrafts.length} gateway API draft(s), 1 knowledge sync plan prepared locally.`,
+      created_at: now,
+    };
+
+    data.skillResearchItems.unshift(...skillItems);
+    data.gatewayApiDrafts.unshift(...apiDrafts);
+    data.knowledgeSyncPlans.unshift(syncPlan);
+    data.workItems.unshift(workItem);
+    data.actionQueue.unshift(action);
+    write(data);
+    return { ok: true, workItem, skillResearchItems: skillItems, gatewayApiDrafts: apiDrafts, knowledgeSyncPlan: syncPlan, action };
+  }
+
   function addClip(payload) {
     const data = read();
     const title = normalizeString(payload?.title, 180) || "Daily English clip";
@@ -734,6 +855,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       "CREATE TABLE IF NOT EXISTS bumbee_idea_notes (id TEXT PRIMARY KEY, title TEXT, body TEXT, source TEXT, source_url TEXT, tags_json TEXT, priority TEXT, status TEXT, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_daily_digests (id TEXT PRIMARY KEY, date TEXT, title TEXT, source_count INTEGER, idea_count INTEGER, sources_json TEXT, recommendations_json TEXT, status TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_jira_drafts (id TEXT PRIMARY KEY, title TEXT, issue_type TEXT, project_url TEXT, source TEXT, priority TEXT, assignee TEXT, tester TEXT, deadline_date TEXT, status TEXT, tags_json TEXT, description TEXT, created_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_skill_research_items (id TEXT PRIMARY KEY, title TEXT, goal TEXT, source TEXT, status TEXT, priority TEXT, expected_output_json TEXT, tags_json TEXT, created_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_gateway_api_drafts (id TEXT PRIMARY KEY, name TEXT, method TEXT, path TEXT, purpose TEXT, auth_required INTEGER, status TEXT, request_schema_json TEXT, response_schema_json TEXT, risks_json TEXT, created_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_knowledge_sync_plans (id TEXT PRIMARY KEY, title TEXT, goal TEXT, sources_json TEXT, targets_json TEXT, cadence TEXT, status TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_companion_messages (id TEXT PRIMARY KEY, role TEXT, message TEXT, source TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_clips (id TEXT PRIMARY KEY, title TEXT, source_type TEXT, source_url TEXT, local_path TEXT, speaker TEXT, topic TEXT, transcript TEXT, license_note TEXT, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_vocabulary (id TEXT PRIMARY KEY, clip_id TEXT, word_or_phrase TEXT, meaning_vi TEXT, meaning_en TEXT, example_sentence TEXT, timestamp_seconds INTEGER, category TEXT, review_status TEXT, created_at TEXT);",
@@ -756,6 +880,15 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     }
     for (const draft of data.jiraDrafts) {
       lines.push(`INSERT OR REPLACE INTO bumbee_jira_drafts VALUES (${sqlQuote(draft.id)}, ${sqlQuote(draft.title)}, ${sqlQuote(draft.issue_type)}, ${sqlQuote(draft.project_url)}, ${sqlQuote(draft.source)}, ${sqlQuote(draft.priority)}, ${sqlQuote(draft.assignee)}, ${sqlQuote(draft.tester)}, ${sqlQuote(draft.deadline_date)}, ${sqlQuote(draft.status)}, ${sqlQuote(JSON.stringify(draft.tags || []))}, ${sqlQuote(draft.description)}, ${sqlQuote(draft.created_at)});`);
+    }
+    for (const item of data.skillResearchItems) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_skill_research_items VALUES (${sqlQuote(item.id)}, ${sqlQuote(item.title)}, ${sqlQuote(item.goal)}, ${sqlQuote(item.source)}, ${sqlQuote(item.status)}, ${sqlQuote(item.priority)}, ${sqlQuote(JSON.stringify(item.expected_output || []))}, ${sqlQuote(JSON.stringify(item.tags || []))}, ${sqlQuote(item.created_at)});`);
+    }
+    for (const draft of data.gatewayApiDrafts) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_gateway_api_drafts VALUES (${sqlQuote(draft.id)}, ${sqlQuote(draft.name)}, ${sqlQuote(draft.method)}, ${sqlQuote(draft.path)}, ${sqlQuote(draft.purpose)}, ${draft.auth_required ? 1 : 0}, ${sqlQuote(draft.status)}, ${sqlQuote(JSON.stringify(draft.request_schema || {}))}, ${sqlQuote(JSON.stringify(draft.response_schema || {}))}, ${sqlQuote(JSON.stringify(draft.risks || []))}, ${sqlQuote(draft.created_at)});`);
+    }
+    for (const plan of data.knowledgeSyncPlans) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_knowledge_sync_plans VALUES (${sqlQuote(plan.id)}, ${sqlQuote(plan.title)}, ${sqlQuote(plan.goal)}, ${sqlQuote(JSON.stringify(plan.sources || []))}, ${sqlQuote(JSON.stringify(plan.targets || []))}, ${sqlQuote(plan.cadence)}, ${sqlQuote(plan.status)}, ${sqlQuote(plan.created_at)});`);
     }
     for (const message of data.companionMessages) {
       lines.push(`INSERT OR REPLACE INTO bumbee_companion_messages VALUES (${sqlQuote(message.id)}, ${sqlQuote(message.role)}, ${sqlQuote(message.message)}, ${sqlQuote(message.source)}, ${sqlQuote(message.created_at)});`);
@@ -808,6 +941,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       if (typeof payload?.[key] === "boolean") next[key] = payload[key];
     }
     if (typeof payload?.dailyIdeaScanEnabled === "boolean") next.dailyIdeaScanEnabled = payload.dailyIdeaScanEnabled;
+    if (typeof payload?.capabilityLearningEnabled === "boolean") next.capabilityLearningEnabled = payload.capabilityLearningEnabled;
     // Guardrails: these remain false until explicit future implementation.
     next.autoPublish = false;
     next.realMoneyWallet = false;
@@ -900,6 +1034,55 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         updated_at: new Date().toISOString(),
       });
     }
+    if (data.skillResearchItems.length === 0) {
+      const now = new Date().toISOString();
+      const goal = "Research new skills and API drafts, sync useful knowledge into final skills, and prepare owner-reviewed gateway upgrades.";
+      data.skillResearchItems.push({
+        id: makeId("skillresearch"),
+        title: "skill discovery and final-skill proposal",
+        goal,
+        source: "seed_demo",
+        status: "research_draft",
+        priority: "normal",
+        expected_output: ["SKILL.md update proposal", "Usage examples", "Gateway enablement checklist"],
+        tags: ["capability_learning", "gateway", "skills"],
+        created_at: now,
+      });
+      data.gatewayApiDrafts.push({
+        id: makeId("gatewayapi"),
+        name: "capability proposal intake",
+        method: "POST",
+        path: "/api/bumbee/capabilities/capability-proposal-intake",
+        purpose: goal,
+        auth_required: true,
+        status: "draft_no_live_deploy",
+        request_schema: { title: "string", goal: "string", approval: "owner_required" },
+        response_schema: { ok: "boolean", draft_id: "string" },
+        risks: ["Owner approval required before implementation."],
+        created_at: now,
+      });
+      data.knowledgeSyncPlans.push({
+        id: makeId("syncplan"),
+        title: "Knowledge sync plan: Bumbee self-improving skills",
+        goal,
+        sources: data.settings.sourceFolders,
+        targets: ["Bumbee OS local store", "final-skills-mcps", "Bumbee Wiki", "Gateway capability registry draft"],
+        cadence: "daily_review_or_manual_scan",
+        status: "draft_waiting_owner_review",
+        created_at: now,
+      });
+      data.actionQueue.push({
+        id: makeId("action"),
+        title: "Review capability upgrade: Bumbee self-improving skills",
+        action_type: "capability_upgrade_review",
+        target_type: "capability_upgrade",
+        target_id: "",
+        priority: "normal",
+        status: "waiting_owner_review",
+        note: "Seeded skill research, gateway API draft, and knowledge sync plan.",
+        created_at: now,
+      });
+    }
     write(data);
     return { ok: true, ...list() };
   }
@@ -912,6 +1095,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     addIdeaNote,
     buildDailyDigest,
     companionChat,
+    proposeCapabilityUpgrade,
     addClip,
     addVocabulary,
     addUserProfile,

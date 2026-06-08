@@ -7,6 +7,9 @@
   const digestList = document.getElementById("digestList");
   const jiraDraftList = document.getElementById("jiraDraftList");
   const companionList = document.getElementById("companionList");
+  const skillResearchList = document.getElementById("skillResearchList");
+  const gatewayApiDraftList = document.getElementById("gatewayApiDraftList");
+  const knowledgeSyncList = document.getElementById("knowledgeSyncList");
   const workList = document.getElementById("workList");
   const clipList = document.getElementById("clipList");
   const profileList = document.getElementById("profileList");
@@ -29,6 +32,8 @@
       ["Ideas", counts.ideaNotes || 0],
       ["Digests", counts.dailyDigests || 0],
       ["Jira drafts", counts.jiraDrafts || 0],
+      ["Skill research", counts.skillResearchItems || 0],
+      ["API drafts", counts.gatewayApiDrafts || 0],
       ["Clips", counts.clips || 0],
       ["Vocab", counts.vocabulary || 0],
       ["Profiles", counts.userProfiles || 0],
@@ -49,6 +54,9 @@
     const ideas = data?.ideaNotes || [];
     const digests = data?.dailyDigests || [];
     const jiraDrafts = data?.jiraDrafts || [];
+    const skillResearchItems = data?.skillResearchItems || [];
+    const gatewayApiDrafts = data?.gatewayApiDrafts || [];
+    const knowledgeSyncPlans = data?.knowledgeSyncPlans || [];
     const messages = data?.companionMessages || [];
     const clips = data?.clips || [];
     const profiles = data?.userProfiles || [];
@@ -96,6 +104,30 @@
         <small>${escapeHtml(message.message)}</small>
       </article>
     `).join("") : `<article class="item"><strong>No companion chat yet</strong><small>Capture an idea or note above.</small></article>`;
+
+    skillResearchList.innerHTML = skillResearchItems.length ? skillResearchItems.slice(0, 5).map((item) => `
+      <article class="item">
+        <strong>${escapeHtml(item.title)}</strong>
+        <small>${escapeHtml(item.priority)} · ${escapeHtml(item.status)} · ${escapeHtml(item.source)}</small>
+        <small>${(item.expected_output || []).map(escapeHtml).join(", ")}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No skill research backlog</strong><small>Prepare a capability upgrade draft.</small></article>`;
+
+    gatewayApiDraftList.innerHTML = gatewayApiDrafts.length ? gatewayApiDrafts.slice(0, 5).map((draft) => `
+      <article class="item">
+        <strong>${escapeHtml(draft.method)} ${escapeHtml(draft.path)}</strong>
+        <small>${escapeHtml(draft.name)} · ${escapeHtml(draft.status)} · auth: ${draft.auth_required ? "yes" : "no"}</small>
+        <small>${escapeHtml((draft.purpose || "").slice(0, 220))}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No gateway API drafts</strong><small>Gateway changes stay draft-only until approved.</small></article>`;
+
+    knowledgeSyncList.innerHTML = knowledgeSyncPlans.length ? knowledgeSyncPlans.slice(0, 4).map((plan) => `
+      <article class="item">
+        <strong>${escapeHtml(plan.title)}</strong>
+        <small>${escapeHtml(plan.cadence)} · ${escapeHtml(plan.status)}</small>
+        <small>${(plan.targets || []).map(escapeHtml).join(", ")}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No knowledge sync plans</strong><small>Plan how new knowledge enters skills, wiki, and gateway.</small></article>`;
 
     workList.innerHTML = works.length ? works.slice(0, 8).map((item) => `
       <article class="item">
@@ -227,6 +259,24 @@
       note: "Review idea inbox, daily digest, and Jira drafts before creating live tasks.",
     });
     rawOutput.textContent = JSON.stringify(result, null, 2);
+    await refresh();
+  });
+
+  document.getElementById("capabilityForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const skills = document.getElementById("capabilitySkills").value.split(",").map((item) => item.trim()).filter(Boolean);
+    const apis = document.getElementById("capabilityApis").value.split(",").map((item) => item.trim()).filter(Boolean);
+    const sources = document.getElementById("capabilitySources").value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    const result = await window.bumbeeOsAPI.proposeCapabilityUpgrade({
+      title: document.getElementById("capabilityTitle").value,
+      goal: document.getElementById("capabilityGoal").value,
+      skills,
+      apis,
+      knowledge_sources: sources,
+      source: "bumbee_os_capability_lab",
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    event.target.reset();
     await refresh();
   });
 

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("bumbeeOsAPI", {
   addIdeaNote: (payload) => ipcRenderer.invoke("bumbee-os:add-idea-note", payload),
   buildDailyDigest: (payload) => ipcRenderer.invoke("bumbee-os:build-daily-digest", payload),
   companionChat: (payload) => ipcRenderer.invoke("bumbee-os:companion-chat", payload),
+  proposeCapabilityUpgrade: (payload) => ipcRenderer.invoke("bumbee-os:propose-capability-upgrade", payload),
   addClip: (payload) => ipcRenderer.invoke("bumbee-os:add-clip", payload),
   addVocabulary: (payload) => ipcRenderer.invoke("bumbee-os:add-vocabulary", payload),
   addUserProfile: (payload) => ipcRenderer.invoke("bumbee-os:add-user-profile", payload),
