@@ -16,6 +16,8 @@ const DEFAULT_DATA = {
   workspaceConnections: [],
   teamMembers: [],
   opsDashboards: [],
+  commandSessions: [],
+  commandMessages: [],
   companionMessages: [],
   clips: [],
   vocabulary: [],
@@ -49,6 +51,7 @@ const DEFAULT_DATA = {
       "/home/bumbee_workspace/awesome-bumbee-skills/bumbee-studio-idea/nhutpham-task",
     ],
     defaultWorkspaceScanMode: "local_first_connector_drafts",
+    commandChatMode: "remember_analyze_draft_actions",
   },
 };
 
@@ -164,6 +167,16 @@ function addDaysIso(days) {
   return date.toISOString().slice(0, 10);
 }
 
+function classifyCommandIntent(text) {
+  const value = String(text || "").toLowerCase();
+  if (/doanh thu|revenue|crm|khách|customer|cơ hội|opportunit|odoo/.test(value)) return "crm_revenue_report";
+  if (/đăng|publish|social|trang chủ|homepage|sản phẩm|product/.test(value)) return "publisher_work";
+  if (/jira|task|việc|deadline|nhân sự|team|giao việc/.test(value)) return "jira_workspace";
+  if (/phân tích|đánh giá|idea|ý tưởng|analysis|analyze/.test(value)) return "analysis";
+  if (/làm|triển khai|ra lệnh|command|chạy|tạo/.test(value)) return "command";
+  return "question";
+}
+
 function ensureSeedData(data) {
   if (!Array.isArray(data.servicePackages) || data.servicePackages.length === 0) {
     data.servicePackages = clone(DEFAULT_SERVICE_PACKAGES);
@@ -200,6 +213,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         workspaceConnections: Array.isArray(data.workspaceConnections) ? data.workspaceConnections : [],
         teamMembers: Array.isArray(data.teamMembers) ? data.teamMembers : [],
         opsDashboards: Array.isArray(data.opsDashboards) ? data.opsDashboards : [],
+        commandSessions: Array.isArray(data.commandSessions) ? data.commandSessions : [],
+        commandMessages: Array.isArray(data.commandMessages) ? data.commandMessages : [],
         companionMessages: Array.isArray(data.companionMessages) ? data.companionMessages : [],
         clips: Array.isArray(data.clips) ? data.clips : [],
         vocabulary: Array.isArray(data.vocabulary) ? data.vocabulary : [],
@@ -240,6 +255,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         workspaceConnections: data.workspaceConnections.length,
         teamMembers: data.teamMembers.length,
         opsDashboards: data.opsDashboards.length,
+        commandSessions: data.commandSessions.length,
+        commandMessages: data.commandMessages.length,
         companionMessages: data.companionMessages.length,
         clips: data.clips.length,
         vocabulary: data.vocabulary.length,
@@ -258,6 +275,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         dailyCompanion: "local_digest_and_jira_drafts",
         capabilityLearning: "research_backlog_and_gateway_api_drafts",
         workspaceOps: "local_sources_now_remote_connectors_draft",
+        commandChat: "remember_questions_analyze_and_draft_work",
         socialPublisher: "draft_and_review_queue",
         englishTrailer: "local_first",
         gatewayScan: "metadata_ready",
@@ -284,6 +302,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       workspaceConnections: data.workspaceConnections.slice(0, 100),
       teamMembers: data.teamMembers.slice(0, 100),
       opsDashboards: data.opsDashboards.slice(0, 50),
+      commandSessions: data.commandSessions.slice(0, 100),
+      commandMessages: data.commandMessages.slice(0, 200),
       companionMessages: data.companionMessages.slice(0, 100),
       clips: data.clips.slice(0, 100),
       vocabulary: data.vocabulary.slice(0, 200),
@@ -798,6 +818,132 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     return { ok: true, dashboard };
   }
 
+  function createCommandSession(payload = {}) {
+    const data = read();
+    const now = new Date().toISOString();
+    const title = normalizeString(payload.title, 180) || `Bumbee command session ${now.slice(0, 10)}`;
+    const session = {
+      id: makeId("cmdsession"),
+      title,
+      purpose: normalizeString(payload.purpose, 800) || "Remember chat, analyze commands, and prepare draft work.",
+      status: "active",
+      workspace_connection_ids: normalizeArray(payload.workspace_connection_ids, 20, 120),
+      team_member_ids: normalizeArray(payload.team_member_ids, 20, 120),
+      created_at: now,
+      updated_at: now,
+    };
+    data.commandSessions.unshift(session);
+    write(data);
+    return { ok: true, session };
+  }
+
+  function ensureCommandSession(data, payload = {}) {
+    const requested = normalizeString(payload.session_id, 120);
+    const existing = requested ? data.commandSessions.find((item) => item.id === requested) : data.commandSessions[0];
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const session = {
+      id: makeId("cmdsession"),
+      title: normalizeString(payload.session_title, 180) || `Bumbee command session ${now.slice(0, 10)}`,
+      purpose: "Remember chat, analyze commands, and prepare draft work.",
+      status: "active",
+      workspace_connection_ids: [],
+      team_member_ids: [],
+      created_at: now,
+      updated_at: now,
+    };
+    data.commandSessions.unshift(session);
+    return session;
+  }
+
+  function buildCommandAnalysis(text, intent) {
+    const summary = summarizeText(text, 420);
+    const nextByIntent = {
+      crm_revenue_report: "Prepare CRM/revenue report draft from Odoo/customer sources, then owner reviews.",
+      publisher_work: "Prepare product/publisher work draft for homepage/social, then owner reviews before publish.",
+      jira_workspace: "Create Jira draft and workspace action so owner/team can join execution.",
+      analysis: "Capture idea and prepare analysis checklist before turning it into work.",
+      command: "Convert command into safe draft action; no live execution until approved.",
+      question: "Save question and answer context so future sessions can reference it.",
+    };
+    return {
+      summary,
+      intent,
+      next_step: nextByIntent[intent] || nextByIntent.question,
+      guardrail: "Draft-only. No live Jira, publish, payment, email, or customer update without owner approval.",
+    };
+  }
+
+  function addCommandMessage(payload = {}) {
+    const data = read();
+    const text = normalizeString(payload.message || payload.text, 12000);
+    if (!text) return { ok: false, error: "missing command message" };
+    const now = new Date().toISOString();
+    const session = ensureCommandSession(data, payload);
+    const intent = classifyCommandIntent(text);
+    const analysis = buildCommandAnalysis(text, intent);
+    const ownerMessage = {
+      id: makeId("cmdmsg"),
+      session_id: session.id,
+      role: normalizeString(payload.role, 40) || "owner",
+      message_type: intent,
+      message: text,
+      analysis,
+      created_at: now,
+    };
+    const reply = {
+      id: makeId("cmdmsg"),
+      session_id: session.id,
+      role: "bumbee",
+      message_type: "analysis_reply",
+      message: `${analysis.next_step} ${analysis.guardrail}`,
+      analysis,
+      created_at: now,
+    };
+    const title = extractTitleFromText(text, analysis.next_step);
+    const work = {
+      id: makeId("work"),
+      title,
+      type: intent === "publisher_work" ? "publisher" : intent === "crm_revenue_report" ? "crm_report" : "command",
+      status: "draft",
+      channelDrafts: ["Command Chat", "Jira draft", "Workspace", "Owner review"],
+      tags: Array.from(new Set(["command_chat", intent, ...extractHashtags(text)])).slice(0, 12),
+      owner_profile_id: "",
+      publisher_profile_id: "",
+      approval_required: true,
+      note: text,
+      created_at: now,
+      updated_at: now,
+    };
+    const jiraDraft = buildJiraDraft({
+      title,
+      source: `command-session:${session.id}`,
+      body: text,
+      tags: work.tags,
+    }, data.settings);
+    jiraDraft.status = "draft_waiting_owner_review";
+    jiraDraft.assignee = "owner_or_team_member";
+    jiraDraft.tester = "owner + AI tester";
+    const action = {
+      id: makeId("action"),
+      title: `Review command: ${title}`,
+      action_type: intent,
+      target_type: "command_session",
+      target_id: session.id,
+      priority: estimatePriority(text),
+      status: "waiting_owner_review",
+      note: analysis.next_step,
+      created_at: now,
+    };
+    data.commandMessages.unshift(reply, ownerMessage);
+    data.workItems.unshift(work);
+    data.jiraDrafts.unshift(jiraDraft);
+    data.actionQueue.unshift(action);
+    session.updated_at = now;
+    write(data);
+    return { ok: true, session, message: ownerMessage, reply, workItem: work, jiraDraft, action };
+  }
+
   function addClip(payload) {
     const data = read();
     const title = normalizeString(payload?.title, 180) || "Daily English clip";
@@ -1001,6 +1147,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       "CREATE TABLE IF NOT EXISTS bumbee_workspace_connections (id TEXT PRIMARY KEY, name TEXT, type TEXT, location TEXT, normalized_path TEXT, scan_mode TEXT, status TEXT, owner TEXT, cadence TEXT, tags_json TEXT, notes TEXT, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_team_members (id TEXT PRIMARY KEY, name TEXT, role TEXT, member_type TEXT, email TEXT, owner_area TEXT, work_sources_json TEXT, status TEXT, daily_report_expected INTEGER, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_ops_dashboards (id TEXT PRIMARY KEY, date TEXT, title TEXT, metrics_json TEXT, sections_json TEXT, status TEXT, created_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_command_sessions (id TEXT PRIMARY KEY, title TEXT, purpose TEXT, status TEXT, workspace_connection_ids_json TEXT, team_member_ids_json TEXT, created_at TEXT, updated_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_command_messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, message_type TEXT, message TEXT, analysis_json TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_companion_messages (id TEXT PRIMARY KEY, role TEXT, message TEXT, source TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_clips (id TEXT PRIMARY KEY, title TEXT, source_type TEXT, source_url TEXT, local_path TEXT, speaker TEXT, topic TEXT, transcript TEXT, license_note TEXT, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_vocabulary (id TEXT PRIMARY KEY, clip_id TEXT, word_or_phrase TEXT, meaning_vi TEXT, meaning_en TEXT, example_sentence TEXT, timestamp_seconds INTEGER, category TEXT, review_status TEXT, created_at TEXT);",
@@ -1041,6 +1189,12 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     }
     for (const dashboard of data.opsDashboards) {
       lines.push(`INSERT OR REPLACE INTO bumbee_ops_dashboards VALUES (${sqlQuote(dashboard.id)}, ${sqlQuote(dashboard.date)}, ${sqlQuote(dashboard.title)}, ${sqlQuote(JSON.stringify(dashboard.metrics || {}))}, ${sqlQuote(JSON.stringify(dashboard.sections || []))}, ${sqlQuote(dashboard.status)}, ${sqlQuote(dashboard.created_at)});`);
+    }
+    for (const session of data.commandSessions) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_command_sessions VALUES (${sqlQuote(session.id)}, ${sqlQuote(session.title)}, ${sqlQuote(session.purpose)}, ${sqlQuote(session.status)}, ${sqlQuote(JSON.stringify(session.workspace_connection_ids || []))}, ${sqlQuote(JSON.stringify(session.team_member_ids || []))}, ${sqlQuote(session.created_at)}, ${sqlQuote(session.updated_at)});`);
+    }
+    for (const message of data.commandMessages) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_command_messages VALUES (${sqlQuote(message.id)}, ${sqlQuote(message.session_id)}, ${sqlQuote(message.role)}, ${sqlQuote(message.message_type)}, ${sqlQuote(message.message)}, ${sqlQuote(JSON.stringify(message.analysis || {}))}, ${sqlQuote(message.created_at)});`);
     }
     for (const message of data.companionMessages) {
       lines.push(`INSERT OR REPLACE INTO bumbee_companion_messages VALUES (${sqlQuote(message.id)}, ${sqlQuote(message.role)}, ${sqlQuote(message.message)}, ${sqlQuote(message.source)}, ${sqlQuote(message.created_at)});`);
@@ -1301,6 +1455,19 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         updated_at: now,
       });
     }
+    if (data.commandSessions.length === 0) {
+      const now = new Date().toISOString();
+      data.commandSessions.push({
+        id: makeId("cmdsession"),
+        title: "Owner daily command session",
+        purpose: "Chat here to save questions, analysis, and commands for Bumbee to draft workspace/Jira/publisher/report actions.",
+        status: "active",
+        workspace_connection_ids: [],
+        team_member_ids: [],
+        created_at: now,
+        updated_at: now,
+      });
+    }
     write(data);
     return { ok: true, ...list() };
   }
@@ -1317,6 +1484,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     addWorkspaceConnection,
     addTeamMember,
     buildOpsDashboard,
+    createCommandSession,
+    addCommandMessage,
     addClip,
     addVocabulary,
     addUserProfile,

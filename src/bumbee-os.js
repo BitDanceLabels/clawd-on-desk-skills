@@ -13,6 +13,8 @@
   const workspaceList = document.getElementById("workspaceList");
   const teamList = document.getElementById("teamList");
   const opsDashboardList = document.getElementById("opsDashboardList");
+  const commandSessionList = document.getElementById("commandSessionList");
+  const commandMessageList = document.getElementById("commandMessageList");
   const workList = document.getElementById("workList");
   const clipList = document.getElementById("clipList");
   const profileList = document.getElementById("profileList");
@@ -39,6 +41,8 @@
       ["API drafts", counts.gatewayApiDrafts || 0],
       ["Sources", counts.workspaceConnections || 0],
       ["Team", counts.teamMembers || 0],
+      ["Cmd sessions", counts.commandSessions || 0],
+      ["Cmd messages", counts.commandMessages || 0],
       ["Clips", counts.clips || 0],
       ["Vocab", counts.vocabulary || 0],
       ["Profiles", counts.userProfiles || 0],
@@ -65,6 +69,8 @@
     const workspaces = data?.workspaceConnections || [];
     const teamMembers = data?.teamMembers || [];
     const opsDashboards = data?.opsDashboards || [];
+    const commandSessions = data?.commandSessions || [];
+    const commandMessages = data?.commandMessages || [];
     const messages = data?.companionMessages || [];
     const clips = data?.clips || [];
     const profiles = data?.userProfiles || [];
@@ -161,6 +167,22 @@
       </article>
     `).join("") : `<article class="item"><strong>No ops dashboard yet</strong><small>Build dashboard after adding sources/team.</small></article>`;
 
+    commandSessionList.innerHTML = commandSessions.length ? commandSessions.slice(0, 5).map((session) => `
+      <article class="item">
+        <strong>${escapeHtml(session.title)}</strong>
+        <small>${escapeHtml(session.status)} · ${escapeHtml(session.updated_at || session.created_at)}</small>
+        <small>${escapeHtml(session.purpose)}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No command session</strong><small>Create a session or send a command.</small></article>`;
+
+    commandMessageList.innerHTML = commandMessages.length ? commandMessages.slice(0, 8).map((message) => `
+      <article class="item">
+        <strong>${escapeHtml(message.role)} · ${escapeHtml(message.message_type)}</strong>
+        <small>${escapeHtml(message.analysis?.next_step || message.created_at)}</small>
+        <small>${escapeHtml((message.message || "").slice(0, 260))}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No command messages</strong><small>Chat or command Bumbee to remember and draft work.</small></article>`;
+
     workList.innerHTML = works.length ? works.slice(0, 8).map((item) => `
       <article class="item">
         <strong>${escapeHtml(item.title)}</strong>
@@ -244,6 +266,27 @@
   document.getElementById("refreshBtn").addEventListener("click", refresh);
   document.getElementById("seedDemoBtn").addEventListener("click", async () => {
     await window.bumbeeOsAPI.seedDemo();
+    await refresh();
+  });
+
+  document.getElementById("newCommandSessionBtn").addEventListener("click", async () => {
+    const result = await window.bumbeeOsAPI.createCommandSession({
+      title: document.getElementById("commandSessionTitle").value || "Owner command session",
+      purpose: "Remember chat, analyze commands, and draft workspace/Jira/social/report actions.",
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    await refresh();
+  });
+
+  document.getElementById("commandForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const result = await window.bumbeeOsAPI.addCommandMessage({
+      session_title: document.getElementById("commandSessionTitle").value,
+      message: document.getElementById("commandMessage").value,
+      role: "owner",
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    document.getElementById("commandMessage").value = "";
     await refresh();
   });
 

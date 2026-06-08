@@ -261,3 +261,33 @@ test("Bumbee OS stores workspace connectors, team members, and ops dashboard met
   assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_workspace_connections/);
   assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_ops_dashboards/);
 });
+
+test("Bumbee OS command chat remembers questions and drafts executable work", () => {
+  const store = createStore(tmpDir());
+  const session = store.createCommandSession({
+    title: "CEO daily command",
+    purpose: "Ask questions, analyze, and command Bumbee work.",
+  });
+  assert.equal(session.ok, true);
+
+  const result = store.addCommandMessage({
+    session_id: session.session.id,
+    message: "Tạo Jira task và workspace để team làm sản phẩm đăng trang chủ, social, rồi báo cáo doanh thu Odoo CRM hằng ngày.",
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.message.message_type, "crm_revenue_report");
+  assert.equal(result.reply.role, "bumbee");
+  assert.equal(result.workItem.approval_required, true);
+  assert.equal(result.jiraDraft.status, "draft_waiting_owner_review");
+  assert.equal(result.action.status, "waiting_owner_review");
+
+  const data = store.list();
+  assert.equal(data.counts.commandSessions, 1);
+  assert.equal(data.counts.commandMessages, 2);
+  assert.equal(data.counts.workItems, 1);
+  assert.equal(data.counts.jiraDrafts, 1);
+
+  const dump = store.exportSqlDump();
+  assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_command_sessions/);
+  assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_command_messages/);
+});

@@ -26,6 +26,29 @@
     <section class="panel">
       <div class="panel-head">
         <div>
+          <p class="eyebrow">Command chat</p>
+          <h2>Remember, analyze, command</h2>
+        </div>
+        <button id="newCommandSessionBtn" type="button" class="secondary">New session</button>
+      </div>
+      <div class="companion-grid">
+        <article>
+          <form id="commandForm" class="form">
+            <input id="commandSessionTitle" placeholder="Session title">
+            <textarea id="commandMessage" rows="6" placeholder="Chat câu hỏi, phân tích, hoặc ra lệnh: tạo workspace/Jira, chuẩn bị sản phẩm đăng trang chủ/social, báo cáo doanh thu CRM, đánh giá hiệu suất team..."></textarea>
+            <button type="submit">Send to Bumbee</button>
+          </form>
+        </article>
+        <article>
+          <div id="commandSessionList" class="list"></div>
+          <div id="commandMessageList" class="list"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
           <p class="eyebrow">Daily companion</p>
           <h2>Idea scan + Jira draft</h2>
         </div>

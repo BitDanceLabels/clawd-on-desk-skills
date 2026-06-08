@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld("bumbeeOsAPI", {
   addWorkspaceConnection: (payload) => ipcRenderer.invoke("bumbee-os:add-workspace-connection", payload),
   addTeamMember: (payload) => ipcRenderer.invoke("bumbee-os:add-team-member", payload),
   buildOpsDashboard: (payload) => ipcRenderer.invoke("bumbee-os:build-ops-dashboard", payload),
+  createCommandSession: (payload) => ipcRenderer.invoke("bumbee-os:create-command-session", payload),
+  addCommandMessage: (payload) => ipcRenderer.invoke("bumbee-os:add-command-message", payload),
   addClip: (payload) => ipcRenderer.invoke("bumbee-os:add-clip", payload),
   addVocabulary: (payload) => ipcRenderer.invoke("bumbee-os:add-vocabulary", payload),
   addUserProfile: (payload) => ipcRenderer.invoke("bumbee-os:add-user-profile", payload),
