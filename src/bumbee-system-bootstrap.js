@@ -8,7 +8,11 @@ const path = require("path");
 const DEFAULT_SERVER_HOST = "server-google-vscode";
 const DEFAULT_SERVER_USER = "nhutpm7777";
 const DEFAULT_REMOTE_SKILLS_ROOT = "/home/bumbee_workspace/awesome-bumbee-skills/final-skills-mcps";
-const DEFAULT_REQUIRED_SKILLS = ["bumbee-system-awareness", "bumbee-encyclopedia"];
+const DEFAULT_REQUIRED_SKILLS = [
+  "bumbee-system-awareness",
+  "bumbee-encyclopedia",
+  "bumbee-project-viral-architecture-review",
+];
 
 function shQuote(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`;

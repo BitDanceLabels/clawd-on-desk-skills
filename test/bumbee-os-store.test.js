@@ -339,3 +339,36 @@ test("Bumbee OS command chat remembers questions and drafts executable work", ()
   assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_command_sessions/);
   assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_command_messages/);
 });
+
+test("Bumbee OS project review worker scores projects and creates review artifacts", () => {
+  const store = createStore(tmpDir());
+  const result = store.runProjectReviewWorker({
+    title: "Biên tập idea thơ và hoàn thiện Suno music content",
+    project_type: "music-content",
+    body: [
+      "Cần skill biên tập thơ, lyric, mood, story arc, hook viral, CTA và content package.",
+      "Kết quả phải lưu wiki, tạo Jira draft, có worker ổn định, database, test, owner approval.",
+      "Có đường bán hàng cho gói music content và social campaign.",
+    ].join("\n"),
+    source: "test",
+    tags: ["music", "suno", "content"],
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.review.project_type, "music-content");
+  assert.equal(result.review.scores.overall >= 6, true);
+  assert.equal(result.review.worker_suggestions.some((worker) => worker.name === "music-content-editor-worker"), true);
+  assert.equal(result.jiraDraft.issue_type, "Review");
+  assert.equal(result.wikiCandidate.category, "project-review");
+  assert.equal(result.action.action_type, "project_review_score_comment");
+
+  const data = store.list();
+  assert.equal(data.counts.projectReviews, 1);
+  assert.equal(data.counts.jiraDrafts, 1);
+  assert.equal(data.counts.wikiCandidates, 1);
+  assert.equal(data.counts.actionQueue, 1);
+
+  const dump = store.exportSqlDump();
+  assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_project_reviews/);
+  assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_project_reviews/);
+});

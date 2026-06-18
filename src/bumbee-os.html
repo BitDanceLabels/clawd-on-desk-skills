@@ -138,6 +138,35 @@
     <section class="panel">
       <div class="panel-head">
         <div>
+          <p class="eyebrow">OpenClaw workers</p>
+          <h2>Project viral + architecture review</h2>
+        </div>
+      </div>
+      <div class="companion-grid">
+        <article>
+          <form id="projectReviewForm" class="form">
+            <input id="projectReviewTitle" placeholder="Project title, e.g. Idea thơ + Suno music content">
+            <select id="projectReviewType">
+              <option value="">Auto detect project type</option>
+              <option value="music-content">Music / poem / Suno content</option>
+              <option value="social-content">Social content / viral campaign</option>
+              <option value="software-system">Software / worker / architecture</option>
+              <option value="learning-product">Learning product</option>
+              <option value="general-project">General project</option>
+            </select>
+            <textarea id="projectReviewBody" rows="6" placeholder="Describe idea, repo, worker, content, music, market, current risks, and desired output. Bumbee will score viral, architecture, aesthetic, stability, monetization and create Jira + Wiki review drafts."></textarea>
+            <button type="submit">Run review worker</button>
+          </form>
+        </article>
+        <article>
+          <div id="projectReviewList" class="list"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
           <p class="eyebrow">Workspaces + team ops</p>
           <h2>Daily sources and people dashboard</h2>
         </div>

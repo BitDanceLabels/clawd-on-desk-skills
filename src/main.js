@@ -3301,6 +3301,7 @@ function createWindow() {
   ipcMain.handle("bumbee-os:build-daily-digest", (_event, payload) => _bumbeeOsStore.buildDailyDigest(payload));
   ipcMain.handle("bumbee-os:build-daily-memory-review", (_event, payload) => _bumbeeOsStore.buildDailyMemoryReview(payload));
   ipcMain.handle("bumbee-os:approve-wiki-candidate", (_event, payload) => _bumbeeOsStore.approveWikiCandidate(payload));
+  ipcMain.handle("bumbee-os:run-project-review-worker", (_event, payload) => _bumbeeOsStore.runProjectReviewWorker(payload));
   ipcMain.handle("bumbee-os:companion-chat", (_event, payload) => _bumbeeOsStore.companionChat(payload));
   ipcMain.handle("bumbee-os:propose-capability-upgrade", (_event, payload) => _bumbeeOsStore.proposeCapabilityUpgrade(payload));
   ipcMain.handle("bumbee-os:add-workspace-connection", (_event, payload) => _bumbeeOsStore.addWorkspaceConnection(payload));

@@ -8,6 +8,7 @@
   const digestList = document.getElementById("digestList");
   const memoryReviewList = document.getElementById("memoryReviewList");
   const wikiCandidateList = document.getElementById("wikiCandidateList");
+  const projectReviewList = document.getElementById("projectReviewList");
   const jiraDraftList = document.getElementById("jiraDraftList");
   const companionList = document.getElementById("companionList");
   const skillResearchList = document.getElementById("skillResearchList");
@@ -41,6 +42,7 @@
       ["Digests", counts.dailyDigests || 0],
       ["Memory reviews", counts.dailyMemoryReviews || 0],
       ["Wiki candidates", counts.wikiCandidates || 0],
+      ["Project reviews", counts.projectReviews || 0],
       ["Jira drafts", counts.jiraDrafts || 0],
       ["Skill research", counts.skillResearchItems || 0],
       ["API drafts", counts.gatewayApiDrafts || 0],
@@ -69,6 +71,7 @@
     const digests = data?.dailyDigests || [];
     const memoryReviews = data?.dailyMemoryReviews || [];
     const wikiCandidates = data?.wikiCandidates || [];
+    const projectReviews = data?.projectReviews || [];
     const jiraDrafts = data?.jiraDrafts || [];
     const skillResearchItems = data?.skillResearchItems || [];
     const gatewayApiDrafts = data?.gatewayApiDrafts || [];
@@ -137,6 +140,15 @@
         ${candidate.status === "waiting_owner_approval" ? `<button type="button" class="secondary approve-wiki-candidate" data-id="${escapeHtml(candidate.id)}">Approve local</button>` : `<small>${escapeHtml(candidate.wiki_file_path || "")}</small>`}
       </article>
     `).join("") : `<article class="item"><strong>No wiki candidates</strong><small>Daily memory review will prepare owner-approved wiki inbox pages.</small></article>`;
+
+    projectReviewList.innerHTML = projectReviews.length ? projectReviews.slice(0, 8).map((review) => `
+      <article class="item">
+        <strong>${escapeHtml(review.title)}</strong>
+        <small>${escapeHtml(review.project_type)} · overall ${escapeHtml(review.scores?.overall ?? "?")}/10 · ${escapeHtml(review.status)}</small>
+        <small>viral ${escapeHtml(review.scores?.viral ?? "?")} · architecture ${escapeHtml(review.scores?.architecture ?? "?")} · aesthetic ${escapeHtml(review.scores?.aesthetic ?? "?")} · stability ${escapeHtml(review.scores?.stability ?? "?")}</small>
+        <small>${escapeHtml((review.next_actions || []).slice(0, 2).join(" "))}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No project reviews</strong><small>Run OpenClaw review worker to create score, Jira draft, and Wiki candidate.</small></article>`;
 
     companionList.innerHTML = messages.length ? messages.slice(0, 6).map((message) => `
       <article class="item">
@@ -388,6 +400,19 @@
       target_folder: document.getElementById("localWikiInboxFolder").value,
     });
     rawOutput.textContent = JSON.stringify(result, null, 2);
+    await refresh();
+  });
+
+  document.getElementById("projectReviewForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const result = await window.bumbeeOsAPI.runProjectReviewWorker({
+      title: document.getElementById("projectReviewTitle").value,
+      project_type: document.getElementById("projectReviewType").value,
+      body: document.getElementById("projectReviewBody").value,
+      source: "bumbee_os_openclaw_review",
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    event.target.reset();
     await refresh();
   });
 

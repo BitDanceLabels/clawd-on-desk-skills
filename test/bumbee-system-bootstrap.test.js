@@ -38,11 +38,12 @@ test("Bumbee system bootstrap syncs required skills to Codex and Claude targets"
 
   assert.equal(result.ok, true);
   assert.equal(result.status, "ready");
-  assert.equal(result.synced.length, 4);
+  assert.equal(result.synced.length, 6);
   assert.equal(fs.existsSync(path.join(home, ".codex", "skills", "bumbee-system-awareness", "SKILL.md")), true);
   assert.equal(fs.existsSync(path.join(home, ".claude", "skills", "bumbee-encyclopedia", "SKILL.md")), true);
+  assert.equal(fs.existsSync(path.join(home, ".codex", "skills", "bumbee-project-viral-architecture-review", "SKILL.md")), true);
   assert.equal(calls.filter((call) => call.command === "ssh").length, 1);
-  assert.equal(calls.filter((call) => call.command === "scp").length, 4);
+  assert.equal(calls.filter((call) => call.command === "scp").length, 6);
 });
 
 test("Bumbee system bootstrap reports remote connection errors without throwing", async () => {

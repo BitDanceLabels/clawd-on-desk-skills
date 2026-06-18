@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("bumbeeOsAPI", {
   buildDailyDigest: (payload) => ipcRenderer.invoke("bumbee-os:build-daily-digest", payload),
   buildDailyMemoryReview: (payload) => ipcRenderer.invoke("bumbee-os:build-daily-memory-review", payload),
   approveWikiCandidate: (payload) => ipcRenderer.invoke("bumbee-os:approve-wiki-candidate", payload),
+  runProjectReviewWorker: (payload) => ipcRenderer.invoke("bumbee-os:run-project-review-worker", payload),
   companionChat: (payload) => ipcRenderer.invoke("bumbee-os:companion-chat", payload),
   proposeCapabilityUpgrade: (payload) => ipcRenderer.invoke("bumbee-os:propose-capability-upgrade", payload),
   addWorkspaceConnection: (payload) => ipcRenderer.invoke("bumbee-os:add-workspace-connection", payload),

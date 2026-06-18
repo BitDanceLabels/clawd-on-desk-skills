@@ -11,6 +11,7 @@ const DEFAULT_DATA = {
   dailyDigests: [],
   dailyMemoryReviews: [],
   wikiCandidates: [],
+  projectReviews: [],
   jiraDrafts: [],
   skillResearchItems: [],
   gatewayApiDrafts: [],
@@ -212,6 +213,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         dailyDigests: Array.isArray(data.dailyDigests) ? data.dailyDigests : [],
         dailyMemoryReviews: Array.isArray(data.dailyMemoryReviews) ? data.dailyMemoryReviews : [],
         wikiCandidates: Array.isArray(data.wikiCandidates) ? data.wikiCandidates : [],
+        projectReviews: Array.isArray(data.projectReviews) ? data.projectReviews : [],
         jiraDrafts: Array.isArray(data.jiraDrafts) ? data.jiraDrafts : [],
         skillResearchItems: Array.isArray(data.skillResearchItems) ? data.skillResearchItems : [],
         gatewayApiDrafts: Array.isArray(data.gatewayApiDrafts) ? data.gatewayApiDrafts : [],
@@ -256,6 +258,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         dailyDigests: data.dailyDigests.length,
         dailyMemoryReviews: data.dailyMemoryReviews.length,
         wikiCandidates: data.wikiCandidates.length,
+        projectReviews: data.projectReviews.length,
         jiraDrafts: data.jiraDrafts.length,
         skillResearchItems: data.skillResearchItems.length,
         gatewayApiDrafts: data.gatewayApiDrafts.length,
@@ -285,6 +288,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         workspaceOps: "local_sources_now_remote_connectors_draft",
         commandChat: "remember_questions_analyze_and_draft_work",
         wikiMemoryReview: "daily_candidates_waiting_owner_approval",
+        projectReviewWorker: "score_viral_architecture_aesthetic_stability",
         socialPublisher: "draft_and_review_queue",
         englishTrailer: "local_first",
         gatewayScan: "metadata_ready",
@@ -306,6 +310,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       dailyDigests: data.dailyDigests.slice(0, 50),
       dailyMemoryReviews: data.dailyMemoryReviews.slice(0, 50),
       wikiCandidates: data.wikiCandidates.slice(0, 100),
+      projectReviews: data.projectReviews.slice(0, 100),
       jiraDrafts: data.jiraDrafts.slice(0, 100),
       skillResearchItems: data.skillResearchItems.slice(0, 100),
       gatewayApiDrafts: data.gatewayApiDrafts.slice(0, 100),
@@ -547,6 +552,215 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       approved_at: "",
       wiki_file_path: "",
     };
+  }
+
+  function clampScore(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(10, Math.round(n)));
+  }
+
+  function inferProjectType(text) {
+    const value = String(text || "").toLowerCase();
+    if (/music|suno|song|lyric|beat|melody|nhạc|bài hát|thơ|poem|poetry/.test(value)) return "music-content";
+    if (/video|tiktok|youtube|short|reel|viral|content|caption|script/.test(value)) return "social-content";
+    if (/app|repo|api|mcp|worker|architecture|database|server|vscode|openclaw|codex|claude/.test(value)) return "software-system";
+    if (/course|english|học|training|lesson|vocab/.test(value)) return "learning-product";
+    return "general-project";
+  }
+
+  function scoreBySignals(text, groups, base = 4) {
+    const value = String(text || "").toLowerCase();
+    let score = base;
+    for (const group of groups) {
+      if (group.some((pattern) => pattern.test(value))) score += 1;
+    }
+    return clampScore(score);
+  }
+
+  function buildProjectReviewScores(text, projectType) {
+    const viral = scoreBySignals(text, [
+      [/pain|nỗi đau|gấp|khẩn|urgent|deadline/],
+      [/hook|viral|trend|share|tiktok|short|reel|before.*after|wow|bất ngờ/],
+      [/customer|khách|lead|doanh thu|sales|bán|money|pricing/],
+      [/demo|proof|case study|result|evidence|số liệu/],
+      [/clear|rõ|simple|dễ hiểu|cta|call to action/],
+    ], 3);
+    const architecture = scoreBySignals(text, [
+      [/repo|database|db|schema|api|mcp|gateway|worker/],
+      [/codex|claude|openclaw|bumbee on desk|automation/],
+      [/test|demo|deploy|ci|release|monitor|log/],
+      [/approval|guardrail|permission|review|owner/],
+      [/sync|wiki|jira|task|local|server/],
+    ], 3);
+    const aesthetic = scoreBySignals(text, [
+      [/beautiful|đẹp|taste|brand|visual|design|layout/],
+      [/music|poem|thơ|lyric|melody|suno|story/],
+      [/content|copy|caption|script|voice|tone/],
+      [/structure|kết cấu|flow|arc|intro|hook|ending/],
+    ], projectType === "music-content" || projectType === "social-content" ? 4 : 3);
+    const stability = scoreBySignals(text, [
+      [/test|qa|monitor|health|doctor|status/],
+      [/database|local|backup|export|sql|wiki/],
+      [/worker|queue|retry|log|automation/],
+      [/no live|approval|required|guardrail|safe/],
+    ], 3);
+    const monetization = scoreBySignals(text, [
+      [/price|pricing|định giá|doanh thu|sales|bán|bán hàng|crm|customer|khách/],
+      [/package|gói|offer|cta|landing|homepage|product/],
+      [/lead|job|remote|market|opportunity|cơ hội/],
+    ], 3);
+    const overall = clampScore((viral * 0.28) + (architecture * 0.24) + (aesthetic * 0.18) + (stability * 0.18) + (monetization * 0.12));
+    return { viral, architecture, aesthetic, stability, monetization, overall };
+  }
+
+  function rubricReason(score, strong, weak) {
+    if (score >= 8) return strong;
+    if (score >= 5) return "Có nền tảng tốt nhưng cần thêm proof, output rõ, và review checklist.";
+    return weak;
+  }
+
+  function buildProjectWorkers(scores, projectType) {
+    const workers = [
+      {
+        name: "viral-hook-worker",
+        status: scores.viral >= 7 ? "ready_to_refine" : "needs_input",
+        job: "Check hook, pain point, CTA, shareability, and audience proof.",
+      },
+      {
+        name: "architecture-stability-worker",
+        status: scores.architecture >= 7 && scores.stability >= 7 ? "ready_to_monitor" : "needs_design_review",
+        job: "Check repo/API/db/worker boundaries, test plan, logs, and rollback path.",
+      },
+      {
+        name: "wiki-jira-review-worker",
+        status: "ready_to_save",
+        job: "Save review into local Bumbee Wiki candidates and draft Jira review task.",
+      },
+    ];
+    if (projectType === "music-content") {
+      workers.push({
+        name: "music-content-editor-worker",
+        status: scores.aesthetic >= 7 ? "ready_to_polish" : "needs_content_structure",
+        job: "Score lyric/poem idea, Suno prompt, story arc, mood, structure, and content package.",
+      });
+    }
+    return workers;
+  }
+
+  function runProjectReviewWorker(payload = {}) {
+    const data = read();
+    const now = new Date().toISOString();
+    const title = normalizeString(payload.title || payload.project_title, 180) || "Bumbee project review";
+    const body = normalizeString(payload.body || payload.description || payload.idea || payload.note, 8000);
+    const source = normalizeString(payload.source, 800) || "openclaw_bumbee_on_desk_worker";
+    const inputText = `${title}\n${body}`;
+    const projectType = normalizeString(payload.project_type, 80) || inferProjectType(inputText);
+    if (!body && !title) return { ok: false, error: "missing project title or description" };
+    const scores = buildProjectReviewScores(inputText, projectType);
+    const tags = Array.from(new Set([
+      "project-review",
+      projectType,
+      "openclaw",
+      "bumbee-on-desk",
+      ...normalizeArray(payload.tags, 12, 60),
+      ...extractHashtags(inputText),
+    ])).slice(0, 16);
+    const review = {
+      id: makeId("projectreview"),
+      title,
+      project_type: projectType,
+      source,
+      summary: summarizeText(body, 900) || title,
+      scores,
+      rubric: {
+        viral: rubricReason(scores.viral, "Hook/pain/CTA có khả năng kéo attention tốt.", "Thiếu hook, audience pain, proof hoặc CTA rõ."),
+        architecture: rubricReason(scores.architecture, "Kiến trúc có worker/API/db/test path rõ.", "Thiếu repo/API/db/worker boundary hoặc test/deploy path."),
+        aesthetic: rubricReason(scores.aesthetic, "Kết cấu và taste đủ tốt để biên tập thành output đẹp.", "Thiếu flow, mood, cấu trúc nội dung hoặc tiêu chuẩn thẩm mỹ."),
+        stability: rubricReason(scores.stability, "Có guardrail, review, log hoặc monitor để chạy ổn định.", "Thiếu monitor/log/rollback/approval gate."),
+        monetization: rubricReason(scores.monetization, "Có đường bán hàng hoặc money path tương đối rõ.", "Chưa rõ offer, pricing, customer, CRM hoặc kênh bán."),
+      },
+      worker_suggestions: buildProjectWorkers(scores, projectType),
+      next_actions: [
+        scores.viral < 7 ? "Viết lại hook + target audience + CTA." : "Chuẩn bị 3 biến thể hook để test.",
+        scores.architecture < 7 ? "Vẽ lại repo/API/db/worker boundary trước khi build." : "Tạo smoke test và monitor checklist.",
+        scores.aesthetic < 7 ? "Biên tập lại flow/kết cấu/mood trước khi publish." : "Chuẩn bị demo/asset package.",
+        "Owner review score/comment trước khi chạy worker live hoặc đăng social.",
+      ],
+      owner_score: "",
+      owner_comment: "",
+      status: "waiting_owner_review",
+      created_at: now,
+      updated_at: now,
+    };
+
+    const sourceForDrafts = {
+      title: `Review project: ${title}`,
+      source,
+      body: [
+        `Project type: ${projectType}`,
+        `Overall score: ${scores.overall}/10`,
+        "",
+        review.summary,
+        "",
+        "Scores:",
+        `- Viral: ${scores.viral}/10`,
+        `- Architecture: ${scores.architecture}/10`,
+        `- Aesthetic/content structure: ${scores.aesthetic}/10`,
+        `- Stability: ${scores.stability}/10`,
+        `- Monetization: ${scores.monetization}/10`,
+        "",
+        "Next actions:",
+        ...review.next_actions.map((item) => `- ${item}`),
+      ].join("\n"),
+      tags,
+    };
+    const jiraDraft = buildJiraDraft(sourceForDrafts, data.settings);
+    jiraDraft.title = `Owner review: ${title}`;
+    jiraDraft.issue_type = "Review";
+    jiraDraft.priority = scores.overall >= 8 ? "high" : "normal";
+    jiraDraft.tags = tags;
+    jiraDraft.description = [
+      sourceForDrafts.body,
+      "",
+      "Owner review fields:",
+      "- Score 1-10:",
+      "- Comment:",
+      "- Approve next worker:",
+      "- Reject/needs rewrite:",
+    ].join("\n");
+    const wikiCandidate = buildWikiCandidate({
+      ...sourceForDrafts,
+      title: `Project review rubric: ${title}`,
+    }, review.id, data.settings);
+    wikiCandidate.category = "project-review";
+    wikiCandidate.reason = "OpenClaw/Bumbee project worker generated a reusable scoring review that should be searchable in local Bumbee Wiki.";
+    wikiCandidate.owner_question = "Lưu review/chấm điểm dự án này vào Bumbee Wiki và dùng làm chuẩn tạo skill/worker tiếp không?";
+
+    const action = {
+      id: makeId("action"),
+      title: `Score/comment project review: ${title}`,
+      action_type: "project_review_score_comment",
+      target_type: "project_review",
+      target_id: review.id,
+      priority: scores.overall >= 8 ? "high" : "normal",
+      status: "waiting_owner_review",
+      note: `Overall ${scores.overall}/10. Owner should score, comment, and decide which worker/skill to create next.`,
+      created_at: now,
+    };
+    data.projectReviews.unshift(review);
+    data.jiraDrafts.unshift(jiraDraft);
+    data.wikiCandidates.unshift(wikiCandidate);
+    data.actionQueue.unshift(action);
+    data.companionMessages.unshift({
+      id: makeId("chat"),
+      role: "bumbee",
+      message: `OpenClaw review đã chấm "${title}" ${scores.overall}/10 và tạo Jira draft + Wiki candidate chờ chủ nhân comment.`,
+      source: "openclaw_project_review_worker",
+      created_at: now,
+    });
+    write(data);
+    return { ok: true, review, jiraDraft, wikiCandidate, action };
   }
 
   function buildDailyMemoryReview(payload = {}) {
@@ -1337,6 +1551,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       "CREATE TABLE IF NOT EXISTS bumbee_daily_digests (id TEXT PRIMARY KEY, date TEXT, title TEXT, source_count INTEGER, idea_count INTEGER, sources_json TEXT, recommendations_json TEXT, status TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_daily_memory_reviews (id TEXT PRIMARY KEY, date TEXT, title TEXT, source_count INTEGER, candidate_count INTEGER, summary TEXT, suggested_questions_json TEXT, created_candidate_ids_json TEXT, status TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_wiki_candidates (id TEXT PRIMARY KEY, review_id TEXT, title TEXT, category TEXT, summary TEXT, source TEXT, source_title TEXT, tags_json TEXT, proposed_wiki_path TEXT, confidence TEXT, reason TEXT, owner_question TEXT, status TEXT, approved_at TEXT, wiki_file_path TEXT, created_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_project_reviews (id TEXT PRIMARY KEY, title TEXT, project_type TEXT, source TEXT, summary TEXT, scores_json TEXT, rubric_json TEXT, worker_suggestions_json TEXT, next_actions_json TEXT, owner_score TEXT, owner_comment TEXT, status TEXT, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_jira_drafts (id TEXT PRIMARY KEY, title TEXT, issue_type TEXT, project_url TEXT, source TEXT, priority TEXT, assignee TEXT, tester TEXT, deadline_date TEXT, status TEXT, tags_json TEXT, description TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_skill_research_items (id TEXT PRIMARY KEY, title TEXT, goal TEXT, source TEXT, status TEXT, priority TEXT, expected_output_json TEXT, tags_json TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_gateway_api_drafts (id TEXT PRIMARY KEY, name TEXT, method TEXT, path TEXT, purpose TEXT, auth_required INTEGER, status TEXT, request_schema_json TEXT, response_schema_json TEXT, risks_json TEXT, created_at TEXT);",
@@ -1371,6 +1586,9 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     }
     for (const candidate of data.wikiCandidates) {
       lines.push(`INSERT OR REPLACE INTO bumbee_wiki_candidates VALUES (${sqlQuote(candidate.id)}, ${sqlQuote(candidate.review_id)}, ${sqlQuote(candidate.title)}, ${sqlQuote(candidate.category)}, ${sqlQuote(candidate.summary)}, ${sqlQuote(candidate.source)}, ${sqlQuote(candidate.source_title)}, ${sqlQuote(JSON.stringify(candidate.tags || []))}, ${sqlQuote(candidate.proposed_wiki_path)}, ${sqlQuote(candidate.confidence)}, ${sqlQuote(candidate.reason)}, ${sqlQuote(candidate.owner_question)}, ${sqlQuote(candidate.status)}, ${sqlQuote(candidate.approved_at)}, ${sqlQuote(candidate.wiki_file_path)}, ${sqlQuote(candidate.created_at)});`);
+    }
+    for (const review of data.projectReviews) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_project_reviews VALUES (${sqlQuote(review.id)}, ${sqlQuote(review.title)}, ${sqlQuote(review.project_type)}, ${sqlQuote(review.source)}, ${sqlQuote(review.summary)}, ${sqlQuote(JSON.stringify(review.scores || {}))}, ${sqlQuote(JSON.stringify(review.rubric || {}))}, ${sqlQuote(JSON.stringify(review.worker_suggestions || []))}, ${sqlQuote(JSON.stringify(review.next_actions || []))}, ${sqlQuote(review.owner_score)}, ${sqlQuote(review.owner_comment)}, ${sqlQuote(review.status)}, ${sqlQuote(review.created_at)}, ${sqlQuote(review.updated_at)});`);
     }
     for (const draft of data.jiraDrafts) {
       lines.push(`INSERT OR REPLACE INTO bumbee_jira_drafts VALUES (${sqlQuote(draft.id)}, ${sqlQuote(draft.title)}, ${sqlQuote(draft.issue_type)}, ${sqlQuote(draft.project_url)}, ${sqlQuote(draft.source)}, ${sqlQuote(draft.priority)}, ${sqlQuote(draft.assignee)}, ${sqlQuote(draft.tester)}, ${sqlQuote(draft.deadline_date)}, ${sqlQuote(draft.status)}, ${sqlQuote(JSON.stringify(draft.tags || []))}, ${sqlQuote(draft.description)}, ${sqlQuote(draft.created_at)});`);
@@ -1584,6 +1802,24 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       data.dailyMemoryReviews.push(review);
       data.wikiCandidates.push(candidate);
     }
+    if (data.projectReviews.length === 0) {
+      const now = new Date().toISOString();
+      const result = runProjectReviewWorker({
+        title: "Biên tập idea thơ, music, Suno content",
+        project_type: "music-content",
+        source: "seed_demo",
+        body: "Skill mới giúp biên tập idea thơ, hoàn thiện lyric/music/content package cho Suno, có hook viral, mood rõ, kết cấu đẹp, Jira review và wiki lưu lại.",
+        tags: ["music", "content", "suno", "project-review"],
+      });
+      const nextData = read();
+      data.projectReviews = nextData.projectReviews;
+      data.jiraDrafts = nextData.jiraDrafts;
+      data.wikiCandidates = nextData.wikiCandidates;
+      data.actionQueue = nextData.actionQueue;
+      data.companionMessages = nextData.companionMessages;
+      data.updated_at = now;
+      void result;
+    }
     if (data.skillResearchItems.length === 0) {
       const now = new Date().toISOString();
       const goal = "Research new skills and API drafts, sync useful knowledge into final skills, and prepare owner-reviewed gateway upgrades.";
@@ -1725,6 +1961,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     buildDailyDigest,
     buildDailyMemoryReview,
     approveWikiCandidate,
+    runProjectReviewWorker,
     companionChat,
     proposeCapabilityUpgrade,
     addWorkspaceConnection,
