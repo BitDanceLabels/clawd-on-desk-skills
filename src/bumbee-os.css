@@ -222,6 +222,10 @@ textarea {
   color: var(--muted);
 }
 
+.item button {
+  margin-top: 10px;
+}
+
 .readiness {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

@@ -16,12 +16,23 @@
         <p class="lead">Owner guide, social publisher, English trailer learning, and safe gateway readiness in one local-first dashboard.</p>
       </div>
       <div class="hero-actions">
+        <button id="syncSystemSkillsBtn" type="button" class="secondary">Sync system skills</button>
         <button id="seedDemoBtn" type="button">Seed demo</button>
         <button id="refreshBtn" type="button" class="secondary">Refresh</button>
       </div>
     </header>
 
     <section class="status-grid" id="statusGrid"></section>
+
+    <section class="panel system-panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">System bootstrap</p>
+          <h2>Codex + Claude skills sync</h2>
+        </div>
+      </div>
+      <div id="systemBootstrapStatus" class="list"></div>
+    </section>
 
     <section class="panel">
       <div class="panel-head">
@@ -53,6 +64,7 @@
           <h2>Idea scan + Jira draft</h2>
         </div>
         <button id="dailyDigestBtn" type="button" class="secondary">Scan today</button>
+        <button id="dailyMemoryReviewBtn" type="button" class="secondary">Wiki review</button>
       </div>
       <div class="companion-grid">
         <article>
@@ -65,6 +77,7 @@
         <article>
           <div class="source-grid">
             <input id="jiraProjectUrl" placeholder="Jira project URL">
+            <input id="localWikiInboxFolder" placeholder="Local wiki inbox folder">
             <textarea id="sourceFolders" rows="3" placeholder="Source folders, one per line"></textarea>
           </div>
           <div class="action-row">
@@ -82,6 +95,16 @@
         <article>
           <h3>Jira drafts</h3>
           <div id="jiraDraftList" class="list"></div>
+        </article>
+      </div>
+      <div class="split compact">
+        <article>
+          <h3>Wiki memory reviews</h3>
+          <div id="memoryReviewList" class="list"></div>
+        </article>
+        <article>
+          <h3>Wiki candidates</h3>
+          <div id="wikiCandidateList" class="list"></div>
         </article>
       </div>
     </section>

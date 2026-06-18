@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const net = require("net");
+const createBumbeeSystemBootstrap = require("./bumbee-system-bootstrap");
 
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
@@ -2993,6 +2994,9 @@ const _rabbitCtx = {
   initialIntervalMin: rabbitIntervalMin,
 };
 const _rabbit = require("./rabbit")(_rabbitCtx);
+const _bumbeeSystemBootstrap = createBumbeeSystemBootstrap({
+  logger: (message) => console.log(`Clawd: ${message}`),
+});
 
 function createWindow() {
   const prefs = loadPrefs();
@@ -3295,6 +3299,8 @@ function createWindow() {
   ipcMain.handle("bumbee-os:add-work-item", (_event, payload) => _bumbeeOsStore.addWorkItem(payload));
   ipcMain.handle("bumbee-os:add-idea-note", (_event, payload) => _bumbeeOsStore.addIdeaNote(payload));
   ipcMain.handle("bumbee-os:build-daily-digest", (_event, payload) => _bumbeeOsStore.buildDailyDigest(payload));
+  ipcMain.handle("bumbee-os:build-daily-memory-review", (_event, payload) => _bumbeeOsStore.buildDailyMemoryReview(payload));
+  ipcMain.handle("bumbee-os:approve-wiki-candidate", (_event, payload) => _bumbeeOsStore.approveWikiCandidate(payload));
   ipcMain.handle("bumbee-os:companion-chat", (_event, payload) => _bumbeeOsStore.companionChat(payload));
   ipcMain.handle("bumbee-os:propose-capability-upgrade", (_event, payload) => _bumbeeOsStore.proposeCapabilityUpgrade(payload));
   ipcMain.handle("bumbee-os:add-workspace-connection", (_event, payload) => _bumbeeOsStore.addWorkspaceConnection(payload));
@@ -3311,6 +3317,8 @@ function createWindow() {
   ipcMain.handle("bumbee-os:record-sepay-notification", (_event, payload) => _bumbeeOsStore.recordSepayNotification(payload));
   ipcMain.handle("bumbee-os:export-sql-dump", () => _bumbeeOsStore.exportSqlDump());
   ipcMain.handle("bumbee-os:update-settings", (_event, payload) => _bumbeeOsStore.updateSettings(payload));
+  ipcMain.handle("bumbee-system:bootstrap-status", () => _bumbeeSystemBootstrap.status());
+  ipcMain.handle("bumbee-system:sync-skills", (_event, payload) => _bumbeeSystemBootstrap.sync(payload || {}));
   ipcMain.handle("bumbee-chat:vision-audio", (_event, payload) => transcribeVisionAudio(payload));
   ipcMain.handle("bumbee-vocab:list", () => listVocabItems());
   ipcMain.handle("bumbee-vocab:add", (_event, payload) => addVocabItems(payload));
@@ -3715,6 +3723,11 @@ if (!gotTheLock) {
     // Auto-updater: setup event handlers + silent check after 5s
     setupAutoUpdater();
     setTimeout(() => checkForUpdates(false), 5000);
+    setTimeout(() => {
+      _bumbeeSystemBootstrap.sync({ reason: "app-startup" })
+        .then((result) => console.log(`Clawd: Bumbee system bootstrap ${result.status}`))
+        .catch((err) => console.warn("Clawd: Bumbee system bootstrap failed:", err.message));
+    }, 2500);
 
     // Start rabbit popup scheduler (runs only if user enabled it via menu)
     _rabbit.start();

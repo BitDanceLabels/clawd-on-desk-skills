@@ -9,6 +9,8 @@ const DEFAULT_DATA = {
   workItems: [],
   ideaNotes: [],
   dailyDigests: [],
+  dailyMemoryReviews: [],
+  wikiCandidates: [],
   jiraDrafts: [],
   skillResearchItems: [],
   gatewayApiDrafts: [],
@@ -42,6 +44,7 @@ const DEFAULT_DATA = {
     sepayQrTemplate: "compact",
     companionMode: "daily_work_companion",
     dailyIdeaScanEnabled: true,
+    dailyWikiReviewEnabled: true,
     capabilityLearningEnabled: true,
     jiraProjectUrl: "https://jira.bumbee.asia/bumbee-on-desk/projects/2bc56e64-4b21-4d1d-9126-11daa3a1d543/issues/",
     notionDailyJournalUrl: "https://www.notion.so/BUMBEE-STUDIO-IDEA-HO-N-THI-N-IDEA-356f8cb9fada80eabfe6cb6edca893cc",
@@ -50,6 +53,7 @@ const DEFAULT_DATA = {
       "~/Bumbee/bumbee-wiki",
       "/home/bumbee_workspace/awesome-bumbee-skills/bumbee-studio-idea/nhutpham-task",
     ],
+    localWikiInboxFolder: "~/Bumbee/bumbee-wiki-studio/02-wiki-inbox",
     defaultWorkspaceScanMode: "local_first_connector_drafts",
     commandChatMode: "remember_analyze_draft_actions",
   },
@@ -206,6 +210,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         workItems: Array.isArray(data.workItems) ? data.workItems : [],
         ideaNotes: Array.isArray(data.ideaNotes) ? data.ideaNotes : [],
         dailyDigests: Array.isArray(data.dailyDigests) ? data.dailyDigests : [],
+        dailyMemoryReviews: Array.isArray(data.dailyMemoryReviews) ? data.dailyMemoryReviews : [],
+        wikiCandidates: Array.isArray(data.wikiCandidates) ? data.wikiCandidates : [],
         jiraDrafts: Array.isArray(data.jiraDrafts) ? data.jiraDrafts : [],
         skillResearchItems: Array.isArray(data.skillResearchItems) ? data.skillResearchItems : [],
         gatewayApiDrafts: Array.isArray(data.gatewayApiDrafts) ? data.gatewayApiDrafts : [],
@@ -248,6 +254,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         workItems: data.workItems.length,
         ideaNotes: data.ideaNotes.length,
         dailyDigests: data.dailyDigests.length,
+        dailyMemoryReviews: data.dailyMemoryReviews.length,
+        wikiCandidates: data.wikiCandidates.length,
         jiraDrafts: data.jiraDrafts.length,
         skillResearchItems: data.skillResearchItems.length,
         gatewayApiDrafts: data.gatewayApiDrafts.length,
@@ -276,6 +284,7 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         capabilityLearning: "research_backlog_and_gateway_api_drafts",
         workspaceOps: "local_sources_now_remote_connectors_draft",
         commandChat: "remember_questions_analyze_and_draft_work",
+        wikiMemoryReview: "daily_candidates_waiting_owner_approval",
         socialPublisher: "draft_and_review_queue",
         englishTrailer: "local_first",
         gatewayScan: "metadata_ready",
@@ -295,6 +304,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       workItems: data.workItems.slice(0, 100),
       ideaNotes: data.ideaNotes.slice(0, 100),
       dailyDigests: data.dailyDigests.slice(0, 50),
+      dailyMemoryReviews: data.dailyMemoryReviews.slice(0, 50),
+      wikiCandidates: data.wikiCandidates.slice(0, 100),
       jiraDrafts: data.jiraDrafts.slice(0, 100),
       skillResearchItems: data.skillResearchItems.slice(0, 100),
       gatewayApiDrafts: data.gatewayApiDrafts.slice(0, 100),
@@ -498,6 +509,190 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       ].join("\n"),
       created_at: new Date().toISOString(),
     };
+  }
+
+  function inferWikiCategory(text) {
+    const value = String(text || "").toLowerCase();
+    if (/job|remote|lead|khách|customer|crm|doanh thu|sales|quảng cáo|ads|marketing/.test(value)) return "sales-growth";
+    if (/skill|api|gateway|mcp|repo|github|codex|claude/.test(value)) return "skills-api";
+    if (/jira|task|deadline|team|nhân sự|report|báo cáo/.test(value)) return "operations";
+    if (/english|tiếng anh|trailer|vocab|học/.test(value)) return "learning";
+    if (/payment|sepay|vietqr|odoo|sản phẩm|product/.test(value)) return "commerce";
+    return "owner-memory";
+  }
+
+  function buildWikiCandidate(source, reviewId, settings) {
+    const title = extractTitleFromText(source.body || source.title, source.title || "Bumbee wiki memory");
+    const body = source.body || "";
+    const category = inferWikiCategory(`${title}\n${body}`);
+    const tags = Array.from(new Set([category, ...(source.tags || []), ...extractHashtags(body)])).slice(0, 12);
+    const summary = summarizeText(body, 700) || title;
+    const sourcePath = normalizeString(source.source, 1000);
+    return {
+      id: makeId("wikicandidate"),
+      review_id: reviewId,
+      title,
+      category,
+      summary,
+      source: sourcePath,
+      source_title: normalizeString(source.title, 180),
+      source_mtime: normalizeString(source.mtime, 80),
+      tags,
+      proposed_wiki_path: normalizeString(settings.localWikiInboxFolder, 800),
+      confidence: /https?:\/\/|\/|\.md|notion|jira|odoo|wiki/i.test(sourcePath) ? "medium" : "low",
+      reason: "Daily memory review found a reusable idea, source link, workflow, customer/opportunity note, or task context that should be searchable later.",
+      owner_question: "Đưa nội dung này vào Bumbee Wiki local inbox để sau này tìm lại không?",
+      status: "waiting_owner_approval",
+      created_at: new Date().toISOString(),
+      approved_at: "",
+      wiki_file_path: "",
+    };
+  }
+
+  function buildDailyMemoryReview(payload = {}) {
+    const data = read();
+    const now = new Date().toISOString();
+    const sources = collectIdeaSources(payload, data);
+    const commandSources = data.commandMessages
+      .filter((message) => message.role === "owner")
+      .slice(0, 30)
+      .map((message) => ({
+        title: extractTitleFromText(message.message, `Command ${message.message_type}`),
+        source: `command-session:${message.session_id}`,
+        body: message.message,
+        tags: ["command_chat", message.message_type],
+        mtime: message.created_at,
+      }));
+    const companionSources = data.companionMessages
+      .filter((message) => message.role === "owner")
+      .slice(0, 30)
+      .map((message) => ({
+        title: extractTitleFromText(message.message, "Companion note"),
+        source: message.source || "companion_chat",
+        body: message.message,
+        tags: ["daily_journal", "companion"],
+        mtime: message.created_at,
+      }));
+    const allSources = [...commandSources, ...companionSources, ...sources];
+    const worthRemembering = allSources.filter((source) => {
+      const text = `${source.title}\n${source.body}`.toLowerCase();
+      return /job|remote|lead|khách|customer|crm|doanh thu|quảng cáo|ads|skill|api|gateway|repo|link|https?:\/\/|wiki|notion|jira|odoo|task|ý tưởng|idea|nhật ký|daily|báo cáo|team|sản phẩm|product/.test(text);
+    });
+    const selected = (worthRemembering.length ? worthRemembering : allSources).slice(0, Number(payload.limit) || 12);
+    const review = {
+      id: makeId("memoryreview"),
+      date: now.slice(0, 10),
+      title: normalizeString(payload.title, 180) || `Bumbee daily wiki memory review ${now.slice(0, 10)}`,
+      source_count: allSources.length,
+      candidate_count: selected.length,
+      summary: selected.length
+        ? `Bumbee found ${selected.length} item(s) that may belong in the wiki for future search.`
+        : "No strong wiki candidate found from current local notes and chat memory.",
+      suggested_questions: [
+        "Cái nào cần đưa vào Bumbee Wiki để sau này tìm lại?",
+        "Cái nào cần tạo Jira task hoặc CRM lead?",
+        "Cái nào cần bổ sung link/repo/API trước khi lưu chính thức?",
+      ],
+      status: "waiting_owner_approval",
+      created_candidate_ids: [],
+      created_at: now,
+    };
+    const candidates = selected.map((source) => buildWikiCandidate(source, review.id, data.settings));
+    review.created_candidate_ids = candidates.map((candidate) => candidate.id);
+    data.dailyMemoryReviews.unshift(review);
+    data.wikiCandidates.unshift(...candidates);
+    data.companionMessages.unshift({
+      id: makeId("chat"),
+      role: "bumbee",
+      message: candidates.length
+        ? `Bumbee thấy ${candidates.length} kiến thức/note nên đưa vào wiki. Vui lòng duyệt Wiki candidates để lưu vào local wiki inbox.`
+        : "Bumbee đã rà nhật ký hôm nay nhưng chưa thấy kiến thức đủ rõ để đưa vào wiki.",
+      source: "daily_wiki_memory_review",
+      created_at: now,
+    });
+    data.actionQueue.unshift({
+      id: makeId("action"),
+      title: `Approve wiki memory review: ${review.date}`,
+      action_type: "wiki_memory_review",
+      target_type: "daily_memory_review",
+      target_id: review.id,
+      priority: candidates.some((candidate) => ["sales-growth", "skills-api", "commerce"].includes(candidate.category)) ? "high" : "normal",
+      status: "waiting_owner_review",
+      note: `${candidates.length} wiki candidate(s) prepared locally. Owner can approve candidates into the local wiki inbox.`,
+      created_at: now,
+    });
+    write(data);
+    return { ok: true, review, candidates };
+  }
+
+  function safeSlug(value) {
+    return normalizeString(value, 120)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      || "bumbee-memory";
+  }
+
+  function approveWikiCandidate(payload = {}) {
+    const data = read();
+    const id = normalizeString(payload.id || payload.candidate_id, 120);
+    const candidate = data.wikiCandidates.find((item) => item.id === id);
+    if (!candidate) return { ok: false, error: "wiki candidate not found" };
+    const now = new Date().toISOString();
+    const inbox = normalizePath(payload.target_folder || candidate.proposed_wiki_path || data.settings.localWikiInboxFolder);
+    if (!inbox) return { ok: false, error: "missing local wiki inbox folder" };
+    fs.mkdirSync(inbox, { recursive: true });
+    const filename = `${now.slice(0, 10)}-${safeSlug(candidate.title)}-${candidate.id.slice(-6)}.md`;
+    const filePath = path.join(inbox, filename);
+    const markdown = [
+      "---",
+      `title: ${candidate.title}`,
+      `category: ${candidate.category}`,
+      `status: approved_local_inbox`,
+      `created_at: ${candidate.created_at}`,
+      `approved_at: ${now}`,
+      `source: ${candidate.source}`,
+      `tags: ${(candidate.tags || []).join(", ")}`,
+      "---",
+      "",
+      `# ${candidate.title}`,
+      "",
+      "## Summary",
+      "",
+      candidate.summary,
+      "",
+      "## Why Bumbee saved this",
+      "",
+      candidate.reason,
+      "",
+      "## Source",
+      "",
+      `- ${candidate.source || "bumbee-os-local-memory"}`,
+      "",
+      "## Owner question",
+      "",
+      candidate.owner_question,
+      "",
+    ].join("\n");
+    fs.writeFileSync(filePath, markdown, { encoding: "utf8", flag: "wx" });
+    candidate.status = "approved_local_inbox";
+    candidate.approved_at = now;
+    candidate.wiki_file_path = filePath;
+    data.actionQueue.unshift({
+      id: makeId("action"),
+      title: `Wiki memory approved: ${candidate.title}`,
+      action_type: "wiki_memory_approved",
+      target_type: "wiki_candidate",
+      target_id: candidate.id,
+      priority: "normal",
+      status: "completed_local",
+      note: `Saved to ${filePath}. Remote wiki sync/publish still requires connector approval.`,
+      created_at: now,
+    });
+    write(data);
+    return { ok: true, candidate, filePath };
   }
 
   function buildDailyDigest(payload = {}) {
@@ -1140,6 +1335,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
       "CREATE TABLE IF NOT EXISTS bumbee_work_items (id TEXT PRIMARY KEY, title TEXT, type TEXT, status TEXT, tags_json TEXT, note TEXT, approval_required INTEGER, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_idea_notes (id TEXT PRIMARY KEY, title TEXT, body TEXT, source TEXT, source_url TEXT, tags_json TEXT, priority TEXT, status TEXT, created_at TEXT, updated_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_daily_digests (id TEXT PRIMARY KEY, date TEXT, title TEXT, source_count INTEGER, idea_count INTEGER, sources_json TEXT, recommendations_json TEXT, status TEXT, created_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_daily_memory_reviews (id TEXT PRIMARY KEY, date TEXT, title TEXT, source_count INTEGER, candidate_count INTEGER, summary TEXT, suggested_questions_json TEXT, created_candidate_ids_json TEXT, status TEXT, created_at TEXT);",
+      "CREATE TABLE IF NOT EXISTS bumbee_wiki_candidates (id TEXT PRIMARY KEY, review_id TEXT, title TEXT, category TEXT, summary TEXT, source TEXT, source_title TEXT, tags_json TEXT, proposed_wiki_path TEXT, confidence TEXT, reason TEXT, owner_question TEXT, status TEXT, approved_at TEXT, wiki_file_path TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_jira_drafts (id TEXT PRIMARY KEY, title TEXT, issue_type TEXT, project_url TEXT, source TEXT, priority TEXT, assignee TEXT, tester TEXT, deadline_date TEXT, status TEXT, tags_json TEXT, description TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_skill_research_items (id TEXT PRIMARY KEY, title TEXT, goal TEXT, source TEXT, status TEXT, priority TEXT, expected_output_json TEXT, tags_json TEXT, created_at TEXT);",
       "CREATE TABLE IF NOT EXISTS bumbee_gateway_api_drafts (id TEXT PRIMARY KEY, name TEXT, method TEXT, path TEXT, purpose TEXT, auth_required INTEGER, status TEXT, request_schema_json TEXT, response_schema_json TEXT, risks_json TEXT, created_at TEXT);",
@@ -1168,6 +1365,12 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     }
     for (const digest of data.dailyDigests) {
       lines.push(`INSERT OR REPLACE INTO bumbee_daily_digests VALUES (${sqlQuote(digest.id)}, ${sqlQuote(digest.date)}, ${sqlQuote(digest.title)}, ${sqlQuote(digest.source_count)}, ${sqlQuote(digest.idea_count)}, ${sqlQuote(JSON.stringify(digest.sources || []))}, ${sqlQuote(JSON.stringify(digest.recommendations || []))}, ${sqlQuote(digest.status)}, ${sqlQuote(digest.created_at)});`);
+    }
+    for (const review of data.dailyMemoryReviews) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_daily_memory_reviews VALUES (${sqlQuote(review.id)}, ${sqlQuote(review.date)}, ${sqlQuote(review.title)}, ${sqlQuote(review.source_count)}, ${sqlQuote(review.candidate_count)}, ${sqlQuote(review.summary)}, ${sqlQuote(JSON.stringify(review.suggested_questions || []))}, ${sqlQuote(JSON.stringify(review.created_candidate_ids || []))}, ${sqlQuote(review.status)}, ${sqlQuote(review.created_at)});`);
+    }
+    for (const candidate of data.wikiCandidates) {
+      lines.push(`INSERT OR REPLACE INTO bumbee_wiki_candidates VALUES (${sqlQuote(candidate.id)}, ${sqlQuote(candidate.review_id)}, ${sqlQuote(candidate.title)}, ${sqlQuote(candidate.category)}, ${sqlQuote(candidate.summary)}, ${sqlQuote(candidate.source)}, ${sqlQuote(candidate.source_title)}, ${sqlQuote(JSON.stringify(candidate.tags || []))}, ${sqlQuote(candidate.proposed_wiki_path)}, ${sqlQuote(candidate.confidence)}, ${sqlQuote(candidate.reason)}, ${sqlQuote(candidate.owner_question)}, ${sqlQuote(candidate.status)}, ${sqlQuote(candidate.approved_at)}, ${sqlQuote(candidate.wiki_file_path)}, ${sqlQuote(candidate.created_at)});`);
     }
     for (const draft of data.jiraDrafts) {
       lines.push(`INSERT OR REPLACE INTO bumbee_jira_drafts VALUES (${sqlQuote(draft.id)}, ${sqlQuote(draft.title)}, ${sqlQuote(draft.issue_type)}, ${sqlQuote(draft.project_url)}, ${sqlQuote(draft.source)}, ${sqlQuote(draft.priority)}, ${sqlQuote(draft.assignee)}, ${sqlQuote(draft.tester)}, ${sqlQuote(draft.deadline_date)}, ${sqlQuote(draft.status)}, ${sqlQuote(JSON.stringify(draft.tags || []))}, ${sqlQuote(draft.description)}, ${sqlQuote(draft.created_at)});`);
@@ -1242,11 +1445,13 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     if (typeof payload?.companionMode === "string") next.companionMode = normalizeString(payload.companionMode, 80);
     if (typeof payload?.jiraProjectUrl === "string") next.jiraProjectUrl = normalizeString(payload.jiraProjectUrl, 800);
     if (typeof payload?.notionDailyJournalUrl === "string") next.notionDailyJournalUrl = normalizeString(payload.notionDailyJournalUrl, 800);
+    if (typeof payload?.localWikiInboxFolder === "string") next.localWikiInboxFolder = normalizeString(payload.localWikiInboxFolder, 800);
     if (Array.isArray(payload?.sourceFolders)) next.sourceFolders = normalizeArray(payload.sourceFolders, 12, 800);
     for (const key of ["autoPublish", "realMoneyWallet", "cameraEnabled", "microphoneEnabled"]) {
       if (typeof payload?.[key] === "boolean") next[key] = payload[key];
     }
     if (typeof payload?.dailyIdeaScanEnabled === "boolean") next.dailyIdeaScanEnabled = payload.dailyIdeaScanEnabled;
+    if (typeof payload?.dailyWikiReviewEnabled === "boolean") next.dailyWikiReviewEnabled = payload.dailyWikiReviewEnabled;
     if (typeof payload?.capabilityLearningEnabled === "boolean") next.capabilityLearningEnabled = payload.capabilityLearningEnabled;
     // Guardrails: these remain false until explicit future implementation.
     next.autoPublish = false;
@@ -1339,6 +1544,45 @@ module.exports = function createBumbeeOsStore(userDataPath) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
+    }
+    if (data.wikiCandidates.length === 0) {
+      const review = {
+        id: makeId("memoryreview"),
+        date: new Date().toISOString().slice(0, 10),
+        title: "Bumbee wiki memory review demo",
+        source_count: 1,
+        candidate_count: 1,
+        summary: "Demo candidate showing how daily notes become searchable wiki inbox pages after owner approval.",
+        suggested_questions: [
+          "Đưa skill/job/lead note này vào wiki không?",
+          "Có cần bổ sung link web/repo/API trước khi lưu không?",
+        ],
+        status: "waiting_owner_approval",
+        created_candidate_ids: [],
+        created_at: new Date().toISOString(),
+      };
+      const candidate = {
+        id: makeId("wikicandidate"),
+        review_id: review.id,
+        title: "AI tìm job remote và cơ hội dự án",
+        category: "sales-growth",
+        summary: "Skill tìm job remote, lead khách hàng, cơ hội dự án, viết pitch/quảng cáo và tạo CRM/Jira draft chờ chủ nhân duyệt.",
+        source: "seed_demo",
+        source_title: "Remote job opportunity scout",
+        source_mtime: "",
+        tags: ["sales-growth", "remote-job", "lead-generation", "skills"],
+        proposed_wiki_path: data.settings.localWikiInboxFolder,
+        confidence: "medium",
+        reason: "This is reusable business knowledge that owner may forget and should find later from Bumbee Wiki.",
+        owner_question: "Đưa note AI tìm job remote vào Bumbee Wiki local inbox không?",
+        status: "waiting_owner_approval",
+        created_at: new Date().toISOString(),
+        approved_at: "",
+        wiki_file_path: "",
+      };
+      review.created_candidate_ids = [candidate.id];
+      data.dailyMemoryReviews.push(review);
+      data.wikiCandidates.push(candidate);
     }
     if (data.skillResearchItems.length === 0) {
       const now = new Date().toISOString();
@@ -1479,6 +1723,8 @@ module.exports = function createBumbeeOsStore(userDataPath) {
     addWorkItem,
     addIdeaNote,
     buildDailyDigest,
+    buildDailyMemoryReview,
+    approveWikiCandidate,
     companionChat,
     proposeCapabilityUpgrade,
     addWorkspaceConnection,

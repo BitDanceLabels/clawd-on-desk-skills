@@ -185,6 +185,54 @@ test("Bumbee OS companion captures ideas and prepares daily Jira drafts", () => 
   assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_jira_drafts/);
 });
 
+test("Bumbee OS daily memory review prepares and approves wiki candidates", () => {
+  const dir = tmpDir();
+  const sourceRoot = path.join(dir, "daily-journal");
+  const wikiInbox = path.join(dir, "wiki-inbox");
+  fs.mkdirSync(sourceRoot, { recursive: true });
+  fs.writeFileSync(
+    path.join(sourceRoot, "remote-job-scout.md"),
+    [
+      "# AI tìm job remote và cơ hội dự án",
+      "",
+      "Cần lưu list web tìm job toàn cầu, repo nghiên cứu, link API, và cách viết quảng cáo để kinh doanh. #remote-job #lead",
+      "Bumbee phải nhớ để sau này chủ nhân tìm lại trong wiki.",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const store = createStore(dir);
+  const command = store.addCommandMessage({
+    message: "Nhớ task AI tìm job remote, chạy quảng cáo, CRM lead và tạo Jira draft để tui không quên.",
+  });
+  assert.equal(command.ok, true);
+
+  const review = store.buildDailyMemoryReview({
+    sourceFolders: [sourceRoot],
+    localWikiInboxFolder: wikiInbox,
+    limit: 8,
+    maxAgeHours: 24,
+  });
+  assert.equal(review.ok, true);
+  assert.equal(review.review.status, "waiting_owner_approval");
+  assert.equal(review.candidates.length >= 1, true);
+  assert.equal(review.candidates.some((candidate) => candidate.category === "sales-growth"), true);
+
+  const candidate = review.candidates.find((item) => item.category === "sales-growth") || review.candidates[0];
+  const approved = store.approveWikiCandidate({
+    candidate_id: candidate.id,
+    target_folder: wikiInbox,
+  });
+  assert.equal(approved.ok, true);
+  assert.equal(fs.existsSync(approved.filePath), true);
+  assert.match(fs.readFileSync(approved.filePath, "utf8"), /AI tìm job remote/);
+  assert.equal(store.list().wikiCandidates.find((item) => item.id === candidate.id).status, "approved_local_inbox");
+
+  const dump = store.exportSqlDump();
+  assert.match(dump.sql, /CREATE TABLE IF NOT EXISTS bumbee_daily_memory_reviews/);
+  assert.match(dump.sql, /INSERT OR REPLACE INTO bumbee_wiki_candidates/);
+});
+
 test("Bumbee OS prepares skill research and gateway API capability upgrades", () => {
   const store = createStore(tmpDir());
   const result = store.proposeCapabilityUpgrade({

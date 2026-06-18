@@ -3,8 +3,11 @@
 
   const statusGrid = document.getElementById("statusGrid");
   const rawOutput = document.getElementById("rawOutput");
+  const systemBootstrapStatus = document.getElementById("systemBootstrapStatus");
   const ideaList = document.getElementById("ideaList");
   const digestList = document.getElementById("digestList");
+  const memoryReviewList = document.getElementById("memoryReviewList");
+  const wikiCandidateList = document.getElementById("wikiCandidateList");
   const jiraDraftList = document.getElementById("jiraDraftList");
   const companionList = document.getElementById("companionList");
   const skillResearchList = document.getElementById("skillResearchList");
@@ -36,6 +39,8 @@
       ["Works", counts.workItems || 0],
       ["Ideas", counts.ideaNotes || 0],
       ["Digests", counts.dailyDigests || 0],
+      ["Memory reviews", counts.dailyMemoryReviews || 0],
+      ["Wiki candidates", counts.wikiCandidates || 0],
       ["Jira drafts", counts.jiraDrafts || 0],
       ["Skill research", counts.skillResearchItems || 0],
       ["API drafts", counts.gatewayApiDrafts || 0],
@@ -62,6 +67,8 @@
     const works = data?.workItems || [];
     const ideas = data?.ideaNotes || [];
     const digests = data?.dailyDigests || [];
+    const memoryReviews = data?.dailyMemoryReviews || [];
+    const wikiCandidates = data?.wikiCandidates || [];
     const jiraDrafts = data?.jiraDrafts || [];
     const skillResearchItems = data?.skillResearchItems || [];
     const gatewayApiDrafts = data?.gatewayApiDrafts || [];
@@ -83,8 +90,10 @@
     const settings = data?.settings || {};
 
     const jiraInput = document.getElementById("jiraProjectUrl");
+    const wikiInboxInput = document.getElementById("localWikiInboxFolder");
     const sourceInput = document.getElementById("sourceFolders");
     if (jiraInput && document.activeElement !== jiraInput) jiraInput.value = settings.jiraProjectUrl || "";
+    if (wikiInboxInput && document.activeElement !== wikiInboxInput) wikiInboxInput.value = settings.localWikiInboxFolder || "";
     if (sourceInput && document.activeElement !== sourceInput) sourceInput.value = (settings.sourceFolders || []).join("\n");
 
     ideaList.innerHTML = ideas.length ? ideas.slice(0, 8).map((item) => `
@@ -110,6 +119,24 @@
         <small>${escapeHtml((draft.description || "").slice(0, 220))}</small>
       </article>
     `).join("") : `<article class="item"><strong>No Jira drafts</strong><small>Daily scan creates draft tickets only, not live Jira issues.</small></article>`;
+
+    memoryReviewList.innerHTML = memoryReviews.length ? memoryReviews.slice(0, 5).map((review) => `
+      <article class="item">
+        <strong>${escapeHtml(review.title)}</strong>
+        <small>${escapeHtml(review.date)} · ${review.candidate_count || 0} wiki candidates · ${escapeHtml(review.status)}</small>
+        <small>${escapeHtml(review.summary || "")}</small>
+      </article>
+    `).join("") : `<article class="item"><strong>No wiki memory review yet</strong><small>Run Wiki review to find notes worth saving into local wiki inbox.</small></article>`;
+
+    wikiCandidateList.innerHTML = wikiCandidates.length ? wikiCandidates.slice(0, 8).map((candidate) => `
+      <article class="item">
+        <strong>${escapeHtml(candidate.title)}</strong>
+        <small>${escapeHtml(candidate.category)} · ${escapeHtml(candidate.status)} · ${escapeHtml(candidate.confidence)}</small>
+        <small>${escapeHtml((candidate.summary || "").slice(0, 260))}</small>
+        <small>${escapeHtml(candidate.source || "")}</small>
+        ${candidate.status === "waiting_owner_approval" ? `<button type="button" class="secondary approve-wiki-candidate" data-id="${escapeHtml(candidate.id)}">Approve local</button>` : `<small>${escapeHtml(candidate.wiki_file_path || "")}</small>`}
+      </article>
+    `).join("") : `<article class="item"><strong>No wiki candidates</strong><small>Daily memory review will prepare owner-approved wiki inbox pages.</small></article>`;
 
     companionList.innerHTML = messages.length ? messages.slice(0, 6).map((message) => `
       <article class="item">
@@ -256,14 +283,43 @@
     }
   }
 
+  function renderBootstrapStatus(status) {
+    if (!systemBootstrapStatus) return;
+    if (!status) {
+      systemBootstrapStatus.innerHTML = `<article class="item"><strong>Not checked</strong><small>Bumbee will sync system skills after startup.</small></article>`;
+      return;
+    }
+    const synced = Array.isArray(status.synced) ? status.synced : [];
+    const errors = Array.isArray(status.errors) ? status.errors : [];
+    systemBootstrapStatus.innerHTML = `
+      <article class="item">
+        <strong>${escapeHtml(status.status || "unknown")} · ${status.ok ? "ready" : "needs attention"}</strong>
+        <small>${escapeHtml(status.message || "")}</small>
+        <small>Server: ${escapeHtml(status.serverUser || "nhutpm7777")}@${escapeHtml(status.serverHost || "server-google-vscode")}</small>
+        <small>Synced: ${synced.length} file set(s) · Errors: ${errors.length}</small>
+        ${errors.length ? `<small>${errors.slice(0, 2).map((error) => escapeHtml(error.message || "")).join("<br>")}</small>` : ""}
+      </article>
+    `;
+  }
+
   async function refresh() {
     const data = await window.bumbeeOsAPI.list();
     renderStatus(data);
     renderLists(data);
+    try {
+      renderBootstrapStatus(await window.bumbeeOsAPI.bootstrapStatus());
+    } catch (err) {
+      renderBootstrapStatus({ ok: false, status: "error", message: err.message || String(err), errors: [] });
+    }
     rawOutput.textContent = JSON.stringify(data, null, 2);
   }
 
   document.getElementById("refreshBtn").addEventListener("click", refresh);
+  document.getElementById("syncSystemSkillsBtn").addEventListener("click", async () => {
+    const result = await window.bumbeeOsAPI.syncSystemSkills({ reason: "owner-click" });
+    renderBootstrapStatus(result);
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+  });
   document.getElementById("seedDemoBtn").addEventListener("click", async () => {
     await window.bumbeeOsAPI.seedDemo();
     await refresh();
@@ -313,12 +369,36 @@
     await refresh();
   });
 
+  document.getElementById("dailyMemoryReviewBtn").addEventListener("click", async () => {
+    const folders = document.getElementById("sourceFolders").value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    const result = await window.bumbeeOsAPI.buildDailyMemoryReview({
+      sourceFolders: folders,
+      limit: 12,
+      maxAgeHours: 336,
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    await refresh();
+  });
+
+  wikiCandidateList.addEventListener("click", async (event) => {
+    const button = event.target.closest(".approve-wiki-candidate");
+    if (!button) return;
+    const result = await window.bumbeeOsAPI.approveWikiCandidate({
+      candidate_id: button.dataset.id,
+      target_folder: document.getElementById("localWikiInboxFolder").value,
+    });
+    rawOutput.textContent = JSON.stringify(result, null, 2);
+    await refresh();
+  });
+
   document.getElementById("saveCompanionSettingsBtn").addEventListener("click", async () => {
     const folders = document.getElementById("sourceFolders").value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
     const result = await window.bumbeeOsAPI.updateSettings({
       jiraProjectUrl: document.getElementById("jiraProjectUrl").value,
+      localWikiInboxFolder: document.getElementById("localWikiInboxFolder").value,
       sourceFolders: folders,
       dailyIdeaScanEnabled: true,
+      dailyWikiReviewEnabled: true,
       companionMode: "daily_work_companion",
     });
     rawOutput.textContent = JSON.stringify(result, null, 2);
