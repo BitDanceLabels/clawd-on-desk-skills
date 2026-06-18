@@ -298,18 +298,31 @@
   function renderBootstrapStatus(status) {
     if (!systemBootstrapStatus) return;
     if (!status) {
-      systemBootstrapStatus.innerHTML = `<article class="item"><strong>Not checked</strong><small>Bumbee will sync system skills after startup.</small></article>`;
+      systemBootstrapStatus.innerHTML = `<article class="item bootstrap-card bootstrap-idle"><strong>Not checked</strong><small>Bumbee will sync system skills after startup.</small></article>`;
       return;
     }
     const synced = Array.isArray(status.synced) ? status.synced : [];
     const errors = Array.isArray(status.errors) ? status.errors : [];
+    const skills = Array.isArray(status.skills) ? status.skills : [];
+    const targets = Array.isArray(status.targets) ? status.targets : [];
+    const state = status.ok ? "ready" : ["partial", "syncing", "idle"].includes(status.status) ? status.status : "error";
+    const checkedAt = status.checked_at ? new Date(status.checked_at).toLocaleString() : "not recorded";
+    const title = status.status === "syncing" ? "Syncing Codex + Claude skills" : status.ok ? "Ready: Codex + Claude skills synced" : "Needs attention: skills sync incomplete";
     systemBootstrapStatus.innerHTML = `
-      <article class="item">
-        <strong>${escapeHtml(status.status || "unknown")} · ${status.ok ? "ready" : "needs attention"}</strong>
+      <article class="item bootstrap-card bootstrap-${escapeHtml(state)}">
+        <div class="bootstrap-title-row">
+          <strong>${escapeHtml(title)}</strong>
+          <span class="sync-badge sync-badge-${escapeHtml(state)}">${escapeHtml(state)}</span>
+        </div>
         <small>${escapeHtml(status.message || "")}</small>
+        <small>Checked: ${escapeHtml(checkedAt)}</small>
         <small>Server: ${escapeHtml(status.serverUser || "nhutpm7777")}@${escapeHtml(status.serverHost || "server-google-vscode")}</small>
-        <small>Synced: ${synced.length} file set(s) · Errors: ${errors.length}</small>
-        ${errors.length ? `<small>${errors.slice(0, 2).map((error) => escapeHtml(error.message || "")).join("<br>")}</small>` : ""}
+        <small>Remote skills root: ${escapeHtml(status.remoteSkillsRoot || "")}</small>
+        <small>Synced copies: ${synced.length} · Errors: ${errors.length}</small>
+        ${skills.length ? `<small>Skills: ${skills.map(escapeHtml).join(", ")}</small>` : ""}
+        ${targets.length ? `<small>Targets: ${targets.map(escapeHtml).join(" · ")}</small>` : ""}
+        ${synced.length ? `<details><summary>Synced files</summary><ul>${synced.map((item) => `<li>${escapeHtml(item.skill)} -> ${escapeHtml(item.path)}</li>`).join("")}</ul></details>` : ""}
+        ${errors.length ? `<details open><summary>Errors</summary><ul>${errors.map((error) => `<li>${escapeHtml(error.skill || error.stage || "sync")} · ${escapeHtml(error.message || "")}</li>`).join("")}</ul></details>` : ""}
       </article>
     `;
   }
@@ -327,10 +340,23 @@
   }
 
   document.getElementById("refreshBtn").addEventListener("click", refresh);
-  document.getElementById("syncSystemSkillsBtn").addEventListener("click", async () => {
-    const result = await window.bumbeeOsAPI.syncSystemSkills({ reason: "owner-click" });
-    renderBootstrapStatus(result);
-    rawOutput.textContent = JSON.stringify(result, null, 2);
+  document.getElementById("syncSystemSkillsBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "Syncing...";
+    renderBootstrapStatus({ ok: false, status: "syncing", message: "Syncing Bumbee system skills now.", synced: [], errors: [] });
+    try {
+      const result = await window.bumbeeOsAPI.syncSystemSkills({ reason: "owner-click" });
+      renderBootstrapStatus(result);
+      rawOutput.textContent = JSON.stringify(result, null, 2);
+    } catch (err) {
+      const result = { ok: false, status: "error", message: err.message || String(err), synced: [], errors: [] };
+      renderBootstrapStatus(result);
+      rawOutput.textContent = JSON.stringify(result, null, 2);
+    } finally {
+      button.disabled = false;
+      button.textContent = "Sync system skills";
+    }
   });
   document.getElementById("seedDemoBtn").addEventListener("click", async () => {
     await window.bumbeeOsAPI.seedDemo();

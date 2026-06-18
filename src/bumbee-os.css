@@ -288,3 +288,75 @@ pre {
     grid-template-columns: 1fr;
   }
 }
+
+
+.bootstrap-card {
+  border-left: 4px solid var(--line);
+}
+
+.bootstrap-ready {
+  border-left-color: var(--green);
+}
+
+.bootstrap-partial,
+.bootstrap-syncing,
+.bootstrap-idle {
+  border-left-color: var(--amber);
+}
+
+.bootstrap-error {
+  border-left-color: var(--coral);
+}
+
+.bootstrap-title-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sync-badge {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.sync-badge-ready {
+  color: #071012;
+  background: var(--green);
+}
+
+.sync-badge-partial,
+.sync-badge-syncing,
+.sync-badge-idle {
+  color: #171002;
+  background: var(--amber);
+}
+
+.sync-badge-error {
+  color: #190807;
+  background: var(--coral);
+}
+
+.bootstrap-card details {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.bootstrap-card summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.bootstrap-card ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer } = require("electron");
+const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer, Notification } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -2998,6 +2998,25 @@ const _bumbeeSystemBootstrap = createBumbeeSystemBootstrap({
   logger: (message) => console.log(`Clawd: ${message}`),
 });
 
+function notifyBumbeeSystemBootstrap(result) {
+  if (!result) return;
+  try {
+    const syncedCount = Array.isArray(result.synced) ? result.synced.length : 0;
+    const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
+    const title = result.ok
+      ? "Bumbee skills synced"
+      : result.status === "partial"
+        ? "Bumbee skills partially synced"
+        : "Bumbee skills sync failed";
+    const body = result.ok
+      ? `Codex + Claude are ready: ${syncedCount} skill copies synced.`
+      : `${errorCount} error(s). Open Bumbee OS > System bootstrap for details.`;
+    new Notification({ title, body }).show();
+  } catch (err) {
+    console.warn("Clawd: failed to show Bumbee bootstrap notification:", err.message);
+  }
+}
+
 function createWindow() {
   const prefs = loadPrefs();
   if (prefs && SIZES[prefs.size]) currentSize = prefs.size;
@@ -3319,7 +3338,11 @@ function createWindow() {
   ipcMain.handle("bumbee-os:export-sql-dump", () => _bumbeeOsStore.exportSqlDump());
   ipcMain.handle("bumbee-os:update-settings", (_event, payload) => _bumbeeOsStore.updateSettings(payload));
   ipcMain.handle("bumbee-system:bootstrap-status", () => _bumbeeSystemBootstrap.status());
-  ipcMain.handle("bumbee-system:sync-skills", (_event, payload) => _bumbeeSystemBootstrap.sync(payload || {}));
+  ipcMain.handle("bumbee-system:sync-skills", async (_event, payload) => {
+    const result = await _bumbeeSystemBootstrap.sync(payload || {});
+    notifyBumbeeSystemBootstrap(result);
+    return result;
+  });
   ipcMain.handle("bumbee-chat:vision-audio", (_event, payload) => transcribeVisionAudio(payload));
   ipcMain.handle("bumbee-vocab:list", () => listVocabItems());
   ipcMain.handle("bumbee-vocab:add", (_event, payload) => addVocabItems(payload));
@@ -3726,7 +3749,10 @@ if (!gotTheLock) {
     setTimeout(() => checkForUpdates(false), 5000);
     setTimeout(() => {
       _bumbeeSystemBootstrap.sync({ reason: "app-startup" })
-        .then((result) => console.log(`Clawd: Bumbee system bootstrap ${result.status}`))
+        .then((result) => {
+          console.log(`Clawd: Bumbee system bootstrap ${result.status}`);
+          notifyBumbeeSystemBootstrap(result);
+        })
         .catch((err) => console.warn("Clawd: Bumbee system bootstrap failed:", err.message));
     }, 2500);
 
