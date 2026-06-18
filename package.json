@@ -1,6 +1,6 @@
 {
   "name": "clawd-on-desk",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "A desktop pet that reacts to your Claude Code sessions in real-time.",
   "main": "src/main.js",
   "scripts": {
@@ -120,7 +120,7 @@
         "provider": "github",
         "owner": "BitDanceLabels",
         "repo": "clawd-on-desk-skills",
-        "private": true
+        "releaseType": "release"
       }
     ]
   },
