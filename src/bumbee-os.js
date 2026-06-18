@@ -305,6 +305,7 @@
     const errors = Array.isArray(status.errors) ? status.errors : [];
     const skills = Array.isArray(status.skills) ? status.skills : [];
     const targets = Array.isArray(status.targets) ? status.targets : [];
+    const awareness = Array.isArray(status.installedAwarenessFiles) ? status.installedAwarenessFiles : [];
     const state = status.ok ? "ready" : ["partial", "syncing", "idle"].includes(status.status) ? status.status : "error";
     const checkedAt = status.checked_at ? new Date(status.checked_at).toLocaleString() : "not recorded";
     const title = status.status === "syncing" ? "Syncing Codex + Claude skills" : status.ok ? "Ready: Codex + Claude skills synced" : "Needs attention: skills sync incomplete";
@@ -318,9 +319,10 @@
         <small>Checked: ${escapeHtml(checkedAt)}</small>
         <small>Server: ${escapeHtml(status.serverUser || "nhutpm7777")}@${escapeHtml(status.serverHost || "server-google-vscode")}</small>
         <small>Remote skills root: ${escapeHtml(status.remoteSkillsRoot || "")}</small>
-        <small>Synced copies: ${synced.length} · Errors: ${errors.length}</small>
+        <small>Synced copies: ${synced.length} · Awareness files: ${awareness.length} · Errors: ${errors.length}</small>
         ${skills.length ? `<small>Skills: ${skills.map(escapeHtml).join(", ")}</small>` : ""}
         ${targets.length ? `<small>Targets: ${targets.map(escapeHtml).join(" · ")}</small>` : ""}
+        ${awareness.length ? `<details><summary>Awareness files</summary><ul>${awareness.map((item) => `<li>${escapeHtml(item.path)}</li>`).join("")}</ul></details>` : ""}
         ${synced.length ? `<details><summary>Synced files</summary><ul>${synced.map((item) => `<li>${escapeHtml(item.skill)} -> ${escapeHtml(item.path)}</li>`).join("")}</ul></details>` : ""}
         ${errors.length ? `<details open><summary>Errors</summary><ul>${errors.map((error) => `<li>${escapeHtml(error.skill || error.stage || "sync")} · ${escapeHtml(error.message || "")}</li>`).join("")}</ul></details>` : ""}
       </article>
@@ -344,7 +346,7 @@
     const button = event.currentTarget;
     button.disabled = true;
     button.textContent = "Syncing...";
-    renderBootstrapStatus({ ok: false, status: "syncing", message: "Syncing Bumbee system skills now.", synced: [], errors: [] });
+    renderBootstrapStatus({ ok: false, status: "syncing", message: "Installing Bumbee awareness and syncing system skills now.", installedAwarenessFiles: [], synced: [], errors: [] });
     try {
       const result = await window.bumbeeOsAPI.syncSystemSkills({ reason: "owner-click" });
       renderBootstrapStatus(result);

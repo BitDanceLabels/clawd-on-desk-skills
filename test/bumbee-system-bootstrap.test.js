@@ -39,6 +39,9 @@ test("Bumbee system bootstrap syncs required skills to Codex and Claude targets"
   assert.equal(result.ok, true);
   assert.equal(result.status, "ready");
   assert.equal(result.synced.length, 6);
+  assert.equal(result.installedAwarenessFiles.length, 4);
+  assert.equal(fs.readFileSync(path.join(home, "AGENTS.md"), "utf8").includes("server-google-vscode"), true);
+  assert.equal(fs.readFileSync(path.join(home, ".claude", "CLAUDE.md"), "utf8").includes("Bumbee System Awareness"), true);
   assert.equal(fs.existsSync(path.join(home, ".codex", "skills", "bumbee-system-awareness", "SKILL.md")), true);
   assert.equal(fs.existsSync(path.join(home, ".claude", "skills", "bumbee-encyclopedia", "SKILL.md")), true);
   assert.equal(fs.existsSync(path.join(home, ".codex", "skills", "bumbee-project-viral-architecture-review", "SKILL.md")), true);
@@ -56,5 +59,6 @@ test("Bumbee system bootstrap reports remote connection errors without throwing"
 
   assert.equal(result.ok, false);
   assert.equal(result.status, "error");
+  assert.equal(result.installedAwarenessFiles.length, 4);
   assert.match(result.message, /Cannot reach Bumbee skills root/);
 });

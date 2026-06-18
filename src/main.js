@@ -3002,6 +3002,7 @@ function notifyBumbeeSystemBootstrap(result) {
   if (!result) return;
   try {
     const syncedCount = Array.isArray(result.synced) ? result.synced.length : 0;
+    const awarenessCount = Array.isArray(result.installedAwarenessFiles) ? result.installedAwarenessFiles.length : 0;
     const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
     const title = result.ok
       ? "Bumbee skills synced"
@@ -3009,7 +3010,7 @@ function notifyBumbeeSystemBootstrap(result) {
         ? "Bumbee skills partially synced"
         : "Bumbee skills sync failed";
     const body = result.ok
-      ? `Codex + Claude are ready: ${syncedCount} skill copies synced.`
+      ? `Codex + Claude are ready: ${syncedCount} skill copies and ${awarenessCount} awareness files installed.`
       : `${errorCount} error(s). Open Bumbee OS > System bootstrap for details.`;
     new Notification({ title, body }).show();
   } catch (err) {
