@@ -213,7 +213,7 @@ const DEFAULT_DONATION_URL = "https://bitdancegroup.com/bumbee-vocab-tinder/chec
 const DONATION_STATUS_URL = (process.env.BUMBEE_DONATION_STATUS_URL || "https://bitdancegroup.com/payment/bumbee/status").replace(/\/$/, "");
 const PROXYCLI_CHAT_URL = (process.env.BUMBEE_PROXYCLI_CHAT_URL || process.env.PROXYCLI_CHAT_URL || process.env.OPENAI_BASE_URL || "https://gateway.bumbee.asia/v1").replace(/\/$/, "");
 const PROXYCLI_API_KEY = process.env.BUMBEE_PROXYCLI_API_KEY || process.env.PROXYCLI_API_KEY || process.env.OPENAI_API_KEY || "bumbee-proxy-key-2024";
-const PROXYCLI_MODEL = process.env.BUMBEE_PROXYCLI_MODEL || process.env.PROXYCLI_MODEL || process.env.OPENAI_MODEL || "claude-haiku-4-5-20251001";
+const PROXYCLI_MODEL = process.env.BUMBEE_PROXYCLI_MODEL || process.env.PROXYCLI_MODEL || process.env.OPENAI_MODEL || "codex-cli-local";
 const DONATION_ALLOWED_HOSTS = [
   /^buymeacoffee\.com$/i,
   /^(www\.)?ko-fi\.com$/i,

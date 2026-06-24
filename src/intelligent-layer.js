@@ -15,6 +15,8 @@ const https = require("https");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const zlib = require("zlib");
+const { spawn } = require("child_process");
 const { URL } = require("url");
 
 const WIKI_HOSTS = {
@@ -40,16 +42,21 @@ function fetch(url, opts) {
       timeout: o.timeout || 8000,
     };
     const req = lib.request(reqOpts, (res) => {
-      let chunks = "";
-      res.on("data", (d) => { chunks += d; });
+      const chunks = [];
+      res.on("data", (d) => { chunks.push(Buffer.from(d)); });
       res.on("end", () => {
+        const rawBody = Buffer.concat(chunks);
+        const bodyText = decodeHttpBody(rawBody, res.headers["content-encoding"]);
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          try { resolve(o.parseJson === false ? chunks : JSON.parse(chunks)); }
-          catch { resolve(chunks); }
+          try { resolve(o.parseJson === false ? bodyText : JSON.parse(bodyText)); }
+          catch { resolve(bodyText); }
         } else if (res.statusCode === 404) {
           resolve(null);
         } else {
-          reject(new Error(`HTTP ${res.statusCode}: ${chunks.slice(0, 200)}`));
+          const err = new Error(`HTTP ${res.statusCode}: ${extractErrorText(bodyText).slice(0, 500)}`);
+          err.statusCode = res.statusCode;
+          err.body = bodyText;
+          reject(err);
         }
       });
     });
@@ -57,6 +64,160 @@ function fetch(url, opts) {
     req.on("error", reject);
     if (o.body) req.write(typeof o.body === "string" ? o.body : JSON.stringify(o.body));
     req.end();
+  });
+}
+
+function decodeHttpBody(buffer, encoding) {
+  if (!buffer || !buffer.length) return "";
+  const enc = String(encoding || "").toLowerCase();
+  try {
+    if (enc.includes("br") && typeof zlib.brotliDecompressSync === "function") {
+      return zlib.brotliDecompressSync(buffer).toString("utf8");
+    }
+    if (enc.includes("gzip") || (buffer[0] === 0x1f && buffer[1] === 0x8b)) {
+      return zlib.gunzipSync(buffer).toString("utf8");
+    }
+    if (enc.includes("deflate")) {
+      return zlib.inflateSync(buffer).toString("utf8");
+    }
+  } catch {}
+  return buffer.toString("utf8");
+}
+
+function extractErrorText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  try {
+    const data = JSON.parse(raw);
+    const detail = data.detail;
+    if (typeof detail === "string") return detail;
+    if (detail?.error?.message) return String(detail.error.message);
+    if (detail?.message) return String(detail.message);
+    if (data.error?.message) return String(data.error.message);
+    if (data.message) return String(data.message);
+  } catch {}
+  return raw;
+}
+
+function parseCsvList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function unique(items) {
+  const out = [];
+  const seen = new Set();
+  for (const item of items) {
+    if (!item || seen.has(item)) continue;
+    seen.add(item);
+    out.push(item);
+  }
+  return out;
+}
+
+function modelStatePath() {
+  return path.join(os.homedir(), ".clawd-on-desk", "bumbee-smart-model.json");
+}
+
+function readModelState() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(modelStatePath(), "utf8"));
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeModelState(state) {
+  try {
+    const file = modelStatePath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(state, null, 2));
+  } catch {}
+}
+
+function isProviderSwitchError(err) {
+  const msg = `${err?.message || ""}\n${err?.body || ""}`.toLowerCase();
+  if (err?.statusCode && [401, 402, 403, 408, 409, 429, 500, 502, 503, 504].includes(err.statusCode)) return true;
+  return /quota|credit|billing|insufficient|balance|limit|rate|token|context|auth|unauthori[sz]ed|forbidden|permission|expired|exhausted|unavailable|overloaded|provider|model/i.test(msg);
+}
+
+function explainProviderError(err) {
+  const message = extractErrorText(err?.body || "") || err?.message || "unknown provider error";
+  return message.replace(/\s+/g, " ").trim().slice(0, 500);
+}
+
+function runCodexCli(prompt, system, timeoutMs) {
+  const codexBin = process.env.BUMBEE_CODEX_BIN || process.env.CODEX_BIN || "codex";
+  const childPath = unique([
+    path.join(os.homedir(), ".npm-global/bin"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+    process.env.PATH || "",
+  ]).join(":");
+  const outFile = path.join(os.tmpdir(), `bumbee-codex-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+  const fullPrompt = [
+    system ? `System: ${system}` : "",
+    "Answer in Vietnamese when the user writes Vietnamese. Keep the answer concise and useful.",
+    String(prompt || ""),
+  ].filter(Boolean).join("\n\n");
+  const args = [
+    "exec",
+    "--skip-git-repo-check",
+    "--sandbox",
+    "read-only",
+    "--output-last-message",
+    outFile,
+    "-",
+  ];
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(codexBin, args, {
+      cwd: os.homedir(),
+      env: { ...process.env, PATH: childPath, NO_COLOR: "1" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill("SIGTERM"); } catch {}
+      try { fs.unlinkSync(outFile); } catch {}
+      reject(new Error("Codex CLI timeout"));
+    }, timeoutMs || 90_000);
+    child.stdout.on("data", (chunk) => { stdout += chunk.toString("utf8"); });
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { fs.unlinkSync(outFile); } catch {}
+      reject(new Error(`Codex CLI failed: ${err.message}`));
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      let answer = "";
+      try { answer = fs.readFileSync(outFile, "utf8").trim(); } catch {}
+      try { fs.unlinkSync(outFile); } catch {}
+      if (answer) return resolve(answer);
+      if (code !== 0) return reject(new Error(`Codex CLI failed with exit ${code}${stderr ? ` | ${String(stderr).slice(0, 500)}` : ""}`));
+      const fallback = String(stdout || "").trim();
+      if (fallback) return resolve(fallback);
+      const errText = String(stderr || "").trim();
+      if (errText) return reject(new Error(`Codex CLI returned no answer: ${errText.slice(0, 500)}`));
+      reject(new Error("Codex CLI returned no answer"));
+    });
+    child.stdin.end(fullPrompt);
   });
 }
 
@@ -153,9 +314,18 @@ module.exports = function initIntelligentLayer(opts) {
 
   const proxycliUrl = (config.proxycliUrl || "").replace(/\/$/, "");
   const proxycliApiKey = config.proxycliApiKey || "";
-  const proxycliModel = config.proxycliModel || "gpt-4o-mini";
+  const configuredProxycliModel = process.env.BUMBEE_DESK_DEFAULT_MODEL || "codex-cli-local";
+  const proxycliFallbackModels = unique([
+    ...parseCsvList(process.env.BUMBEE_PROXYCLI_FALLBACK_MODELS || process.env.SMART_CHAT_FALLBACK_MODELS || "codex-cli-local,gpt-5-codex-nhutpm7777,codex-5.1-nhutpm7777,claude-3-5-haiku-20241022-default"),
+    configuredProxycliModel,
+  ]);
+  const modelState = readModelState();
+  let proxycliModel = modelState.proxycliUrl === proxycliUrl && modelState.model
+    ? modelState.model
+    : configuredProxycliModel;
+  let lastSwitchNotice = null;
 
-  async function proxycliChat(prompt, system, context) {
+  async function proxycliChat(prompt, system, context, model) {
     if (!proxycliUrl) return null;
     const endpoint = proxycliUrl.endsWith("/chat/completions") ? proxycliUrl : `${proxycliUrl}/chat/completions`;
     const contextObj = context && typeof context === "object" ? context : {};
@@ -171,7 +341,7 @@ module.exports = function initIntelligentLayer(opts) {
       userContent.push({ type: "image_url", image_url: { url: screen.full_screen_base64 } });
     }
     const payload = {
-      model: proxycliModel,
+      model: model || proxycliModel,
       messages: [
         ...(system ? [{ role: "system", content: system }] : []),
         { role: "user", content: userContent.length > 1 ? userContent : prompt },
@@ -181,6 +351,62 @@ module.exports = function initIntelligentLayer(opts) {
     const headers = { "Content-Type": "application/json" };
     if (proxycliApiKey) headers.Authorization = `Bearer ${proxycliApiKey}`;
     return fetch(endpoint, { method: "POST", body: payload, timeout: 30_000, headers });
+  }
+
+  async function proxycliChatWithFallback(prompt, system, context) {
+    const attempts = unique([proxycliModel, configuredProxycliModel, ...proxycliFallbackModels]);
+    const errors = [];
+    let switchNotice = null;
+    for (const model of attempts) {
+      try {
+        if (model === "codex-cli-local") {
+          const answer = await runCodexCli(prompt, system, 90_000);
+          if (model !== proxycliModel) {
+            const previousModel = proxycliModel;
+            proxycliModel = model;
+            switchNotice = {
+              from: previousModel,
+              to: model,
+              reason: errors[errors.length - 1]?.message || "previous model failed",
+            };
+            lastSwitchNotice = switchNotice;
+            writeModelState({
+              proxycliUrl,
+              model,
+              switched_at: new Date().toISOString(),
+              reason: switchNotice.reason,
+            });
+          }
+          return { data: { answer }, model, switched: switchNotice };
+        }
+        const data = await proxycliChat(prompt, system, context, model);
+        if (model && model !== proxycliModel) {
+          const previousModel = proxycliModel;
+          proxycliModel = model;
+          switchNotice = {
+            from: previousModel,
+            to: model,
+            reason: errors[errors.length - 1]?.message || "previous model failed",
+          };
+          lastSwitchNotice = switchNotice;
+          writeModelState({
+            proxycliUrl,
+            model,
+            switched_at: new Date().toISOString(),
+            reason: switchNotice.reason,
+          });
+        }
+        return { data, model, switched: switchNotice };
+      } catch (err) {
+        errors.push({
+          model,
+          message: explainProviderError(err),
+          statusCode: err?.statusCode || null,
+        });
+        if (!isProviderSwitchError(err)) throw err;
+      }
+    }
+    throw new Error(errors.map((item) => `${item.model}: ${item.message}`).join(" | "));
   }
 
   async function gatewayChat(prompt, system, mode, context) {
@@ -305,9 +531,9 @@ module.exports = function initIntelligentLayer(opts) {
       const sys = "Bạn là trợ lý học tiếng Anh cho người Việt. Trả lời ngắn gọn bằng tiếng Việt có dấu, kèm nghĩa tiếng Việt và 1 ví dụ.";
       if (!proxycliUrl) return { mode: "english", error: "ProxyCLI chưa được cấu hình." };
       try {
-        const data = await proxycliChat(query, sys, context);
+        const { data, model, switched } = await proxycliChatWithFallback(query, sys, context);
         const answer = extractAnswer(data);
-        if (answer) return { mode: "english", answer, source: { type: "proxycli", model: proxycliModel } };
+        if (answer) return { mode: "english", answer, source: { type: "proxycli", model, switched } };
         return { mode: "english", error: `Wiktionary không có từ này.` };
       } catch (e) {
         return { mode: "english", error: `Chat lỗi: ${e.message}` };
@@ -321,9 +547,9 @@ module.exports = function initIntelligentLayer(opts) {
 
     if (!proxycliUrl) return { mode, error: "ProxyCLI chưa được cấu hình." };
     try {
-      const data = await proxycliChat(query, sys, context);
+      const { data, model, switched } = await proxycliChatWithFallback(query, sys, context);
       const answer = extractAnswer(data);
-      if (answer) return { mode, answer, source: { type: "proxycli", model: proxycliModel } };
+      if (answer) return { mode, answer, source: { type: "proxycli", model, switched } };
       return { mode, error: "Không nhận được phản hồi từ AI." };
     } catch (e) {
       return { mode, error: `Chat thất bại: ${e.message}` };
@@ -354,7 +580,14 @@ module.exports = function initIntelligentLayer(opts) {
       chatModel,
       authenticated: !!chatAuthToken,
       authSource: chatAuthToken ? chatAuth.source : null,
-      proxycli: proxycliUrl ? { url: proxycliUrl, model: proxycliModel, hasKey: !!proxycliApiKey } : null,
+      proxycli: proxycliUrl ? {
+        url: proxycliUrl,
+        model: proxycliModel,
+        configuredModel: configuredProxycliModel,
+        fallbackModels: proxycliFallbackModels,
+        lastSwitchNotice,
+        hasKey: !!proxycliApiKey,
+      } : null,
     };
   }
 

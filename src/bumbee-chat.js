@@ -1019,6 +1019,10 @@ async function sendPrompt(displayText) {
     if (requestId !== chatRequestId) { thinkingEl.remove(); return; }
     thinkingEl.remove();
     const answer = result.answer || result.error || "No response.";
+    const switched = result.source?.switched;
+    if (switched?.to) {
+      addMessage("system", `Model fallback: ${switched.from || "previous"} failed (${switched.reason || "provider error"}). Switched to ${switched.to} and will keep using it.`);
+    }
     addMessage(result.ok && !result.error ? "assistant" : "system", answer);
     if (result.ok && !result.error) speak(answer);
     if (result.ok && !result.error) {
