@@ -201,7 +201,7 @@ let rabbitEnabled = false;
 let rabbitIntervalMin = 60;
 let characterSkin = "clawd";  // "clawd" | "bunny" — switches the pet character
 // ── Vocab auto-challenge (Phase 1) ──
-let vocabAutoChallenge = false;        // scheduler pops challenges on an interval
+let vocabAutoChallenge = true;         // scheduler pops challenges on an interval (default ON)
 let vocabChallengeIntervalMin = 20;    // minutes between auto-pops
 let vocabReverseMode = false;          // true → Vietnamese→English direction
 let challengeTimer = null;
