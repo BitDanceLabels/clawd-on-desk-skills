@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self';" />
+<title>Bumbee Challenge</title>
+<style>
+  :root {
+    --brand: #f4c842;
+    --bg: #10151f;
+    --card: #182130;
+    --line: #2a3547;
+    --text: #eef2f8;
+    --muted: #93a1b5;
+    --ok: #35c88a;
+    --bad: #e5556b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: transparent;
+    color: var(--text);
+    display: flex; align-items: flex-end; justify-content: flex-end;
+    padding: 10px;
+    user-select: none;
+  }
+  .card {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+    padding: 16px 16px 14px;
+    display: flex; flex-direction: column; gap: 12px;
+    animation: pop .18s ease;
+  }
+  @keyframes pop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .badge { font-size: 11px; font-weight: 700; color: #1a1205; background: var(--brand); padding: 3px 8px; border-radius: 999px; letter-spacing: .3px; }
+  .meta { font-size: 11px; color: var(--muted); text-align: right; line-height: 1.4; }
+  .x { cursor: pointer; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 4px; }
+  .x:hover { color: var(--text); }
+  .scene { font-size: 12.5px; color: var(--muted); }
+  .cue { font-size: 16px; font-weight: 650; line-height: 1.35; }
+  .term-pill { display:inline-block; color: var(--brand); }
+  .choices { display: flex; flex-direction: column; gap: 8px; }
+  .choice {
+    text-align: left; cursor: pointer;
+    background: #131b27; border: 1px solid var(--line); color: var(--text);
+    padding: 10px 12px; border-radius: 10px; font-size: 13.5px; line-height: 1.3;
+    display: flex; gap: 8px; align-items: flex-start; transition: border-color .12s, background .12s;
+  }
+  .choice:hover { border-color: var(--brand); }
+  .choice .k { font-size: 11px; color: var(--muted); font-weight: 700; min-width: 14px; }
+  .choice.correct { border-color: var(--ok); background: rgba(53,200,138,.12); }
+  .choice.wrong { border-color: var(--bad); background: rgba(229,85,107,.12); }
+  .choice[disabled] { cursor: default; }
+  .feedback { font-size: 12.5px; min-height: 16px; }
+  .feedback.ok { color: var(--ok); }
+  .feedback.bad { color: var(--bad); }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; border-top: 1px solid var(--line); }
+  .foot .left { display: flex; gap: 10px; align-items: center; font-size: 11px; color: var(--muted); }
+  .foot label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+  .btn { cursor: pointer; background: #131b27; border: 1px solid var(--line); color: var(--muted); padding: 5px 10px; border-radius: 8px; font-size: 11.5px; }
+  .btn:hover { color: var(--text); border-color: var(--brand); }
+  .empty { text-align: center; padding: 18px 6px; }
+  .empty h2 { margin: 0 0 6px; font-size: 16px; }
+  .empty p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="top">
+      <span class="badge" id="badge">Bumbee</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="meta" id="meta"></span>
+        <span class="x" id="closeBtn" title="Đóng (Esc)">×</span>
+      </div>
+    </div>
+
+    <div id="game">
+      <div class="scene" id="scene"></div>
+      <div class="cue" id="cue"></div>
+      <div class="choices" id="choices"></div>
+      <div class="feedback" id="feedback"></div>
+    </div>
+
+    <div id="empty" class="empty hidden">
+      <h2>🎉 Xong hết từ đến hạn!</h2>
+      <p>Quay lại luyện tiếp khi có từ mới hoặc tới lịch ôn.</p>
+    </div>
+
+    <div class="foot">
+      <div class="left">
+        <label title="Nhìn nghĩa tiếng Việt, chọn từ tiếng Anh"><input type="checkbox" id="reverse" /> Việt→Anh</label>
+        <label title="Tự động nảy thử thách theo nhịp"><input type="checkbox" id="auto" /> Tự nảy</label>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn" id="snoozeBtn" title="Tạm ẩn 30 phút">Để sau</button>
+        <button class="btn" id="skipBtn">Bỏ qua ›</button>
+      </div>
+    </div>
+  </div>
+  <script src="vocab-challenge.js"></script>
+</body>
+</html>

@@ -147,6 +147,8 @@ function savePrefs() {
     rabbitEnabled: _rabbit ? _rabbit.getEnabled() : rabbitEnabled,
     rabbitIntervalMin: _rabbit ? _rabbit.getIntervalMin() : rabbitIntervalMin,
     characterSkin,
+    vocabAutoChallenge, vocabChallengeIntervalMin, vocabReverseMode,
+    vocabAutoSource, vocabAutoSourceIntervalSec,
   };
   try { fs.writeFileSync(PREFS_PATH, JSON.stringify(data)); } catch {}
 }
@@ -173,6 +175,7 @@ let hitWin;  // input window — small opaque rect over hitbox, receives all poi
 let chatWin;
 let visionWin;
 let vocabWin;
+let challengeWin;  // auto-pop vocab challenge popup
 let phaseHubWin;
 let bumbeeOsWin;
 let donationSettingsWin;
@@ -197,6 +200,16 @@ let petHidden = false;
 let rabbitEnabled = false;
 let rabbitIntervalMin = 60;
 let characterSkin = "clawd";  // "clawd" | "bunny" — switches the pet character
+// ── Vocab auto-challenge (Phase 1) ──
+let vocabAutoChallenge = false;        // scheduler pops challenges on an interval
+let vocabChallengeIntervalMin = 20;    // minutes between auto-pops
+let vocabReverseMode = false;          // true → Vietnamese→English direction
+let challengeTimer = null;
+let challengeSnoozeUntil = 0;
+// ── Vocab auto-source (Phase 2) ──
+let vocabAutoSource = false;           // watch clipboard and auto-mine vocab
+let vocabAutoSourceIntervalSec = 45;   // clipboard poll cadence
+let _autoSource = null;
 const DEFAULT_TOGGLE_SHORTCUT = "CommandOrControl+Shift+Alt+C";
 const CHAT_AUTO_HIDE_MS = Number.parseInt(process.env.BUMBEE_CHAT_AUTO_HIDE_MS || "15000", 10);
 const CHAT_DEVICE_ID = process.env.BUMBEE_DEVICE_ID || `${os.hostname()}-${process.platform}`;
@@ -2190,6 +2203,156 @@ function openVocabTinder() {
   });
 }
 
+// ── Vocab auto-challenge popup (Phase 1) ─────────────────────────────────────
+// Reuses the bumbee-english-vocab.json store + english-game-core.buildGameRound.
+function pickDueVocab(db, now, strict) {
+  const words = (db.words || []).filter((w) => w && !w.mastered && String(w.term || "").trim());
+  if (!words.length) return null;
+  const due = words.filter((w) => !w.next_review || new Date(w.next_review).getTime() <= now);
+  const pool = due.length ? due : (strict ? [] : words);
+  if (!pool.length) return null;
+  pool.sort((a, b) => {
+    const at = a.next_review ? new Date(a.next_review).getTime() : 0;
+    const bt = b.next_review ? new Date(b.next_review).getTime() : 0;
+    return at - bt || (a.score || 0) - (b.score || 0);
+  });
+  return pool[0];
+}
+
+function countDueVocab(db, now) {
+  return (db.words || []).filter(
+    (w) => w && !w.mastered && (!w.next_review || new Date(w.next_review).getTime() <= now),
+  ).length;
+}
+
+function buildChallengeRound(opts = {}) {
+  const core = require("./english-game-core");
+  const db = readVocabDb();
+  const now = Date.now();
+  const word = pickDueVocab(db, now, !!opts.strict);
+  if (!word) return null;
+  const reverse = opts.reverse === undefined ? vocabReverseMode : !!opts.reverse;
+  const index = Number(word.review_count) || 0;
+  const round = core.buildGameRound(word, db.words, reverse ? { index, mode: "vi2en" } : { index });
+  if (!round) return null;
+  return {
+    ok: true,
+    round,
+    word: { id: word.id, term: word.term, level: word.level, score: word.score || 0 },
+    player: core.getPlayerLevel(db.words),
+    dueCount: countDueVocab(db, now),
+  };
+}
+
+function openVocabChallenge() {
+  if (challengeWin && !challengeWin.isDestroyed()) {
+    challengeWin.showInactive();
+    try { challengeWin.webContents.send("challenge-refresh"); } catch {}
+    return;
+  }
+  const wa = screen.getPrimaryDisplay().workArea;
+  const w = 380;
+  const h = 470;
+  challengeWin = new BrowserWindow({
+    width: w,
+    height: h,
+    x: wa.x + wa.width - w - 16,
+    y: wa.y + wa.height - h - 16,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    fullscreenable: false,
+    title: "Bumbee Challenge",
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload-vocab-challenge.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  challengeWin.setAlwaysOnTop(true, "floating");
+  challengeWin.loadFile(path.join(__dirname, "vocab-challenge.html"));
+  challengeWin.once("ready-to-show", () => {
+    if (challengeWin && !challengeWin.isDestroyed()) challengeWin.showInactive();
+  });
+  challengeWin.on("closed", () => { challengeWin = null; });
+}
+
+function closeVocabChallenge() {
+  if (challengeWin && !challengeWin.isDestroyed()) challengeWin.close();
+  challengeWin = null;
+}
+
+function startChallengeScheduler() {
+  if (challengeTimer) clearInterval(challengeTimer);
+  challengeTimer = setInterval(() => {
+    if (!vocabAutoChallenge) return;
+    if (Date.now() < challengeSnoozeUntil) return;
+    if (doNotDisturb) return;
+    if (challengeWin && !challengeWin.isDestroyed()) return;  // already showing
+    // Only pop when there is something actually due
+    const db = readVocabDb();
+    if (countDueVocab(db, Date.now()) <= 0) return;
+    openVocabChallenge();
+    // Space out the next auto-pop by the configured interval
+    challengeSnoozeUntil = Date.now() + Math.max(1, vocabChallengeIntervalMin) * 60 * 1000;
+  }, 30000); // check every 30s; actual cadence gated by snooze/due
+}
+
+function setVocabChallengeConfig(cfg = {}) {
+  if (typeof cfg.auto === "boolean") vocabAutoChallenge = cfg.auto;
+  if (typeof cfg.reverse === "boolean") vocabReverseMode = cfg.reverse;
+  if (Number.isFinite(cfg.intervalMin)) {
+    vocabChallengeIntervalMin = Math.max(1, Math.min(240, Math.round(cfg.intervalMin)));
+  }
+  if (vocabAutoChallenge) challengeSnoozeUntil = 0;
+  try { savePrefs(); } catch {}
+  return { ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, intervalMin: vocabChallengeIntervalMin };
+}
+
+// ── Vocab auto-source (Phase 2) ──────────────────────────────────────────────
+// Mines candidate words from raw text (clipboard/url/screen) using the vendored
+// 3000-word stop list (vocab-extractor), then enriches + stores via addVocabItems.
+async function addVocabFromText(text, source, maxTerms = 6) {
+  const raw = String(text || "").trim();
+  if (raw.length < 12) return { ok: false, reason: "too_short" };
+  let terms;
+  try {
+    const { extract } = require("./vocab-extractor");
+    const db = readVocabDb();
+    const known = new Set((db.words || []).map((w) => String(w.term || "").toLowerCase()));
+    terms = extract(raw, { source_app: source || "auto", knownWords: known })
+      .map((c) => c.word)
+      .slice(0, maxTerms);
+  } catch (e) {
+    return { ok: false, reason: "extract_failed", error: e.message };
+  }
+  if (!terms.length) return { ok: false, reason: "no_new_terms" };
+  const res = await addVocabItems({ terms, text: raw.slice(0, 500), source: source || "auto" });
+  try { emitSemanticEvent("vocab.auto_source", { source, added: (res.created || []).length }); } catch {}
+  return { ok: true, source, terms, added: (res.created || []).length };
+}
+
+function ensureAutoSource() {
+  if (_autoSource) return _autoSource;
+  _autoSource = require("./vocab-auto-source")({
+    addFromText: (t, s) => addVocabFromText(t, s),
+    isEnabled: () => vocabAutoSource,
+    getIntervalSec: () => vocabAutoSourceIntervalSec,
+    log: (m) => console.warn("[vocab-auto-source]", m),
+  });
+  return _autoSource;
+}
+
+function setVocabAutoSource(enabled) {
+  vocabAutoSource = !!enabled;
+  try { savePrefs(); } catch {}
+  return { ok: true, auto: vocabAutoSource };
+}
+
 function openPhaseHub() {
   if (phaseHubWin && !phaseHubWin.isDestroyed()) {
     phaseHubWin.show();
@@ -2963,6 +3126,12 @@ const _menuCtx = {
   getWiki: () => _wiki,
   openBumbeeChat,
   openBumbeeVocab: openVocabTinder,
+  openBumbeeChallenge: openVocabChallenge,
+  getVocabAutoChallenge: () => vocabAutoChallenge,
+  setVocabAutoChallenge: (v) => setVocabChallengeConfig({ auto: !!v }),
+  getVocabAutoSource: () => vocabAutoSource,
+  setVocabAutoSource: (v) => setVocabAutoSource(!!v),
+  grabVocabClipboard: () => ensureAutoSource().grabClipboard(true),
   openBumbeePhaseHub: openPhaseHub,
   openBumbeeOs,
   visionCaptureRunning: () => _visionCapture.isRunning(),
@@ -3036,6 +3205,15 @@ function createWindow() {
   if (prefs && typeof prefs.rabbitEnabled === "boolean") rabbitEnabled = prefs.rabbitEnabled;
   if (prefs && typeof prefs.rabbitIntervalMin === "number") rabbitIntervalMin = prefs.rabbitIntervalMin;
   if (prefs && typeof prefs.characterSkin === "string") characterSkin = prefs.characterSkin;
+  if (prefs && typeof prefs.vocabAutoChallenge === "boolean") vocabAutoChallenge = prefs.vocabAutoChallenge;
+  if (prefs && typeof prefs.vocabReverseMode === "boolean") vocabReverseMode = prefs.vocabReverseMode;
+  if (prefs && Number.isFinite(prefs.vocabChallengeIntervalMin)) {
+    vocabChallengeIntervalMin = Math.max(1, Math.min(240, prefs.vocabChallengeIntervalMin));
+  }
+  if (prefs && typeof prefs.vocabAutoSource === "boolean") vocabAutoSource = prefs.vocabAutoSource;
+  if (prefs && Number.isFinite(prefs.vocabAutoSourceIntervalSec)) {
+    vocabAutoSourceIntervalSec = Math.max(15, Math.min(600, prefs.vocabAutoSourceIntervalSec));
+  }
   // Apply persisted rabbit prefs without triggering savePrefs recursion
   _rabbit.configure({ enabled: rabbitEnabled, intervalMin: rabbitIntervalMin });
   // macOS: apply dock visibility (default hidden)
@@ -3362,6 +3540,38 @@ function createWindow() {
     return { ok: true };
   });
   ipcMain.handle("vocab:open-donate", () => openBumbeeDonate());
+  // ── Vocab auto-challenge popup (Phase 1) ──
+  ipcMain.handle("vocab-challenge:next", (_event, opts = {}) => {
+    const round = buildChallengeRound({ reverse: opts.reverse, strict: false });
+    return round || { ok: false, empty: true };
+  });
+  ipcMain.handle("vocab-challenge:answer", (_event, payload = {}) => {
+    const res = reviewVocabItem({ id: payload.id, correct: !!payload.correct });
+    const core = require("./english-game-core");
+    return { ok: !!res.ok, player: res.ok ? core.getPlayerLevel(res.words) : null };
+  });
+  ipcMain.handle("vocab-challenge:snooze", (_event, minutes) => {
+    const m = Number.isFinite(minutes) ? Math.max(1, Math.min(240, minutes)) : 30;
+    challengeSnoozeUntil = Date.now() + m * 60 * 1000;
+    closeVocabChallenge();
+    return { ok: true, snoozeMin: m };
+  });
+  ipcMain.handle("vocab-challenge:close", () => { closeVocabChallenge(); return { ok: true }; });
+  ipcMain.handle("vocab-challenge:get-config", () => ({
+    ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, intervalMin: vocabChallengeIntervalMin,
+  }));
+  ipcMain.handle("vocab-challenge:set-config", (_event, cfg = {}) => setVocabChallengeConfig(cfg));
+  ipcMain.on("open-vocab-challenge", () => openVocabChallenge());
+  // ── Vocab auto-source (Phase 2) ──
+  ipcMain.handle("vocab-source:grab-clipboard", () => ensureAutoSource().grabClipboard(true));
+  ipcMain.handle("vocab-source:add-url", (_event, url) => ensureAutoSource().addFromUrl(url));
+  ipcMain.handle("vocab-source:add-text", (_event, text) => addVocabFromText(text, "manual"));
+  ipcMain.handle("vocab-source:get-config", () => ({ ok: true, auto: vocabAutoSource, intervalSec: vocabAutoSourceIntervalSec }));
+  ipcMain.handle("vocab-source:set-config", (_event, cfg = {}) => {
+    if (typeof cfg.auto === "boolean") setVocabAutoSource(cfg.auto);
+    if (Number.isFinite(cfg.intervalSec)) { vocabAutoSourceIntervalSec = Math.max(15, Math.min(600, Math.round(cfg.intervalSec))); savePrefs(); }
+    return { ok: true, auto: vocabAutoSource, intervalSec: vocabAutoSourceIntervalSec };
+  });
   ipcMain.handle("vision:start-capture", (_event, opts) => { _visionCapture.start(opts); return { ok: true }; });
   ipcMain.handle("vision:stop-capture", () => { _visionCapture.stop(); return { ok: true }; });
   ipcMain.handle("vision:status", () => _visionCapture.stats());
@@ -3759,6 +3969,12 @@ if (!gotTheLock) {
 
     // Start rabbit popup scheduler (runs only if user enabled it via menu)
     _rabbit.start();
+
+    // Start vocab auto-challenge scheduler (pops only if user enabled it)
+    startChallengeScheduler();
+
+    // Start vocab auto-source watcher (mines clipboard only if user enabled it)
+    ensureAutoSource().start();
 
     // ── Bumbee integration: skills loader + clawdbot bridge + gateway register + smart layer ──
     try {

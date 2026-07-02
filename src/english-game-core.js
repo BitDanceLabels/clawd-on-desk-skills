@@ -286,6 +286,22 @@ function buildGameRound(word, allWords = [], options = {}) {
     };
   }
 
+  if (mode === "vi2en") {
+    const vi = word?.lesson?.meaning_vi || "";
+    const meaningLine = vi ? `Nghĩa (VI): ${vi}` : `Meaning: ${meaning}`;
+    return {
+      mode,
+      title: `${getCategory(word)} • Việt → Anh`,
+      coach: "Nhìn nghĩa tiếng Việt, chọn từ/cụm tiếng Anh đúng.",
+      prompt: "Chọn từ tiếng Anh khớp nghĩa.",
+      scene: meaningLine,
+      cue: "Từ tiếng Anh nào mang nghĩa này?",
+      answer: term,
+      choices: buildTermChoices(word, allWords, seedText),
+      speakLine: examples[0] || collocations[0] || term,
+    };
+  }
+
   return {
     mode: "meaning",
     title: `${getCategory(word)} meaning sprint`,
