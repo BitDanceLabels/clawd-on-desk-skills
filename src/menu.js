@@ -118,6 +118,10 @@ const i18n = {
     bumbeeOpenChat: "Open Bumbee Chat…",
     bumbeeOpenOs: "Open Bumbee OS…",
     bumbeeOpenVocab: "Open Vocab Tinder…",
+    bumbeeOpenChallenge: "Vocab Challenge (game)…",
+    bumbeeAutoChallenge: "Auto-pop Challenges 🎯",
+    bumbeeAutoSource: "Auto-mine vocab from clipboard 📋",
+    bumbeeGrabClipboard: "Mine clipboard now",
     bumbeeOpenPhaseHub: "Open Phase Hub…",
     bumbeeStatus: "Connection Status…",
     bumbeeReloadSkills: "Reload Skills ({n})",
@@ -193,6 +197,10 @@ const i18n = {
     characterVRM: "VRM 3D 角色",
     bumbee: "Bumbee 集成",
     bumbeeOpenChat: "打开 Bumbee 聊天…",
+    bumbeeOpenChallenge: "词汇挑战（游戏）…",
+    bumbeeAutoChallenge: "自动弹出挑战 🎯",
+    bumbeeAutoSource: "从剪贴板自动挖词 📋",
+    bumbeeGrabClipboard: "立即挖取剪贴板",
     bumbeeOpenOs: "打开 Bumbee OS…",
     bumbeeOpenPhaseHub: "打开 Phase Hub…",
     bumbeeStatus: "连接状态…",
@@ -408,6 +416,33 @@ module.exports = function initMenu(ctx) {
         click: () => {
           if (ctx.openBumbeeVocab) ctx.openBumbeeVocab();
         },
+      },
+      {
+        label: t("bumbeeOpenChallenge"),
+        enabled: typeof ctx.openBumbeeChallenge === "function",
+        click: () => {
+          if (ctx.openBumbeeChallenge) ctx.openBumbeeChallenge();
+        },
+      },
+      {
+        label: t("bumbeeAutoChallenge"),
+        type: "checkbox",
+        checked: !!ctx.getVocabAutoChallenge?.(),
+        click: (menuItem) => {
+          if (ctx.setVocabAutoChallenge) ctx.setVocabAutoChallenge(menuItem.checked);
+          if (menuItem.checked && ctx.openBumbeeChallenge) ctx.openBumbeeChallenge();
+        },
+      },
+      {
+        label: t("bumbeeAutoSource"),
+        type: "checkbox",
+        checked: !!ctx.getVocabAutoSource?.(),
+        click: (menuItem) => { if (ctx.setVocabAutoSource) ctx.setVocabAutoSource(menuItem.checked); },
+      },
+      {
+        label: t("bumbeeGrabClipboard"),
+        enabled: typeof ctx.grabVocabClipboard === "function",
+        click: () => { try { ctx.grabVocabClipboard && ctx.grabVocabClipboard(); } catch {} },
       },
       {
         label: t("bumbeeOpenPhaseHub"),
