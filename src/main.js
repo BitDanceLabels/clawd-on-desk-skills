@@ -2395,28 +2395,37 @@ function buildPhraseSuggestion() {
   return { ok: true, ...item };
 }
 
+function getVocabChallengeBounds(savedPos) {
+  const base = screen.getPrimaryDisplay().workArea;
+  const area = savedPos ? screen.getDisplayNearestPoint(savedPos).workArea : base;
+  const w = Math.min(380, Math.max(320, area.width - 32), area.width);
+  const h = Math.min(780, Math.max(360, area.height - 32), area.height);
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
+  const maxX = area.x + area.width - w;
+  const maxY = area.y + area.height - h;
+  const defaultX = area.x + area.width - w - 16;
+  const defaultY = area.y + area.height - h - 16;
+  return {
+    width: w,
+    height: h,
+    x: clamp(savedPos ? savedPos.x : defaultX, area.x, maxX),
+    y: clamp(savedPos ? savedPos.y : defaultY, area.y, maxY),
+  };
+}
+
 function openVocabChallenge() {
+  const bounds = getVocabChallengeBounds(challengeWinPos);
   if (challengeWin && !challengeWin.isDestroyed()) {
+    challengeWin.setBounds(bounds);
     challengeWin.showInactive();
     try { challengeWin.webContents.send("challenge-refresh"); } catch {}
     return;
   }
-  const wa = screen.getPrimaryDisplay().workArea;
-  const w = 380;
-  const h = 780; // đủ chỗ: game siêu trí nhớ 🧠 + gợi ý 💬 + thẻ Từ vựng 🐝 + game câu
-  // Reuse the position the user dragged it to last time (clamped to a visible screen)
-  let px = wa.x + wa.width - w - 16;
-  let py = wa.y + wa.height - h - 16;
-  if (challengeWinPos) {
-    const near = screen.getDisplayNearestPoint(challengeWinPos).workArea;
-    px = Math.min(Math.max(challengeWinPos.x, near.x), near.x + near.width - w);
-    py = Math.min(Math.max(challengeWinPos.y, near.y), near.y + near.height - h);
-  }
   challengeWin = new BrowserWindow({
-    width: w,
-    height: h,
-    x: px,
-    y: py,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     frame: false,
     transparent: true,
     resizable: false,

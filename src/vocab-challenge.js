@@ -129,6 +129,10 @@ let current = null;   // { round, word, player, dueCount }
 let locked = false;   // true after an answer, until next round loads
 let lastSpeakLine = ""; // câu tiếng Anh gần nhất để nghe lại
 
+function scrollCardToTop() {
+  if (el.card) el.card.scrollTop = 0;
+}
+
 // ── TTS: đọc câu tiếng Anh để luyện nghe ──
 function speak(text) {
   const line = String(text || "").trim();
@@ -162,6 +166,7 @@ async function loadConfig() {
 }
 
 function renderEmpty() {
+  scrollCardToTop();
   el.game.classList.add("hidden");
   el.empty.classList.remove("hidden");
   el.meta.textContent = "";
@@ -169,6 +174,7 @@ function renderEmpty() {
 }
 
 function renderRound(data) {
+  scrollCardToTop();
   current = data;
   locked = false;
   lastSpeakLine = "";

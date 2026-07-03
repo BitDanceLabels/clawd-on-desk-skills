@@ -16,23 +16,28 @@
     --bad: #e5556b;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
   body {
     font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
     background: transparent;
     color: var(--text);
-    display: flex; align-items: flex-end; justify-content: flex-end;
+    display: flex; align-items: flex-start; justify-content: flex-end;
     padding: 10px;
     user-select: none;
   }
   .card {
     width: 100%;
+    max-height: calc(100vh - 20px);
+    min-height: 0;
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 16px;
     box-shadow: 0 18px 50px rgba(0,0,0,.45);
     padding: 16px 16px 14px;
     display: flex; flex-direction: column; gap: 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: rgba(147, 161, 181, .55) transparent;
     animation: pop .18s ease;
     -webkit-app-region: drag; /* nắm chỗ trống nào trên card cũng kéo được */
   }
@@ -40,7 +45,12 @@
   button, input, select, label, .choice, .wchoice, .speak, .btn { -webkit-app-region: no-drag; }
   @keyframes pop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
   /* Thanh trên cùng = vùng kéo thả cửa sổ */
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; -webkit-app-region: drag; cursor: grab; padding-bottom: 2px; }
+  .top {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    position: sticky; top: 0; z-index: 3;
+    background: var(--card);
+    -webkit-app-region: drag; cursor: grab; padding-bottom: 2px;
+  }
   .badge { font-size: 11px; font-weight: 700; color: #1a1205; background: var(--brand); padding: 3px 8px; border-radius: 999px; letter-spacing: .3px; }
   .meta { font-size: 11px; color: var(--muted); text-align: right; line-height: 1.4; }
   .x { cursor: pointer; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 4px; -webkit-app-region: no-drag; }
