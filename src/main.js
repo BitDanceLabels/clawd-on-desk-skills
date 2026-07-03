@@ -2237,13 +2237,12 @@ function buildChallengeRound(opts = {}) {
   const reverse = opts.reverse === undefined ? vocabReverseMode : !!opts.reverse;
   const gameType = ["mix", "sentence", "vocab"].includes(opts.gameType) ? opts.gameType : vocabGameType;
   const index = Number(word.review_count) || 0;
-  // vocab → word-pick rounds (choices are English terms); sentence → sentence rounds;
-  // mix (mặc định) → chơi song song: cứ 3 round có 1 round chọn từ vựng, còn lại là game câu giao tiếp
+  // vocab → word-pick rounds (choices are English terms); sentence → sentence rounds; mix → default rotation
+  // (game chọn từ vựng có khung RIÊNG chạy song song — xem buildWordMemoryRound)
   let forcedMode = null;
   if (gameType === "vocab") forcedMode = index % 2 ? "fill" : "vi2en";
   else if (gameType === "sentence") forcedMode = index % 2 ? "dialogue" : "translate";
   else if (reverse) forcedMode = "vi2en";
-  else if (index % 3 === 2) forcedMode = "vi2en";
   const round = core.buildGameRound(word, db.words, forcedMode ? { index, mode: forcedMode } : { index });
   if (!round) return null;
   return {
@@ -2262,6 +2261,54 @@ function buildChallengeRound(opts = {}) {
   };
 }
 
+// ── Game từ vựng "siêu trí nhớ" (khung riêng, chạy song song game câu) ──────
+// Nhìn nghĩa → chọn từ đúng. Ưu tiên từ đến hạn ôn, tránh trùng từ của game câu.
+function buildWordMemoryRound(opts = {}) {
+  const core = require("./english-game-core");
+  const db = readVocabDb();
+  const excludeId = String(opts.excludeId || "");
+  const pool = (db.words || []).filter((w) => w && !w.mastered && String(w.term || "").trim() && w.id !== excludeId);
+  if (!pool.length) return null;
+  const now = Date.now();
+  const due = pool.filter((w) => !w.next_review || new Date(w.next_review).getTime() <= now);
+  const pick = (due.length ? due : pool).sort((a, b) => {
+    const at = a.next_review ? new Date(a.next_review).getTime() : 0;
+    const bt = b.next_review ? new Date(b.next_review).getTime() : 0;
+    return at - bt || (a.score || 0) - (b.score || 0);
+  })[0];
+  const round = core.buildGameRound(pick, db.words, { mode: "vi2en", index: Number(pick.review_count) || 0 });
+  if (!round) return null;
+  return {
+    ok: true,
+    round,
+    word: {
+      id: pick.id, term: pick.term, score: pick.score || 0, streak: pick.streak || 0,
+      meaning_vi: pick.lesson?.meaning_vi || "",
+      meaning_en: core.getMeaning(pick),
+      pronunciation: pick.lesson?.pronunciation || "",
+      example: core.getExamples(pick)[0] || "",
+    },
+  };
+}
+
+// ── Gợi ý cụm giao tiếp mới: lấy collocation/câu ví dụ từ kho, xoay vòng ──
+let _suggestCursor = 0;
+function buildPhraseSuggestion() {
+  const core = require("./english-game-core");
+  const db = readVocabDb();
+  const cands = [];
+  for (const w of db.words || []) {
+    if (!w || !w.term) continue;
+    for (const c of core.getCollocations(w)) cands.push({ phrase: c, term: w.term, meaning_vi: w.lesson?.meaning_vi || "", meaning_en: core.getMeaning(w) });
+    const ex = core.getExamples(w)[0];
+    if (ex) cands.push({ phrase: ex, term: w.term, meaning_vi: w.lesson?.meaning_vi || "", meaning_en: core.getMeaning(w) });
+  }
+  if (!cands.length) return null;
+  const item = cands[_suggestCursor % cands.length];
+  _suggestCursor += 1;
+  return { ok: true, ...item };
+}
+
 function openVocabChallenge() {
   if (challengeWin && !challengeWin.isDestroyed()) {
     challengeWin.showInactive();
@@ -2270,7 +2317,7 @@ function openVocabChallenge() {
   }
   const wa = screen.getPrimaryDisplay().workArea;
   const w = 380;
-  const h = 620; // đủ chỗ cho thẻ Từ vựng 🐝 hiện thêm phía trên game
+  const h = 780; // đủ chỗ: game siêu trí nhớ 🧠 + gợi ý 💬 + thẻ Từ vựng 🐝 + game câu
   // Reuse the position the user dragged it to last time (clamped to a visible screen)
   let px = wa.x + wa.width - w - 16;
   let py = wa.y + wa.height - h - 16;
@@ -3587,6 +3634,13 @@ function createWindow() {
     const round = buildChallengeRound({ reverse: opts.reverse, gameType: opts.gameType, strict: false });
     return round || { ok: false, empty: true };
   });
+  // Khung game từ vựng siêu trí nhớ (song song game câu)
+  ipcMain.handle("vocab-challenge:next-word", (_event, opts = {}) => {
+    const round = buildWordMemoryRound({ excludeId: opts.excludeId });
+    return round || { ok: false, empty: true };
+  });
+  // Dải gợi ý cụm giao tiếp mới
+  ipcMain.handle("vocab-challenge:suggest", () => buildPhraseSuggestion() || { ok: false });
   // User types an unknown word/phrase in the popup → AI enriches it into the vocab db
   ipcMain.handle("vocab-challenge:add", async (_event, payload = {}) => {
     const term = String(payload.term || "").trim().slice(0, 80);

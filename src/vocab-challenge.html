@@ -57,6 +57,48 @@
   .choice.correct { border-color: var(--ok); background: rgba(53,200,138,.12); }
   .choice.wrong { border-color: var(--bad); background: rgba(229,85,107,.12); }
   .choice[disabled] { cursor: default; }
+  /* ── 🧠 Game từ vựng siêu trí nhớ (khung riêng, song song game câu) ── */
+  .wgame {
+    background: linear-gradient(135deg, rgba(120,160,255,.10), rgba(160,120,255,.06));
+    border: 1.5px solid rgba(140,150,255,.45);
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 7px;
+    position: relative;
+  }
+  .wgame::before { content: "🧠"; position: absolute; top: -10px; right: 10px; font-size: 16px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+  .wgame .whead { display: flex; align-items: center; justify-content: space-between; }
+  .wgame .wtitle { font-size: 10.5px; font-weight: 800; letter-spacing: .4px; color: #aab6ff; text-transform: uppercase; }
+  .wgame .wstreak { font-size: 10.5px; color: #ffd97a; font-weight: 700; }
+  .wgame .wcue { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .wchoices { display: flex; flex-wrap: wrap; gap: 6px; }
+  .wchoice {
+    cursor: pointer; background: #131b27; border: 1px solid var(--line); color: var(--text);
+    padding: 5px 11px; border-radius: 999px; font-size: 12.5px; transition: border-color .12s, transform .08s;
+  }
+  .wchoice:hover { border-color: #aab6ff; transform: translateY(-1px); }
+  .wchoice.correct { border-color: var(--ok); background: rgba(53,200,138,.15); }
+  .wchoice.wrong { border-color: var(--bad); background: rgba(229,85,107,.15); }
+  .wchoice[disabled] { cursor: default; }
+  .wfeedback { font-size: 11.5px; min-height: 14px; color: var(--muted); }
+  .wfeedback.ok { color: var(--ok); }
+  .wfeedback.bad { color: var(--bad); }
+
+  /* ── 💬 Gợi ý cụm giao tiếp mới ── */
+  .sugg {
+    background: rgba(53,200,138,.07);
+    border: 1px dashed rgba(53,200,138,.45);
+    border-radius: 12px;
+    padding: 8px 10px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px;
+  }
+  .sugg .icon { font-size: 15px; }
+  .sugg .body { flex: 1; line-height: 1.35; }
+  .sugg .phrase { color: #7fe0b6; font-weight: 700; }
+  .sugg .viNote { color: var(--muted); }
+  .sugg .btns { display: flex; gap: 4px; }
+
   /* ── Thẻ Từ vựng 🐝: hiện từ + nghĩa VI + ví dụ (sau khi trả lời / khi thêm từ mới) ── */
   .spot {
     background: linear-gradient(135deg, rgba(244,200,66,.14), rgba(244,200,66,.05));
@@ -114,6 +156,27 @@
         <span class="meta" id="meta"></span>
         <span class="x" id="closeBtn" title="Đóng (Esc)">×</span>
       </div>
+    </div>
+
+    <!-- 🧠 Game từ vựng siêu trí nhớ — khung riêng, chạy song song game câu -->
+    <div class="wgame" id="wgame">
+      <div class="whead">
+        <span class="wtitle">🧠 Siêu trí nhớ từ vựng</span>
+        <span class="wstreak" id="wstreak"></span>
+      </div>
+      <div class="wcue" id="wcue"></div>
+      <div class="wchoices" id="wchoices"></div>
+      <div class="wfeedback" id="wfeedback"></div>
+    </div>
+
+    <!-- 💬 Gợi ý cụm giao tiếp / từ vựng mới -->
+    <div class="sugg" id="sugg">
+      <span class="icon">💬</span>
+      <span class="body" id="suggBody">Đang tìm cụm giao tiếp hay…</span>
+      <span class="btns">
+        <button class="speak" id="suggSpeak" title="Nghe cụm này">🔊</button>
+        <button class="speak" id="suggNext" title="Cụm khác">↻</button>
+      </span>
     </div>
 
     <!-- Thẻ Từ vựng: recap từ vừa học / từ mới vừa thêm -->

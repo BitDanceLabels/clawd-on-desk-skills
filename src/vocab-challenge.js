@@ -29,7 +29,85 @@ const el = {
   spotVi: document.getElementById("spotVi"),
   spotEx: document.getElementById("spotEx"),
   spotSpeak: document.getElementById("spotSpeak"),
+  wcue: document.getElementById("wcue"),
+  wchoices: document.getElementById("wchoices"),
+  wfeedback: document.getElementById("wfeedback"),
+  wstreak: document.getElementById("wstreak"),
+  suggBody: document.getElementById("suggBody"),
+  suggSpeak: document.getElementById("suggSpeak"),
+  suggNext: document.getElementById("suggNext"),
 };
+
+// ── 🧠 Game từ vựng siêu trí nhớ (chạy độc lập với game câu) ──
+let wCurrent = null;  // { round, word }
+let wLocked = false;
+let suggPhrase = "";
+
+async function loadWordRound() {
+  wLocked = false;
+  el.wfeedback.textContent = "";
+  el.wfeedback.className = "wfeedback";
+  try {
+    const data = await api.nextWord({ excludeId: current && current.word ? current.word.id : "" });
+    if (!data || !data.ok || !data.round) {
+      el.wcue.textContent = "🎉 Hết từ đến hạn — thêm từ mới bên dưới nhé!";
+      el.wchoices.replaceChildren();
+      el.wstreak.textContent = "";
+      wCurrent = null;
+      return;
+    }
+    wCurrent = data;
+    const vi = (data.word.meaning_vi || "").trim();
+    el.wcue.textContent = vi ? `“${vi}” là từ nào?` : `“${data.word.meaning_en}” — pick the word:`;
+    el.wstreak.textContent = data.word.streak > 0 ? `⚡ x${data.word.streak}` : "";
+    el.wchoices.replaceChildren();
+    (data.round.choices || []).slice(0, 4).forEach((choice) => {
+      const b = document.createElement("button");
+      b.className = "wchoice";
+      b.textContent = choice;
+      b.addEventListener("click", () => pickWord(choice, b));
+      el.wchoices.appendChild(b);
+    });
+  } catch {
+    el.wcue.textContent = "";
+    el.wchoices.replaceChildren();
+  }
+}
+
+async function pickWord(choice, btn) {
+  if (wLocked || !wCurrent) return;
+  wLocked = true;
+  const answer = String(wCurrent.round.answer).trim().toLowerCase();
+  const correct = String(choice).trim().toLowerCase() === answer;
+  el.wchoices.querySelectorAll(".wchoice").forEach((b) => {
+    b.setAttribute("disabled", "true");
+    if (String(b.textContent).trim().toLowerCase() === answer) b.classList.add("correct");
+    else if (b === btn && !correct) b.classList.add("wrong");
+  });
+  el.wfeedback.textContent = correct ? "✓ Đỉnh! Nhớ dai ghê 🐝" : `✗ Đáp án: ${wCurrent.round.answer}`;
+  el.wfeedback.className = "wfeedback " + (correct ? "ok" : "bad");
+  speak(wCurrent.word.term + (wCurrent.word.example ? ". " + wCurrent.word.example : ""));
+  try { await api.answer({ id: wCurrent.word.id, correct, mode: "vi2en" }); } catch {}
+  setTimeout(loadWordRound, correct ? 1600 : 2600);
+}
+
+// ── 💬 Gợi ý cụm giao tiếp mới ──
+async function loadSuggestion() {
+  try {
+    const s = await api.suggest();
+    if (!s || !s.ok) { el.suggBody.textContent = "Thêm từ mới để nhận gợi ý giao tiếp nhé!"; suggPhrase = ""; return; }
+    suggPhrase = s.phrase;
+    el.suggBody.replaceChildren();
+    const p = document.createElement("span");
+    p.className = "phrase";
+    p.textContent = s.phrase;
+    const note = document.createElement("span");
+    note.className = "viNote";
+    const vi = (s.meaning_vi || "").trim();
+    note.textContent = ` — ${s.term}${vi ? ` · ${vi}` : ""}`;
+    el.suggBody.append(p, note);
+  } catch { suggPhrase = ""; }
+}
 
 // Hiện thẻ Từ vựng (recap sau khi trả lời / từ mới vừa thêm)
 function showSpot(info, tag) {
@@ -184,10 +262,12 @@ async function addUnknownTerm() {
         ? `✓ "${term}" đã có trong kho — sẽ ôn lại sớm.`
         : `✓ Đã thêm "${term}" (kho: ${res.total} từ). Sẽ xuất hiện trong game ngay!`;
       el.addInput.value = "";
-      // Từ mới nhảy ngay lên thẻ Từ vựng + đọc luôn cho quen tai
+      // Từ mới nhảy ngay lên thẻ Từ vựng + đọc luôn cho quen tai + vào game siêu trí nhớ
       if (res.item) {
         showSpot(res.item, "🆕 Từ mới vào game");
         speak(res.item.term + ". " + (res.item.example || ""));
+        loadWordRound();
+        loadSuggestion();
       }
     } else {
       el.addMsg.textContent = `✗ Không thêm được: ${res && res.reason || "lỗi"}`;
@@ -228,9 +308,14 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-if (api && typeof api.onRefresh === "function") api.onRefresh(loadNext);
+el.suggSpeak.addEventListener("click", () => { if (suggPhrase) speak(suggPhrase); });
+el.suggNext.addEventListener("click", loadSuggestion);
+
+if (api && typeof api.onRefresh === "function") api.onRefresh(() => { loadNext(); loadWordRound(); loadSuggestion(); });
 
 (async () => {
   await loadConfig();
   await loadNext();
+  await loadWordRound();
+  await loadSuggestion();
 })();
