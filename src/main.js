@@ -1337,6 +1337,7 @@ function defaultVocabDb() {
     },
     last_reset_month: new Date().toISOString().slice(0, 7),
     words: [],
+    phrases: [],
   };
 }
 
@@ -2261,6 +2262,87 @@ function buildChallengeRound(opts = {}) {
   };
 }
 
+// ── Bóc tách bản nháp nhiều từ: AI tách từng từ/cụm đáng học + soạn thẻ câu chú giải ──
+async function parseVocabDraft(raw) {
+  if (!_smart) return null;
+  try {
+    const result = await _smart.chat({
+      mode: "english",
+      query: [
+        "Người học tiếng Anh (người Việt) vừa nháp một đoạn chứa nhiều từ/cụm muốn học. Hãy bóc tách.",
+        "Trả về JSON DUY NHẤT, không giải thích:",
+        '{"terms":[{"term":"từ hoặc cụm tiếng Anh đáng học","meaning_vi":"nghĩa tiếng Việt ngắn"}],"annotated":"đoạn gốc tiếng Anh, ngay SAU mỗi từ/cụm đáng học chèn nghĩa Việt trong ngoặc, ví dụ: He made a good first impression (ấn tượng ban đầu) at the interview (buổi phỏng vấn)."}',
+        "Chỉ lấy từ/cụm THỰC SỰ đáng học (bỏ a, the, is...). Tối đa 12 mục. Nếu đoạn nháp là tiếng Việt lẫn tiếng Anh thì chỉ bóc phần tiếng Anh.",
+        `Đoạn nháp: ${raw.slice(0, 1200)}`,
+      ].join("\n"),
+      context: { source: "bumbee-english-vocab", device_id: CHAT_DEVICE_ID, session_id: CHAT_SESSION_ID },
+    });
+    const jsonText = String(result.answer || result.reply || "").match(/\{[\s\S]*\}/)?.[0];
+    const parsed = jsonText ? JSON.parse(jsonText) : null;
+    if (!parsed || !Array.isArray(parsed.terms) || !parsed.terms.length) return null;
+    return {
+      terms: parsed.terms.slice(0, 12).map((t) => ({
+        term: normalizeVocabTerm(String(t.term || "")),
+        meaning_vi: String(t.meaning_vi || "").slice(0, 200),
+      })).filter((t) => t.term),
+      annotated: String(parsed.annotated || "").slice(0, 1500),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Thêm nhanh nhiều từ từ bản nháp: tạo item ngay (nghĩa VI từ parse), enrich sâu chạy nền
+function addParsedTerms(parsed, source) {
+  const db = readVocabDb();
+  const existing = new Map(db.words.map((item) => [item.term.toLowerCase(), item]));
+  const created = [];
+  for (const t of parsed.terms) {
+    const key = t.term.toLowerCase();
+    if (existing.has(key)) continue;
+    const lesson = fallbackLesson(t.term, db.settings);
+    lesson.meaning_vi = t.meaning_vi || lesson.meaning_vi;
+    const item = {
+      id: `vocab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      term: t.term, score: 0, streak: 0, mistake_count: 0, review_count: 0, mastered: false,
+      level: db.settings.difficulty || "medium", sources: [source], lesson,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      last_reviewed: null, next_review: new Date().toISOString(),
+    };
+    db.words.unshift(item);
+    existing.set(key, item);
+    created.push(item);
+  }
+  if (parsed.annotated) {
+    if (!Array.isArray(db.phrases)) db.phrases = [];
+    db.phrases.unshift({
+      id: `phrase-${Date.now().toString(36)}`,
+      raw: parsed.raw || "",
+      annotated: parsed.annotated,
+      terms: parsed.terms.map((t) => t.term),
+      created_at: new Date().toISOString(),
+    });
+    db.phrases = db.phrases.slice(0, 100);
+  }
+  writeVocabDb(db);
+  // Enrich sâu (ví dụ, collocations...) chạy nền, không bắt user đợi
+  setImmediate(async () => {
+    for (const item of created) {
+      try {
+        const lesson = await enrichVocabTerm(item.term, readVocabDb().settings, parsed.raw || "");
+        const cur = readVocabDb();
+        const target = cur.words.find((w) => w.id === item.id);
+        if (!target) continue;
+        if (!lesson.meaning_vi && target.lesson?.meaning_vi) lesson.meaning_vi = target.lesson.meaning_vi;
+        target.lesson = lesson;
+        target.updated_at = new Date().toISOString();
+        writeVocabDb(cur);
+      } catch {}
+    }
+  });
+  return { created, total: readVocabDb().words.length };
+}
+
 // ── Game từ vựng "siêu trí nhớ" (khung riêng, chạy song song game câu) ──────
 // Nhìn nghĩa → chọn từ đúng. Ưu tiên từ đến hạn ôn, tránh trùng từ của game câu.
 function buildWordMemoryRound(opts = {}) {
@@ -2297,6 +2379,10 @@ function buildPhraseSuggestion() {
   const core = require("./english-game-core");
   const db = readVocabDb();
   const cands = [];
+  // Thẻ câu chú giải từ bản nháp của user — ưu tiên hiện trước
+  for (const p of (db.phrases || []).slice(0, 20)) {
+    if (p && p.annotated) cands.push({ phrase: p.annotated, term: `📒 câu học ${Array.isArray(p.terms) ? p.terms.length : ""} từ`, meaning_vi: "", meaning_en: "" });
+  }
   for (const w of db.words || []) {
     if (!w || !w.term) continue;
     for (const c of core.getCollocations(w)) cands.push({ phrase: c, term: w.term, meaning_vi: w.lesson?.meaning_vi || "", meaning_en: core.getMeaning(w) });
@@ -3641,12 +3727,32 @@ function createWindow() {
   });
   // Dải gợi ý cụm giao tiếp mới
   ipcMain.handle("vocab-challenge:suggest", () => buildPhraseSuggestion() || { ok: false });
-  // User types an unknown word/phrase in the popup → AI enriches it into the vocab db
+  // User types an unknown word/phrase in the popup → AI enriches it into the vocab db.
+  // Bản nháp dài/nhiều từ → AI bóc tách từng từ đáng học + tạo thẻ câu chú giải nghĩa VI.
   ipcMain.handle("vocab-challenge:add", async (_event, payload = {}) => {
-    const term = String(payload.term || "").trim().slice(0, 80);
+    const term = String(payload.term || "").trim().slice(0, 1200);
     if (!term) return { ok: false, reason: "empty" };
+    const isDraft = term.split(/\s+/).length > 3 || /[,;\n]/.test(term);
+    if (isDraft) {
+      try {
+        const parsed = await parseVocabDraft(term);
+        if (parsed && parsed.terms.length) {
+          parsed.raw = term;
+          const res = addParsedTerms(parsed, "challenge-popup-draft");
+          return {
+            ok: true, multi: true,
+            created: res.created.length, total: res.total,
+            terms: parsed.terms,
+            annotated: parsed.annotated || "",
+          };
+        }
+      } catch {}
+      // AI parse fail → rơi xuống đường cũ: extractVocabTerms trong addVocabItems
+    }
     try {
-      const res = await addVocabItems({ terms: [term], source: "challenge-popup", text: String(payload.note || "") });
+      const res = await addVocabItems(isDraft
+        ? { text: term, source: "challenge-popup-draft" }
+        : { terms: [term], source: "challenge-popup", text: String(payload.note || "") });
       const item = res.items && res.items[0];
       return {
         ok: true, created: res.created.length, existed: res.created.length === 0, total: res.total,

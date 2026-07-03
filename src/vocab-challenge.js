@@ -256,7 +256,22 @@ async function addUnknownTerm() {
   el.addMsg.textContent = `⏳ Đang thêm "${term}" — AI soạn nghĩa + ví dụ…`;
   try {
     const res = await api.add({ term });
-    if (res && res.ok) {
+    if (res && res.ok && res.multi) {
+      // Bản nháp nhiều từ: AI đã bóc tách từng từ + soạn thẻ câu chú giải
+      el.addMsg.className = "addmsg ok";
+      const names = (res.terms || []).map((t) => t.term).join(", ");
+      el.addMsg.textContent = `✓ Đã tách ${res.terms.length} từ: ${names}`.slice(0, 160);
+      el.addInput.value = "";
+      showSpot({
+        term: `📒 ${res.terms.length} từ mới`,
+        pronunciation: "",
+        meaning_vi: (res.terms || []).map((t) => `${t.term} = ${t.meaning_vi}`).join(" · "),
+        example: res.annotated || "",
+      }, "🆕 Câu học nhiều từ — đọc là nhớ luôn");
+      speak(term);
+      loadWordRound();
+      loadSuggestion();
+    } else if (res && res.ok) {
       el.addMsg.className = "addmsg ok";
       el.addMsg.textContent = res.existed
         ? `✓ "${term}" đã có trong kho — sẽ ôn lại sớm.`
