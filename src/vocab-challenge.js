@@ -326,6 +326,22 @@ document.addEventListener("keydown", (e) => {
 el.suggSpeak.addEventListener("click", () => { if (suggPhrase) speak(suggPhrase); });
 el.suggNext.addEventListener("click", loadSuggestion);
 
+// ── Kéo thả cửa sổ: fallback JS khi -webkit-app-region không hoạt động ──
+// (nếu native drag ăn thì mousedown không bao giờ tới đây — hai cơ chế không đụng nhau)
+let dragMove = false, dragLX = 0, dragLY = 0;
+document.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  if (e.target.closest("button, input, select, label, .choice, .wchoice, .speak, .btn, .x")) return;
+  dragMove = true; dragLX = e.screenX; dragLY = e.screenY;
+});
+window.addEventListener("mousemove", (e) => {
+  if (!dragMove) return;
+  const dx = e.screenX - dragLX, dy = e.screenY - dragLY;
+  if (dx || dy) { api.moveBy(dx, dy); dragLX = e.screenX; dragLY = e.screenY; }
+});
+window.addEventListener("mouseup", () => { dragMove = false; });
+window.addEventListener("blur", () => { dragMove = false; });
+
 if (api && typeof api.onRefresh === "function") api.onRefresh(() => { loadNext(); loadWordRound(); loadSuggestion(); });
 
 (async () => {

@@ -2438,11 +2438,13 @@ function openVocabChallenge() {
   challengeWin.once("ready-to-show", () => {
     if (challengeWin && !challengeWin.isDestroyed()) challengeWin.showInactive();
   });
+  let movedSaveTimer = null;
   challengeWin.on("moved", () => {
     if (!challengeWin || challengeWin.isDestroyed()) return;
     const b = challengeWin.getBounds();
     challengeWinPos = { x: b.x, y: b.y };
-    try { savePrefs(); } catch {}
+    if (movedSaveTimer) clearTimeout(movedSaveTimer);
+    movedSaveTimer = setTimeout(() => { try { savePrefs(); } catch {} }, 600);
   });
   challengeWin.on("closed", () => { challengeWin = null; });
 }
@@ -3780,6 +3782,15 @@ function createWindow() {
     return { ok: true, snoozeMin: m };
   });
   ipcMain.handle("vocab-challenge:close", () => { closeVocabChallenge(); return { ok: true }; });
+  // Kéo cửa sổ game bằng JS fallback (delta theo screen coords từ renderer)
+  ipcMain.on("vocab-challenge:move-by", (_event, d = {}) => {
+    if (!challengeWin || challengeWin.isDestroyed()) return;
+    const dx = Math.round(Number(d.dx) || 0);
+    const dy = Math.round(Number(d.dy) || 0);
+    if (!dx && !dy) return;
+    const [x, y] = challengeWin.getPosition();
+    challengeWin.setPosition(x + dx, y + dy);
+  });
   ipcMain.handle("vocab-challenge:get-config", () => ({
     ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, gameType: vocabGameType, intervalMin: vocabChallengeIntervalMin,
   }));

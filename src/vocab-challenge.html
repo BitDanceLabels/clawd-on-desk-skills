@@ -34,7 +34,10 @@
     padding: 16px 16px 14px;
     display: flex; flex-direction: column; gap: 12px;
     animation: pop .18s ease;
+    -webkit-app-region: drag; /* nắm chỗ trống nào trên card cũng kéo được */
   }
+  /* mọi thứ bấm được thì không nằm trong vùng kéo */
+  button, input, select, label, .choice, .wchoice, .speak, .btn { -webkit-app-region: no-drag; }
   @keyframes pop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
   /* Thanh trên cùng = vùng kéo thả cửa sổ */
   .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; -webkit-app-region: drag; cursor: grab; padding-bottom: 2px; }

@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("bumbeeChallenge", {
   add: (payload) => ipcRenderer.invoke("vocab-challenge:add", payload || {}),
   nextWord: (opts) => ipcRenderer.invoke("vocab-challenge:next-word", opts || {}),
   suggest: () => ipcRenderer.invoke("vocab-challenge:suggest"),
+  // kéo cửa sổ bằng JS (dự phòng khi -webkit-app-region không ăn trên cửa sổ trong suốt)
+  moveBy: (dx, dy) => ipcRenderer.send("vocab-challenge:move-by", { dx, dy }),
   snooze: (minutes) => ipcRenderer.invoke("vocab-challenge:snooze", minutes),
   close: () => ipcRenderer.invoke("vocab-challenge:close"),
   getConfig: () => ipcRenderer.invoke("vocab-challenge:get-config"),
