@@ -15,16 +15,39 @@ const el = {
   feedback: document.getElementById("feedback"),
   reverse: document.getElementById("reverse"),
   auto: document.getElementById("auto"),
+  gameType: document.getElementById("gameType"),
   closeBtn: document.getElementById("closeBtn"),
   snoozeBtn: document.getElementById("snoozeBtn"),
   skipBtn: document.getElementById("skipBtn"),
+  speakBtn: document.getElementById("speakBtn"),
+  addInput: document.getElementById("addInput"),
+  addBtn: document.getElementById("addBtn"),
+  addMsg: document.getElementById("addMsg"),
 };
 
 let current = null;   // { round, word, player, dueCount }
 let locked = false;   // true after an answer, until next round loads
+let lastSpeakLine = ""; // câu tiếng Anh gần nhất để nghe lại
+
+// ── TTS: đọc câu tiếng Anh để luyện nghe ──
+function speak(text) {
+  const line = String(text || "").trim();
+  if (!line || !window.speechSynthesis) return;
+  lastSpeakLine = line;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(line);
+    u.lang = "en-US";
+    u.rate = 0.95;
+    const voice = speechSynthesis.getVoices().find((v) => /^en(-|_)/i.test(v.lang) && /female|samantha|zira|aria/i.test(v.name))
+      || speechSynthesis.getVoices().find((v) => /^en(-|_)/i.test(v.lang));
+    if (voice) u.voice = voice;
+    speechSynthesis.speak(u);
+  } catch {}
+}
 
 function setConfigFromUI() {
-  api.setConfig({ reverse: el.reverse.checked, auto: el.auto.checked });
+  api.setConfig({ reverse: el.reverse.checked, auto: el.auto.checked, gameType: el.gameType.value });
 }
 
 async function loadConfig() {
@@ -33,6 +56,7 @@ async function loadConfig() {
     if (cfg && cfg.ok) {
       el.reverse.checked = !!cfg.reverse;
       el.auto.checked = !!cfg.auto;
+      if (cfg.gameType) el.gameType.value = cfg.gameType;
     }
   } catch {}
 }
@@ -47,6 +71,7 @@ function renderEmpty() {
 function renderRound(data) {
   current = data;
   locked = false;
+  lastSpeakLine = "";
   const { round, word, player, dueCount } = data;
   el.empty.classList.add("hidden");
   el.game.classList.remove("hidden");
@@ -97,23 +122,51 @@ async function pick(choice, btn) {
     : `✗ Đáp án: ${round.answer}`;
   el.feedback.className = "feedback " + (correct ? "ok" : "bad");
 
+  // Luyện nghe: đọc to câu tiếng Anh chuẩn của round này
+  speak(round.speakLine || round.answer);
+
   try {
     await api.answer({ id: current.word.id, correct, mode: round.mode });
   } catch {}
 
-  // Auto-advance
-  setTimeout(loadNext, correct ? 900 : 1700);
+  // Auto-advance (chậm hơn chút để nghe kịp câu đọc)
+  setTimeout(loadNext, correct ? 2200 : 3000);
 }
 
 async function loadNext() {
   locked = false;
   try {
-    const data = await api.next({ reverse: el.reverse.checked });
+    const data = await api.next({ reverse: el.reverse.checked, gameType: el.gameType.value });
     if (!data || !data.ok || !data.round) { renderEmpty(); return; }
     renderRound(data);
   } catch {
     renderEmpty();
   }
+}
+
+// ── Thêm từ chưa biết → AI soạn bài học → vào game ──
+async function addUnknownTerm() {
+  const term = el.addInput.value.trim();
+  if (!term) return;
+  el.addBtn.setAttribute("disabled", "true");
+  el.addMsg.className = "addmsg";
+  el.addMsg.textContent = `⏳ Đang thêm "${term}" — AI soạn nghĩa + ví dụ…`;
+  try {
+    const res = await api.add({ term });
+    if (res && res.ok) {
+      el.addMsg.className = "addmsg ok";
+      el.addMsg.textContent = res.existed
+        ? `✓ "${term}" đã có trong kho — sẽ ôn lại sớm.`
+        : `✓ Đã thêm "${term}" (kho: ${res.total} từ). Sẽ xuất hiện trong game ngay!`;
+      el.addInput.value = "";
+    } else {
+      el.addMsg.textContent = `✗ Không thêm được: ${res && res.reason || "lỗi"}`;
+    }
+  } catch {
+    el.addMsg.textContent = "✗ Lỗi kết nối, thử lại nhé.";
+  }
+  el.addBtn.removeAttribute("disabled");
+  setTimeout(() => { el.addMsg.textContent = ""; }, 6000);
 }
 
 // ── Events ──
@@ -122,9 +175,18 @@ el.skipBtn.addEventListener("click", () => { if (!locked) loadNext(); });
 el.snoozeBtn.addEventListener("click", () => api.snooze(30));
 el.reverse.addEventListener("change", () => { setConfigFromUI(); loadNext(); });
 el.auto.addEventListener("change", setConfigFromUI);
+el.gameType.addEventListener("change", () => { setConfigFromUI(); loadNext(); });
+// Chỉ đọc lại câu đã công bố sau khi trả lời — bấm trước lúc đó sẽ không đọc (tránh lộ đáp án)
+el.speakBtn.addEventListener("click", () => speak(lastSpeakLine));
+el.addBtn.addEventListener("click", addUnknownTerm);
+el.addInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addUnknownTerm();
+  e.stopPropagation(); // đừng để phím 1-4/R trong ô nhập kích hoạt game
+});
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { api.close(); return; }
+  if (e.key === "r" || e.key === "R") { speak(lastSpeakLine); return; }
   if (/^[1-4]$/.test(e.key) && !locked) {
     const idx = Number(e.key) - 1;
     const btn = el.choices.querySelectorAll(".choice")[idx];

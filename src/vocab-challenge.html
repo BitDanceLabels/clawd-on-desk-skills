@@ -36,10 +36,11 @@
     animation: pop .18s ease;
   }
   @keyframes pop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  /* Thanh trên cùng = vùng kéo thả cửa sổ */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; -webkit-app-region: drag; cursor: grab; padding-bottom: 2px; }
   .badge { font-size: 11px; font-weight: 700; color: #1a1205; background: var(--brand); padding: 3px 8px; border-radius: 999px; letter-spacing: .3px; }
   .meta { font-size: 11px; color: var(--muted); text-align: right; line-height: 1.4; }
-  .x { cursor: pointer; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 4px; }
+  .x { cursor: pointer; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 4px; -webkit-app-region: no-drag; }
   .x:hover { color: var(--text); }
   .scene { font-size: 12.5px; color: var(--muted); }
   .cue { font-size: 16px; font-weight: 650; line-height: 1.35; }
@@ -56,9 +57,26 @@
   .choice.correct { border-color: var(--ok); background: rgba(53,200,138,.12); }
   .choice.wrong { border-color: var(--bad); background: rgba(229,85,107,.12); }
   .choice[disabled] { cursor: default; }
-  .feedback { font-size: 12.5px; min-height: 16px; }
+  .fbrow { display: flex; align-items: center; gap: 6px; min-height: 20px; }
+  .feedback { font-size: 12.5px; flex: 1; }
   .feedback.ok { color: var(--ok); }
   .feedback.bad { color: var(--bad); }
+  .speak { cursor: pointer; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; font-size: 13px; padding: 2px 8px; }
+  .speak:hover { color: var(--brand); border-color: var(--brand); }
+  .addrow { display: flex; gap: 6px; align-items: center; }
+  .addrow input {
+    flex: 1; background: #131b27; border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 10px; font-size: 12.5px; outline: none;
+  }
+  .addrow input:focus { border-color: var(--brand); }
+  .addrow input::placeholder { color: #5d6b80; }
+  .addmsg { font-size: 11px; color: var(--muted); min-height: 13px; }
+  .addmsg.ok { color: var(--ok); }
+  select.mode {
+    background: #131b27; border: 1px solid var(--line); color: var(--muted);
+    border-radius: 8px; font-size: 11px; padding: 3px 4px; cursor: pointer; outline: none;
+  }
+  select.mode:hover { color: var(--text); border-color: var(--brand); }
   .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; border-top: 1px solid var(--line); }
   .foot .left { display: flex; gap: 10px; align-items: center; font-size: 11px; color: var(--muted); }
   .foot label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
@@ -84,7 +102,10 @@
       <div class="scene" id="scene"></div>
       <div class="cue" id="cue"></div>
       <div class="choices" id="choices"></div>
-      <div class="feedback" id="feedback"></div>
+      <div class="fbrow">
+        <div class="feedback" id="feedback"></div>
+        <button class="speak" id="speakBtn" title="Nghe lại câu tiếng Anh (phím R)">🔊</button>
+      </div>
     </div>
 
     <div id="empty" class="empty hidden">
@@ -92,8 +113,19 @@
       <p>Quay lại luyện tiếp khi có từ mới hoặc tới lịch ôn.</p>
     </div>
 
+    <div class="addrow">
+      <input id="addInput" maxlength="80" placeholder="Gõ từ / cụm tiếng Anh chưa biết, Enter để thêm…" />
+      <button class="btn" id="addBtn" title="AI sẽ soạn nghĩa + ví dụ rồi đưa vào game">＋ Thêm</button>
+    </div>
+    <div class="addmsg" id="addMsg"></div>
+
     <div class="foot">
       <div class="left">
+        <select class="mode" id="gameType" title="Kiểu chơi: trộn cả hai / chọn câu / chọn từ vựng">
+          <option value="mix">🔀 Trộn</option>
+          <option value="sentence">📝 Câu</option>
+          <option value="vocab">🔤 Từ vựng</option>
+        </select>
         <label title="Nhìn nghĩa tiếng Việt, chọn từ tiếng Anh"><input type="checkbox" id="reverse" /> Việt→Anh</label>
         <label title="Tự động nảy thử thách theo nhịp"><input type="checkbox" id="auto" /> Tự nảy</label>
       </div>

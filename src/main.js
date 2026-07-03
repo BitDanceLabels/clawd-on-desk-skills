@@ -148,6 +148,7 @@ function savePrefs() {
     rabbitIntervalMin: _rabbit ? _rabbit.getIntervalMin() : rabbitIntervalMin,
     characterSkin,
     vocabAutoChallenge, vocabChallengeIntervalMin, vocabReverseMode,
+    vocabGameType, challengeWinPos,
     vocabAutoSource, vocabAutoSourceIntervalSec,
   };
   try { fs.writeFileSync(PREFS_PATH, JSON.stringify(data)); } catch {}
@@ -204,6 +205,8 @@ let characterSkin = "clawd";  // "clawd" | "bunny" — switches the pet characte
 let vocabAutoChallenge = true;         // scheduler pops challenges on an interval (default ON)
 let vocabChallengeIntervalMin = 20;    // minutes between auto-pops
 let vocabReverseMode = false;          // true → Vietnamese→English direction
+let vocabGameType = "mix";             // mix | sentence | vocab — vocab = word-pick rounds
+let challengeWinPos = null;            // {x,y} — persisted position after user drags the popup
 let challengeTimer = null;
 let challengeSnoozeUntil = 0;
 // ── Vocab auto-source (Phase 2) ──
@@ -2232,8 +2235,14 @@ function buildChallengeRound(opts = {}) {
   const word = pickDueVocab(db, now, !!opts.strict);
   if (!word) return null;
   const reverse = opts.reverse === undefined ? vocabReverseMode : !!opts.reverse;
+  const gameType = ["mix", "sentence", "vocab"].includes(opts.gameType) ? opts.gameType : vocabGameType;
   const index = Number(word.review_count) || 0;
-  const round = core.buildGameRound(word, db.words, reverse ? { index, mode: "vi2en" } : { index });
+  // vocab → word-pick rounds (choices are English terms); sentence → sentence rounds; mix → default rotation
+  let forcedMode = null;
+  if (gameType === "vocab") forcedMode = index % 2 ? "fill" : "vi2en";
+  else if (gameType === "sentence") forcedMode = index % 2 ? "dialogue" : "translate";
+  else if (reverse) forcedMode = "vi2en";
+  const round = core.buildGameRound(word, db.words, forcedMode ? { index, mode: forcedMode } : { index });
   if (!round) return null;
   return {
     ok: true,
@@ -2252,15 +2261,24 @@ function openVocabChallenge() {
   }
   const wa = screen.getPrimaryDisplay().workArea;
   const w = 380;
-  const h = 470;
+  const h = 540;
+  // Reuse the position the user dragged it to last time (clamped to a visible screen)
+  let px = wa.x + wa.width - w - 16;
+  let py = wa.y + wa.height - h - 16;
+  if (challengeWinPos) {
+    const near = screen.getDisplayNearestPoint(challengeWinPos).workArea;
+    px = Math.min(Math.max(challengeWinPos.x, near.x), near.x + near.width - w);
+    py = Math.min(Math.max(challengeWinPos.y, near.y), near.y + near.height - h);
+  }
   challengeWin = new BrowserWindow({
     width: w,
     height: h,
-    x: wa.x + wa.width - w - 16,
-    y: wa.y + wa.height - h - 16,
+    x: px,
+    y: py,
     frame: false,
     transparent: true,
     resizable: false,
+    movable: true,
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
@@ -2277,6 +2295,12 @@ function openVocabChallenge() {
   challengeWin.loadFile(path.join(__dirname, "vocab-challenge.html"));
   challengeWin.once("ready-to-show", () => {
     if (challengeWin && !challengeWin.isDestroyed()) challengeWin.showInactive();
+  });
+  challengeWin.on("moved", () => {
+    if (!challengeWin || challengeWin.isDestroyed()) return;
+    const b = challengeWin.getBounds();
+    challengeWinPos = { x: b.x, y: b.y };
+    try { savePrefs(); } catch {}
   });
   challengeWin.on("closed", () => { challengeWin = null; });
 }
@@ -2305,12 +2329,15 @@ function startChallengeScheduler() {
 function setVocabChallengeConfig(cfg = {}) {
   if (typeof cfg.auto === "boolean") vocabAutoChallenge = cfg.auto;
   if (typeof cfg.reverse === "boolean") vocabReverseMode = cfg.reverse;
+  if (typeof cfg.gameType === "string" && ["mix", "sentence", "vocab"].includes(cfg.gameType)) {
+    vocabGameType = cfg.gameType;
+  }
   if (Number.isFinite(cfg.intervalMin)) {
     vocabChallengeIntervalMin = Math.max(1, Math.min(240, Math.round(cfg.intervalMin)));
   }
   if (vocabAutoChallenge) challengeSnoozeUntil = 0;
   try { savePrefs(); } catch {}
-  return { ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, intervalMin: vocabChallengeIntervalMin };
+  return { ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, gameType: vocabGameType, intervalMin: vocabChallengeIntervalMin };
 }
 
 // ── Vocab auto-source (Phase 2) ──────────────────────────────────────────────
@@ -3210,6 +3237,12 @@ function createWindow() {
   if (prefs && Number.isFinite(prefs.vocabChallengeIntervalMin)) {
     vocabChallengeIntervalMin = Math.max(1, Math.min(240, prefs.vocabChallengeIntervalMin));
   }
+  if (prefs && typeof prefs.vocabGameType === "string" && ["mix", "sentence", "vocab"].includes(prefs.vocabGameType)) {
+    vocabGameType = prefs.vocabGameType;
+  }
+  if (prefs && prefs.challengeWinPos && Number.isFinite(prefs.challengeWinPos.x) && Number.isFinite(prefs.challengeWinPos.y)) {
+    challengeWinPos = { x: prefs.challengeWinPos.x, y: prefs.challengeWinPos.y };
+  }
   if (prefs && typeof prefs.vocabAutoSource === "boolean") vocabAutoSource = prefs.vocabAutoSource;
   if (prefs && Number.isFinite(prefs.vocabAutoSourceIntervalSec)) {
     vocabAutoSourceIntervalSec = Math.max(15, Math.min(600, prefs.vocabAutoSourceIntervalSec));
@@ -3542,8 +3575,19 @@ function createWindow() {
   ipcMain.handle("vocab:open-donate", () => openBumbeeDonate());
   // ── Vocab auto-challenge popup (Phase 1) ──
   ipcMain.handle("vocab-challenge:next", (_event, opts = {}) => {
-    const round = buildChallengeRound({ reverse: opts.reverse, strict: false });
+    const round = buildChallengeRound({ reverse: opts.reverse, gameType: opts.gameType, strict: false });
     return round || { ok: false, empty: true };
+  });
+  // User types an unknown word/phrase in the popup → AI enriches it into the vocab db
+  ipcMain.handle("vocab-challenge:add", async (_event, payload = {}) => {
+    const term = String(payload.term || "").trim().slice(0, 80);
+    if (!term) return { ok: false, reason: "empty" };
+    try {
+      const res = await addVocabItems({ terms: [term], source: "challenge-popup", text: String(payload.note || "") });
+      return { ok: true, created: res.created.length, existed: res.created.length === 0, total: res.total };
+    } catch (e) {
+      return { ok: false, reason: String(e && e.message || e).slice(0, 120) };
+    }
   });
   ipcMain.handle("vocab-challenge:answer", (_event, payload = {}) => {
     const res = reviewVocabItem({ id: payload.id, correct: !!payload.correct });
@@ -3558,7 +3602,7 @@ function createWindow() {
   });
   ipcMain.handle("vocab-challenge:close", () => { closeVocabChallenge(); return { ok: true }; });
   ipcMain.handle("vocab-challenge:get-config", () => ({
-    ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, intervalMin: vocabChallengeIntervalMin,
+    ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, gameType: vocabGameType, intervalMin: vocabChallengeIntervalMin,
   }));
   ipcMain.handle("vocab-challenge:set-config", (_event, cfg = {}) => setVocabChallengeConfig(cfg));
   ipcMain.on("open-vocab-challenge", () => openVocabChallenge());

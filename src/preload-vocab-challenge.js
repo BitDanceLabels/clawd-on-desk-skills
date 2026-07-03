@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("bumbeeChallenge", {
   next: (opts) => ipcRenderer.invoke("vocab-challenge:next", opts || {}),
   answer: (payload) => ipcRenderer.invoke("vocab-challenge:answer", payload || {}),
+  add: (payload) => ipcRenderer.invoke("vocab-challenge:add", payload || {}),
   snooze: (minutes) => ipcRenderer.invoke("vocab-challenge:snooze", minutes),
   close: () => ipcRenderer.invoke("vocab-challenge:close"),
   getConfig: () => ipcRenderer.invoke("vocab-challenge:get-config"),
