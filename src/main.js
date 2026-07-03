@@ -2237,11 +2237,13 @@ function buildChallengeRound(opts = {}) {
   const reverse = opts.reverse === undefined ? vocabReverseMode : !!opts.reverse;
   const gameType = ["mix", "sentence", "vocab"].includes(opts.gameType) ? opts.gameType : vocabGameType;
   const index = Number(word.review_count) || 0;
-  // vocab → word-pick rounds (choices are English terms); sentence → sentence rounds; mix → default rotation
+  // vocab → word-pick rounds (choices are English terms); sentence → sentence rounds;
+  // mix (mặc định) → chơi song song: cứ 3 round có 1 round chọn từ vựng, còn lại là game câu giao tiếp
   let forcedMode = null;
   if (gameType === "vocab") forcedMode = index % 2 ? "fill" : "vi2en";
   else if (gameType === "sentence") forcedMode = index % 2 ? "dialogue" : "translate";
   else if (reverse) forcedMode = "vi2en";
+  else if (index % 3 === 2) forcedMode = "vi2en";
   const round = core.buildGameRound(word, db.words, forcedMode ? { index, mode: forcedMode } : { index });
   if (!round) return null;
   return {
