@@ -57,6 +57,24 @@
   .choice.correct { border-color: var(--ok); background: rgba(53,200,138,.12); }
   .choice.wrong { border-color: var(--bad); background: rgba(229,85,107,.12); }
   .choice[disabled] { cursor: default; }
+  /* ── Thẻ Từ vựng 🐝: hiện từ + nghĩa VI + ví dụ (sau khi trả lời / khi thêm từ mới) ── */
+  .spot {
+    background: linear-gradient(135deg, rgba(244,200,66,.14), rgba(244,200,66,.05));
+    border: 1.5px solid rgba(244,200,66,.55);
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 4px;
+    animation: pop .22s ease;
+    position: relative;
+  }
+  .spot::before { content: "🐝"; position: absolute; top: -10px; right: 10px; font-size: 16px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+  .spot .tag { font-size: 10px; font-weight: 700; letter-spacing: .4px; color: var(--brand); text-transform: uppercase; }
+  .spot .termrow { display: flex; align-items: center; gap: 8px; }
+  .spot .term { font-size: 19px; font-weight: 800; color: var(--brand); }
+  .spot .ipa { font-size: 11.5px; color: var(--muted); }
+  .spot .vi { font-size: 13px; color: var(--text); }
+  .spot .vi b { color: #ffd97a; }
+  .spot .ex { font-size: 12px; color: var(--muted); font-style: italic; border-left: 2px solid rgba(244,200,66,.4); padding-left: 8px; }
   .fbrow { display: flex; align-items: center; gap: 6px; min-height: 20px; }
   .feedback { font-size: 12.5px; flex: 1; }
   .feedback.ok { color: var(--ok); }
@@ -98,13 +116,24 @@
       </div>
     </div>
 
+    <!-- Thẻ Từ vựng: recap từ vừa học / từ mới vừa thêm -->
+    <div class="spot hidden" id="spot">
+      <span class="tag" id="spotTag">Từ vựng</span>
+      <div class="termrow">
+        <span class="term" id="spotTerm"></span>
+        <span class="ipa" id="spotIpa"></span>
+        <button class="speak" id="spotSpeak" title="Nghe từ + câu ví dụ (phím R)">🔊</button>
+      </div>
+      <div class="vi" id="spotVi"></div>
+      <div class="ex" id="spotEx"></div>
+    </div>
+
     <div id="game">
       <div class="scene" id="scene"></div>
       <div class="cue" id="cue"></div>
       <div class="choices" id="choices"></div>
       <div class="fbrow">
         <div class="feedback" id="feedback"></div>
-        <button class="speak" id="speakBtn" title="Nghe lại câu tiếng Anh (phím R)">🔊</button>
       </div>
     </div>
 

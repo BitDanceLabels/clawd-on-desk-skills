@@ -19,11 +19,33 @@ const el = {
   closeBtn: document.getElementById("closeBtn"),
   snoozeBtn: document.getElementById("snoozeBtn"),
   skipBtn: document.getElementById("skipBtn"),
-  speakBtn: document.getElementById("speakBtn"),
   addInput: document.getElementById("addInput"),
   addBtn: document.getElementById("addBtn"),
   addMsg: document.getElementById("addMsg"),
+  spot: document.getElementById("spot"),
+  spotTag: document.getElementById("spotTag"),
+  spotTerm: document.getElementById("spotTerm"),
+  spotIpa: document.getElementById("spotIpa"),
+  spotVi: document.getElementById("spotVi"),
+  spotEx: document.getElementById("spotEx"),
+  spotSpeak: document.getElementById("spotSpeak"),
 };
+
+// Hiện thẻ Từ vựng (recap sau khi trả lời / từ mới vừa thêm)
+function showSpot(info, tag) {
+  if (!info || !info.term) return;
+  el.spotTag.textContent = tag || "Từ vựng";
+  el.spotTerm.textContent = info.term;
+  el.spotIpa.textContent = info.pronunciation || "";
+  const vi = (info.meaning_vi || "").trim();
+  el.spotVi.innerHTML = "";
+  const b = document.createElement("b");
+  b.textContent = vi || (info.meaning_en || "");
+  el.spotVi.append(vi ? "Nghĩa: " : "Meaning: ", b);
+  el.spotEx.textContent = info.example || "";
+  el.spot.classList.remove("hidden");
+}
+function hideSpot() { el.spot.classList.add("hidden"); }
 
 let current = null;   // { round, word, player, dueCount }
 let locked = false;   // true after an answer, until next round loads
@@ -72,6 +94,7 @@ function renderRound(data) {
   current = data;
   locked = false;
   lastSpeakLine = "";
+  hideSpot(); // ẩn thẻ từ vựng khi đang hỏi — không lộ đáp án
   const { round, word, player, dueCount } = data;
   el.empty.classList.add("hidden");
   el.game.classList.remove("hidden");
@@ -124,13 +147,15 @@ async function pick(choice, btn) {
 
   // Luyện nghe: đọc to câu tiếng Anh chuẩn của round này
   speak(round.speakLine || round.answer);
+  // Thẻ Từ vựng recap: từ + nghĩa VI + ví dụ
+  showSpot(current.word, correct ? "✓ Từ vừa học" : "📖 Học lại từ này");
 
   try {
     await api.answer({ id: current.word.id, correct, mode: round.mode });
   } catch {}
 
-  // Auto-advance (chậm hơn chút để nghe kịp câu đọc)
-  setTimeout(loadNext, correct ? 2200 : 3000);
+  // Auto-advance (chậm hơn để kịp nghe + đọc thẻ từ vựng)
+  setTimeout(loadNext, correct ? 3200 : 4500);
 }
 
 async function loadNext() {
@@ -159,6 +184,11 @@ async function addUnknownTerm() {
         ? `✓ "${term}" đã có trong kho — sẽ ôn lại sớm.`
         : `✓ Đã thêm "${term}" (kho: ${res.total} từ). Sẽ xuất hiện trong game ngay!`;
       el.addInput.value = "";
+      // Từ mới nhảy ngay lên thẻ Từ vựng + đọc luôn cho quen tai
+      if (res.item) {
+        showSpot(res.item, "🆕 Từ mới vào game");
+        speak(res.item.term + ". " + (res.item.example || ""));
+      }
     } else {
       el.addMsg.textContent = `✗ Không thêm được: ${res && res.reason || "lỗi"}`;
     }
@@ -176,8 +206,12 @@ el.snoozeBtn.addEventListener("click", () => api.snooze(30));
 el.reverse.addEventListener("change", () => { setConfigFromUI(); loadNext(); });
 el.auto.addEventListener("change", setConfigFromUI);
 el.gameType.addEventListener("change", () => { setConfigFromUI(); loadNext(); });
-// Chỉ đọc lại câu đã công bố sau khi trả lời — bấm trước lúc đó sẽ không đọc (tránh lộ đáp án)
-el.speakBtn.addEventListener("click", () => speak(lastSpeakLine));
+// Nghe lại: đọc từ trên thẻ + câu ví dụ (thẻ chỉ hiện sau khi trả lời nên không lộ đáp án)
+el.spotSpeak.addEventListener("click", () => {
+  const term = el.spotTerm.textContent || "";
+  const ex = el.spotEx.textContent || "";
+  speak(term && ex ? `${term}. ${ex}` : (lastSpeakLine || term));
+});
 el.addBtn.addEventListener("click", addUnknownTerm);
 el.addInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addUnknownTerm();

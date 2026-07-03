@@ -1507,7 +1507,7 @@ async function enrichVocabTerm(term, settings, sourceNote) {
         `Term: ${term}`,
         sourceNote ? `Source note: ${sourceNote.slice(0, 500)}` : "",
         "Return professional learning content. Do not create silly distractors. Examples must be natural full English sentences.",
-        "JSON shape: {\"meaning_en\":\"...\",\"pronunciation\":\"...\",\"examples\":[\"easy sentence\",\"work sentence\",\"hard sentence\"],\"collocations\":[\"common phrase\",\"common phrase\"],\"quiz\":[{\"type\":\"recall\",\"prompt\":\"...\",\"answer\":\"...\"},{\"type\":\"fill_blank\",\"prompt\":\"...\",\"answer\":\"...\"}]}",
+        "JSON shape: {\"meaning_en\":\"...\",\"meaning_vi\":\"nghĩa tiếng Việt ngắn gọn, tự nhiên\",\"pronunciation\":\"...\",\"examples\":[\"easy sentence\",\"work sentence\",\"hard sentence\"],\"collocations\":[\"common phrase\",\"common phrase\"],\"quiz\":[{\"type\":\"recall\",\"prompt\":\"...\",\"answer\":\"...\"},{\"type\":\"fill_blank\",\"prompt\":\"...\",\"answer\":\"...\"}]}",
       ].filter(Boolean).join("\n"),
       context: {
         source: "bumbee-english-vocab",
@@ -1521,7 +1521,7 @@ async function enrichVocabTerm(term, settings, sourceNote) {
     if (!parsed || typeof parsed !== "object") return lesson;
     return {
       meaning_en: String(parsed.meaning_en || parsed.meaning || lesson.meaning_en).slice(0, 500),
-      meaning_vi: "",
+      meaning_vi: String(parsed.meaning_vi || "").slice(0, 300),
       pronunciation: String(parsed.pronunciation || "").slice(0, 120),
       examples: Array.isArray(parsed.examples) ? parsed.examples.slice(0, 6).map((x) => String(x).slice(0, 240)) : lesson.examples,
       collocations: Array.isArray(parsed.collocations) ? parsed.collocations.slice(0, 8).map((x) => String(x).slice(0, 120)) : lesson.collocations,
@@ -2247,7 +2247,14 @@ function buildChallengeRound(opts = {}) {
   return {
     ok: true,
     round,
-    word: { id: word.id, term: word.term, level: word.level, score: word.score || 0 },
+    word: {
+      id: word.id, term: word.term, level: word.level, score: word.score || 0,
+      // dữ liệu cho thẻ "Từ vựng" recap sau khi trả lời (không đưa lên UI trước khi trả lời!)
+      meaning_vi: word.lesson?.meaning_vi || "",
+      meaning_en: core.getMeaning(word),
+      pronunciation: word.lesson?.pronunciation || "",
+      example: core.getExamples(word)[0] || "",
+    },
     player: core.getPlayerLevel(db.words),
     dueCount: countDueVocab(db, now),
   };
@@ -2261,7 +2268,7 @@ function openVocabChallenge() {
   }
   const wa = screen.getPrimaryDisplay().workArea;
   const w = 380;
-  const h = 540;
+  const h = 620; // đủ chỗ cho thẻ Từ vựng 🐝 hiện thêm phía trên game
   // Reuse the position the user dragged it to last time (clamped to a visible screen)
   let px = wa.x + wa.width - w - 16;
   let py = wa.y + wa.height - h - 16;
@@ -3584,7 +3591,17 @@ function createWindow() {
     if (!term) return { ok: false, reason: "empty" };
     try {
       const res = await addVocabItems({ terms: [term], source: "challenge-popup", text: String(payload.note || "") });
-      return { ok: true, created: res.created.length, existed: res.created.length === 0, total: res.total };
+      const item = res.items && res.items[0];
+      return {
+        ok: true, created: res.created.length, existed: res.created.length === 0, total: res.total,
+        item: item ? {
+          term: item.term,
+          meaning_vi: item.lesson?.meaning_vi || "",
+          meaning_en: item.lesson?.meaning_en || item.lesson?.meaning || "",
+          pronunciation: item.lesson?.pronunciation || "",
+          example: (Array.isArray(item.lesson?.examples) && item.lesson.examples[0]) || "",
+        } : null,
+      };
     } catch (e) {
       return { ok: false, reason: String(e && e.message || e).slice(0, 120) };
     }
