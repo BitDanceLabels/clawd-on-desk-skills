@@ -1333,7 +1333,7 @@ function defaultVocabDb() {
       goal: "business conversation",
       dailyWords: 8,
       difficulty: "medium",
-      monthlyReset: true,
+      monthlyReset: false,
     },
     last_reset_month: new Date().toISOString().slice(0, 7),
     words: [],
