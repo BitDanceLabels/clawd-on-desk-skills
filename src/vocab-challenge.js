@@ -331,6 +331,7 @@ document.addEventListener("keydown", (e) => {
 
 el.suggSpeak.addEventListener("click", () => { if (suggPhrase) speak(suggPhrase); });
 el.suggNext.addEventListener("click", loadSuggestion);
+document.getElementById("profileBtn").addEventListener("click", () => api.openProfile());
 
 // ── Kéo thả cửa sổ: fallback JS khi -webkit-app-region không hoạt động ──
 // (nếu native drag ăn thì mousedown không bao giờ tới đây — hai cơ chế không đụng nhau)

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("bumbeeChallenge", {
   suggest: () => ipcRenderer.invoke("vocab-challenge:suggest"),
   // kéo cửa sổ bằng JS (dự phòng khi -webkit-app-region không ăn trên cửa sổ trong suốt)
   moveBy: (dx, dy) => ipcRenderer.send("vocab-challenge:move-by", { dx, dy }),
+  openProfile: () => ipcRenderer.send("open-vocab-profile"),
   snooze: (minutes) => ipcRenderer.invoke("vocab-challenge:snooze", minutes),
   close: () => ipcRenderer.invoke("vocab-challenge:close"),
   getConfig: () => ipcRenderer.invoke("vocab-challenge:get-config"),

@@ -2343,6 +2343,88 @@ function addParsedTerms(parsed, source) {
   return { created, total: readVocabDb().words.length };
 }
 
+// ── Hồ sơ đam mê: AI hiểu user → định kỳ biên soạn từ vựng đúng lĩnh vực ────
+let profileWin = null;
+let _profileCurating = false;
+
+function openVocabProfile() {
+  if (profileWin && !profileWin.isDestroyed()) { profileWin.show(); return; }
+  const wa = screen.getPrimaryDisplay().workArea;
+  profileWin = new BrowserWindow({
+    width: 430, height: 700,
+    x: wa.x + Math.round((wa.width - 430) / 2), y: wa.y + Math.round((wa.height - 700) / 2),
+    frame: false, transparent: true, resizable: false, movable: true,
+    skipTaskbar: true, alwaysOnTop: true, fullscreenable: false,
+    title: "Bumbee Profile", show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload-vocab-profile.js"),
+      contextIsolation: true, nodeIntegration: false, sandbox: false,
+    },
+  });
+  profileWin.loadFile(path.join(__dirname, "vocab-profile.html"));
+  profileWin.once("ready-to-show", () => { if (profileWin && !profileWin.isDestroyed()) profileWin.show(); });
+  profileWin.on("closed", () => { profileWin = null; });
+}
+
+function profileSummary(profile) {
+  const parts = [];
+  if (profile.profession) parts.push(`Nghề: ${profile.profession}`);
+  if (profile.passions) parts.push(`Đam mê/sở thích: ${profile.passions}`);
+  if (profile.books) parts.push(`Sách/thư viện thích: ${profile.books}`);
+  if (profile.subjects) parts.push(`Chủ đề muốn giỏi: ${profile.subjects}`);
+  const links = ["facebook", "linkedin", "youtube", "website"].map((k) => profile[k]).filter(Boolean);
+  if (links.length) parts.push(`Links: ${links.join(" ")}`);
+  return parts.join("\n");
+}
+
+// AI đọc hồ sơ → soạn 8-10 từ/cụm giao tiếp chuyên nghiệp đúng lĩnh vực → addParsedTerms
+async function runProfileCuration(force = false) {
+  if (_profileCurating) return { ok: false, reason: "đang chạy" };
+  const db = readVocabDb();
+  const profile = db.settings.profile || {};
+  const summary = profileSummary(profile);
+  if (!summary) return { ok: false, reason: "Hồ sơ trống — điền và Lưu trước nhé" };
+  if (!_smart) return { ok: false, reason: "Gateway AI chưa sẵn sàng" };
+  const last = db.last_profile_curate ? new Date(db.last_profile_curate).getTime() : 0;
+  if (!force && Date.now() - last < 3 * 24 * 60 * 60 * 1000) return { ok: false, reason: "chưa tới kỳ" };
+  _profileCurating = true;
+  try {
+    const known = (db.words || []).map((w) => w.term).slice(0, 200).join(", ");
+    const result = await _smart.chat({
+      mode: "english",
+      query: [
+        "Bạn là giáo viên tiếng Anh giao tiếp chuyên nghiệp. Dựa trên hồ sơ người học (người Việt) dưới đây,",
+        "soạn 8-10 từ/cụm tiếng Anh ĐÚNG lĩnh vực và đam mê của họ — thứ họ sẽ thật sự dùng khi làm việc/giao tiếp.",
+        "KHÔNG lặp lại các từ đã có. Trả về JSON DUY NHẤT:",
+        '{"terms":[{"term":"...","meaning_vi":"nghĩa Việt ngắn tự nhiên"}],"annotated":"1 đoạn 2-3 câu tiếng Anh dùng vài từ trên trong ngữ cảnh nghề của họ, sau mỗi từ chèn nghĩa Việt trong ngoặc"}',
+        `HỒ SƠ:\n${summary}`,
+        `TỪ ĐÃ CÓ (tránh trùng): ${known}`,
+      ].join("\n"),
+      context: { source: "bumbee-english-vocab", device_id: CHAT_DEVICE_ID, session_id: CHAT_SESSION_ID },
+    });
+    const jsonText = String(result.answer || result.reply || "").match(/\{[\s\S]*\}/)?.[0];
+    const parsed = jsonText ? JSON.parse(jsonText) : null;
+    if (!parsed || !Array.isArray(parsed.terms) || !parsed.terms.length) return { ok: false, reason: "AI không trả kết quả hợp lệ" };
+    const clean = {
+      terms: parsed.terms.slice(0, 12).map((t) => ({
+        term: normalizeVocabTerm(String(t.term || "")),
+        meaning_vi: String(t.meaning_vi || "").slice(0, 200),
+      })).filter((t) => t.term),
+      annotated: String(parsed.annotated || "").slice(0, 1500),
+      raw: "profile-curator",
+    };
+    const res = addParsedTerms(clean, "profile-curator");
+    const cur = readVocabDb();
+    cur.last_profile_curate = new Date().toISOString();
+    writeVocabDb(cur);
+    return { ok: true, created: res.created.length, total: res.total };
+  } catch (e) {
+    return { ok: false, reason: String(e && e.message || e).slice(0, 120) };
+  } finally {
+    _profileCurating = false;
+  }
+}
+
 // ── Game từ vựng "siêu trí nhớ" (khung riêng, chạy song song game câu) ──────
 // Nhìn nghĩa → chọn từ đúng. Ưu tiên từ đến hạn ôn, tránh trùng từ của game câu.
 function buildWordMemoryRound(opts = {}) {
@@ -2463,9 +2545,15 @@ function closeVocabChallenge() {
   challengeWin = null;
 }
 
+let _lastProfileCurateCheck = 0;
 function startChallengeScheduler() {
   if (challengeTimer) clearInterval(challengeTimer);
   challengeTimer = setInterval(() => {
+    // Định kỳ 3 ngày: AI đọc hồ sơ đam mê và tự biên soạn từ vựng mới (check mỗi 6h)
+    if (Date.now() - _lastProfileCurateCheck > 6 * 60 * 60 * 1000) {
+      _lastProfileCurateCheck = Date.now();
+      runProfileCuration(false).catch(() => {});
+    }
     if (!vocabAutoChallenge) return;
     if (Date.now() < challengeSnoozeUntil) return;
     if (doNotDisturb) return;
@@ -3738,6 +3826,27 @@ function createWindow() {
   });
   // Dải gợi ý cụm giao tiếp mới
   ipcMain.handle("vocab-challenge:suggest", () => buildPhraseSuggestion() || { ok: false });
+  // Hồ sơ đam mê — AI hiểu user, biên soạn từ vựng đúng lĩnh vực
+  ipcMain.on("open-vocab-profile", () => openVocabProfile());
+  ipcMain.handle("vocab-profile:get", () => {
+    const db = readVocabDb();
+    return { ok: true, profile: db.settings.profile || {}, lastCurate: db.last_profile_curate || null };
+  });
+  ipcMain.handle("vocab-profile:save", (_event, profile = {}) => {
+    const db = readVocabDb();
+    const clean = {};
+    for (const k of ["profession", "passions", "books", "subjects", "facebook", "linkedin", "youtube", "website"]) {
+      clean[k] = String(profile[k] || "").slice(0, 600);
+    }
+    db.settings.profile = clean;
+    writeVocabDb(db);
+    return { ok: true };
+  });
+  ipcMain.handle("vocab-profile:curate", () => runProfileCuration(true));
+  ipcMain.handle("vocab-profile:close", () => {
+    if (profileWin && !profileWin.isDestroyed()) profileWin.close();
+    return { ok: true };
+  });
   // User types an unknown word/phrase in the popup → AI enriches it into the vocab db.
   // Bản nháp dài/nhiều từ → AI bóc tách từng từ đáng học + tạo thẻ câu chú giải nghĩa VI.
   ipcMain.handle("vocab-challenge:add", async (_event, payload = {}) => {
