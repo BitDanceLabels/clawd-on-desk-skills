@@ -36,6 +36,7 @@ async function load() {
         setCvStatus(`✓ CV hiện tại: ${p.profile.cv_file}${chars ? ` (${chars} ký tự đã trích)` : ""}`, true);
       }
     }
+    if (p && p.misskeyConnected) setMsk(`✓ Đang kết nối bumbee.asia: @${p.misskeyUser}`, true);
     if (p && p.lastCurate) setStatus(`Lần AI biên soạn gần nhất: ${String(p.lastCurate).slice(0, 10)}`, false);
     if (p && p.syncUrl) {
       let box = document.getElementById("syncBox");
@@ -91,6 +92,31 @@ $("curateBtn").addEventListener("click", async () => {
   } catch { setStatus("✗ Lỗi kết nối AI", false); }
   $("curateBtn").removeAttribute("disabled");
 });
+
+// ── Kết nối bumbee.asia (Misskey) ──
+$("tokenHint").addEventListener("click", () => {
+  const s = $("tokenSteps");
+  s.style.display = s.style.display === "none" ? "block" : "none";
+});
+$("connectBtn").addEventListener("click", async () => {
+  const token = $("misskeyToken").value.trim();
+  if (!token) { setMsk("Dán token trước nhé", false); return; }
+  $("connectBtn").setAttribute("disabled", "true");
+  setMsk("🔗 Đang kết nối bumbee.asia…", false);
+  try {
+    const r = await api.connectMisskey(token);
+    if (r && r.ok) {
+      setMsk(`✓ Đã kết nối @${r.username} — đọc ${r.chars} ký tự hồ sơ${r.notes ? ` + ${r.notes} bài đăng` : ""}. Bấm 🪄 Biên soạn ngay để AI dạy theo đam mê của bạn!`, true);
+      $("misskeyToken").value = "";
+    } else setMsk(`✗ ${r && r.reason || "Kết nối thất bại"}`, false);
+  } catch { setMsk("✗ Lỗi kết nối", false); }
+  $("connectBtn").removeAttribute("disabled");
+});
+function setMsk(msg, ok) {
+  const s = $("misskeyStatus");
+  s.textContent = msg;
+  s.className = "status" + (ok ? " ok" : "");
+}
 
 $("closeBtn").addEventListener("click", () => api.close());
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") api.close(); });

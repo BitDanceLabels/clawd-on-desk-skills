@@ -40,6 +40,19 @@
     <h1>AI hiểu bạn — dạy đúng cái bạn cần</h1>
     <p class="sub">Chia sẻ nghề nghiệp, đam mê, sách và link của bạn. Cứ mỗi 3 ngày AI sẽ tự biên soạn từ vựng + mẫu câu giao tiếp đúng lĩnh vực của bạn và đưa vào game — như một seminar riêng, vừa học vừa nâng tay nghề.</p>
 
+    <div style="background:linear-gradient(135deg,rgba(255,159,26,.14),rgba(244,200,66,.05)); border:1.5px solid rgba(255,159,26,.5); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:7px;">
+      <div style="font-size:13px; font-weight:700; color:#ff9f1a;">🐝 Kết nối bumbee.asia — kéo hồ sơ có sẵn của bạn</div>
+      <div style="font-size:11.5px; color:var(--muted); line-height:1.45;">Bạn đã up giới thiệu, đam mê, bài đăng trên bumbee.asia rồi? Dán <b>token</b> vào đây, AI sẽ đọc thẳng hồ sơ đó để dạy đúng cái bạn thích. <span id="tokenHint" style="color:#ff9f1a; cursor:pointer; text-decoration:underline;">Lấy token ở đâu?</span></div>
+      <div id="tokenSteps" style="display:none; font-size:11px; color:var(--muted); line-height:1.5; background:#131b27; border-radius:8px; padding:8px;">
+        Vào bumbee.asia → ⚙️ Cài đặt → <b>API</b> → <b>Generate access token</b> → tick quyền "Xem tài khoản" → tạo → copy token dán vào đây.
+      </div>
+      <div style="display:flex; gap:6px;">
+        <input id="misskeyToken" placeholder="Dán token bumbee.asia…" style="flex:1;" />
+        <button class="btn primary" id="connectBtn">🔗 Kết nối</button>
+      </div>
+      <div class="status" id="misskeyStatus"></div>
+    </div>
+
     <div class="field"><label>💼 Nghề nghiệp / lĩnh vực</label><input id="profession" placeholder="VD: kỹ sư phần mềm, bác sĩ, founder AI studio…" /></div>
     <div class="field"><label>🔥 Đam mê & sở thích</label><textarea id="passions" placeholder="VD: làm nhạc AI, YouTube automation, xây SaaS, bóng đá…"></textarea></div>
     <div class="field"><label>📚 Sách / thư viện yêu thích</label><textarea id="books" placeholder="VD: Zero to One, Deep Work, docs của Anthropic…"></textarea></div>

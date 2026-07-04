@@ -2402,8 +2402,8 @@ function openVocabProfile() {
   if (profileWin && !profileWin.isDestroyed()) { profileWin.show(); return; }
   const wa = screen.getPrimaryDisplay().workArea;
   profileWin = new BrowserWindow({
-    width: 430, height: 700,
-    x: wa.x + Math.round((wa.width - 430) / 2), y: wa.y + Math.round((wa.height - 700) / 2),
+    width: 430, height: 760,
+    x: wa.x + Math.round((wa.width - 430) / 2), y: wa.y + Math.round((wa.height - 760) / 2),
     frame: false, transparent: true, resizable: false, movable: true,
     skipTaskbar: true, alwaysOnTop: true, fullscreenable: false,
     title: "Bumbee Profile", show: false,
@@ -2417,8 +2417,50 @@ function openVocabProfile() {
   profileWin.on("closed", () => { profileWin = null; });
 }
 
+// Kéo hồ sơ + đam mê thẳng từ tài khoản bumbee.asia (Misskey) — user chỉ dán token
+const MISSKEY_BASE = process.env.BUMBEE_SOCIAL_URL || "https://bumbee.asia";
+async function pullFromMisskey(token) {
+  const tk = String(token || "").trim();
+  if (!tk) return { ok: false, reason: "Chưa có token bumbee.asia" };
+  try {
+    const post = async (ep, body) => {
+      const r = await fetch(`${MISSKEY_BASE}/api/${ep}`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ i: tk, ...body }), signal: AbortSignal.timeout(10000),
+      });
+      if (!r.ok) throw new Error(`${ep} ${r.status}`);
+      return r.json();
+    };
+    const me = await post("i", {});
+    let notes = [];
+    try {
+      const raw = await post("users/notes", { userId: me.id, limit: 20, withReplies: false });
+      notes = (raw || []).map((n) => String(n.text || "").trim()).filter(Boolean).slice(0, 12);
+    } catch {}
+    const lines = [];
+    if (me.name) lines.push(`Tên: ${me.name} (@${me.username})`);
+    if (me.description) lines.push(`Giới thiệu: ${me.description}`);
+    for (const f of me.fields || []) if (f.name && f.value) lines.push(`${f.name}: ${f.value}`);
+    if (me.location) lines.push(`Nơi ở: ${me.location}`);
+    if (notes.length) lines.push(`Bài đăng gần đây (thể hiện mối quan tâm):\n- ${notes.join("\n- ")}`);
+    const summary = lines.join("\n").slice(0, 4000);
+    const db = readVocabDb();
+    db.settings.profile = db.settings.profile || {};
+    db.settings.profile.misskey_token = tk;
+    db.settings.profile.misskey_user = me.username || "";
+    db.settings.profile.misskey_summary = summary;
+    db.settings.profile_updated_at = new Date().toISOString();
+    writeVocabDb(db);
+    return { ok: true, username: me.username, name: me.name, chars: summary.length, notes: notes.length };
+  } catch (e) {
+    const msg = String(e && e.message || e);
+    return { ok: false, reason: /401|403/.test(msg) ? "Token sai hoặc hết hạn" : msg.slice(0, 100) };
+  }
+}
+
 function profileSummary(profile) {
   const parts = [];
+  if (profile.misskey_summary) parts.push(`HỒ SƠ BUMBEE.ASIA:\n${profile.misskey_summary}`);
   if (profile.profession) parts.push(`Nghề: ${profile.profession}`);
   if (profile.passions) parts.push(`Đam mê/sở thích: ${profile.passions}`);
   if (profile.books) parts.push(`Sách/thư viện thích: ${profile.books}`);
@@ -3924,7 +3966,11 @@ function createWindow() {
   ipcMain.on("open-vocab-profile", () => openVocabProfile());
   ipcMain.handle("vocab-profile:get", () => {
     const db = readVocabDb();
-    return { ok: true, profile: db.settings.profile || {}, lastCurate: db.last_profile_curate || null, syncUrl: profileSyncUrl() };
+    const p = db.settings.profile || {};
+    return {
+      ok: true, profile: p, lastCurate: db.last_profile_curate || null, syncUrl: profileSyncUrl(),
+      misskeyUser: p.misskey_user || "", misskeyConnected: !!p.misskey_token, misskeyBase: MISSKEY_BASE,
+    };
   });
   ipcMain.handle("vocab-profile:save", (_event, profile = {}) => {
     const db = readVocabDb();
@@ -3933,9 +3979,12 @@ function createWindow() {
     for (const k of ["profession", "passions", "books", "subjects", "facebook", "linkedin", "youtube", "website", "cv_link"]) {
       clean[k] = String(profile[k] || "").slice(0, 600);
     }
-    // giữ lại phần CV đã trích (không nằm trong form)
+    // giữ lại phần CV + kết nối Misskey (không nằm trong form)
     if (prev.cv_text) clean.cv_text = prev.cv_text;
     if (prev.cv_file) clean.cv_file = prev.cv_file;
+    if (prev.misskey_token) clean.misskey_token = prev.misskey_token;
+    if (prev.misskey_user) clean.misskey_user = prev.misskey_user;
+    if (prev.misskey_summary) clean.misskey_summary = prev.misskey_summary;
     db.settings.profile = clean;
     db.settings.profile_updated_at = new Date().toISOString();
     writeVocabDb(db);
@@ -3953,6 +4002,7 @@ function createWindow() {
     return processCvFile(r.filePaths[0]);
   });
   ipcMain.handle("vocab-profile:attach-path", (_event, p) => processCvFile(String(p || "")));
+  ipcMain.handle("vocab-profile:connect-misskey", (_event, token) => pullFromMisskey(token));
   ipcMain.handle("vocab-profile:curate", () => runProfileCuration(true));
   ipcMain.handle("vocab-profile:close", () => {
     if (profileWin && !profileWin.isDestroyed()) profileWin.close();
