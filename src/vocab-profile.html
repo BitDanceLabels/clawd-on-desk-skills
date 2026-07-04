@@ -40,17 +40,19 @@
     <h1>AI hiểu bạn — dạy đúng cái bạn cần</h1>
     <p class="sub">Chia sẻ nghề nghiệp, đam mê, sách và link của bạn. Cứ mỗi 3 ngày AI sẽ tự biên soạn từ vựng + mẫu câu giao tiếp đúng lĩnh vực của bạn và đưa vào game — như một seminar riêng, vừa học vừa nâng tay nghề.</p>
 
-    <div style="background:linear-gradient(135deg,rgba(255,159,26,.14),rgba(244,200,66,.05)); border:1.5px solid rgba(255,159,26,.5); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:7px;">
+    <div style="background:linear-gradient(135deg,rgba(255,159,26,.14),rgba(244,200,66,.05)); border:1.5px solid rgba(255,159,26,.5); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px;">
       <div style="font-size:13px; font-weight:700; color:#ff9f1a;">🐝 Kết nối bumbee.asia — kéo hồ sơ có sẵn của bạn</div>
-      <div style="font-size:11.5px; color:var(--muted); line-height:1.45;">Bạn đã up giới thiệu, đam mê, bài đăng trên bumbee.asia rồi? Dán <b>token</b> vào đây, AI sẽ đọc thẳng hồ sơ đó để dạy đúng cái bạn thích. <span id="tokenHint" style="color:#ff9f1a; cursor:pointer; text-decoration:underline;">Lấy token ở đâu?</span></div>
-      <div id="tokenSteps" style="display:none; font-size:11px; color:var(--muted); line-height:1.5; background:#131b27; border-radius:8px; padding:8px;">
-        Vào bumbee.asia → ⚙️ Cài đặt → <b>API</b> → <b>Generate access token</b> → tick quyền "Xem tài khoản" → tạo → copy token dán vào đây.
-      </div>
-      <div style="display:flex; gap:6px;">
-        <input id="misskeyToken" placeholder="Dán token bumbee.asia…" style="flex:1;" />
-        <button class="btn primary" id="connectBtn">🔗 Kết nối</button>
-      </div>
+      <div style="font-size:11.5px; color:var(--muted); line-height:1.45;">Đăng nhập bằng tài khoản bumbee.asia của bạn — AI sẽ đọc giới thiệu, đam mê, bài đăng của bạn để dạy đúng cái bạn thích.</div>
+      <button class="btn primary" id="loginBtn" style="font-size:14px; padding:12px;">🔑 Đăng nhập bằng bumbee.asia</button>
       <div class="status" id="misskeyStatus"></div>
+      <div style="font-size:11px; color:var(--muted); text-align:center; cursor:pointer; text-decoration:underline;" id="advToggle">Cách khác: dán token thủ công</div>
+      <div id="advBox" style="display:none; gap:6px; flex-direction:column;">
+        <div style="font-size:10.5px; color:var(--muted); line-height:1.5;">bumbee.asia → ⚙️ Cài đặt → API → Generate access token → tick "Xem tài khoản" → copy.</div>
+        <div style="display:flex; gap:6px;">
+          <input id="misskeyToken" placeholder="Dán token…" style="flex:1;" />
+          <button class="btn" id="connectBtn">Kết nối</button>
+        </div>
+      </div>
     </div>
 
     <div class="field"><label>💼 Nghề nghiệp / lĩnh vực</label><input id="profession" placeholder="VD: kỹ sư phần mềm, bác sĩ, founder AI studio…" /></div>

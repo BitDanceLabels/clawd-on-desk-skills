@@ -94,9 +94,21 @@ $("curateBtn").addEventListener("click", async () => {
 });
 
 // ── Kết nối bumbee.asia (Misskey) ──
-$("tokenHint").addEventListener("click", () => {
-  const s = $("tokenSteps");
-  s.style.display = s.style.display === "none" ? "block" : "none";
+// Đăng nhập bằng tài khoản (MiAuth) — không cần copy token
+$("loginBtn").addEventListener("click", async () => {
+  $("loginBtn").setAttribute("disabled", "true");
+  setMsk("🌐 Đã mở trình duyệt — đăng nhập & bấm Đồng ý, rồi quay lại đây chờ vài giây…", false);
+  try {
+    const r = await api.loginMisskey();
+    if (r && r.ok) {
+      setMsk(`✓ Đã kết nối @${r.username}! AI đọc được ${r.chars} ký tự hồ sơ${r.notes ? ` + ${r.notes} bài đăng` : ""}. Bấm 🪄 Biên soạn ngay!`, true);
+    } else setMsk(`✗ ${r && r.reason || "Chưa đăng nhập được"}`, false);
+  } catch { setMsk("✗ Lỗi kết nối", false); }
+  $("loginBtn").removeAttribute("disabled");
+});
+$("advToggle").addEventListener("click", () => {
+  const b = $("advBox");
+  b.style.display = b.style.display === "none" ? "flex" : "none";
 });
 $("connectBtn").addEventListener("click", async () => {
   const token = $("misskeyToken").value.trim();

@@ -2458,6 +2458,36 @@ async function pullFromMisskey(token) {
   }
 }
 
+// Đăng nhập bumbee.asia bằng tài khoản (MiAuth) — user không cần copy token
+let _miauthPolling = false;
+async function startMisskeyLogin() {
+  if (_miauthPolling) return { ok: false, reason: "Đang chờ đăng nhập…" };
+  const { shell } = require("electron");
+  const sid = require("crypto").randomUUID();
+  const url = `${MISSKEY_BASE}/miauth/${sid}?name=${encodeURIComponent("Bumbee On Desk")}&permission=read:account`;
+  try { await shell.openExternal(url); } catch { return { ok: false, reason: "Không mở được trình duyệt" }; }
+  _miauthPolling = true;
+  try {
+    // chờ user đăng nhập + đồng ý trên web, poll tối đa ~2 phút
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const r = await fetch(`${MISSKEY_BASE}/api/miauth/${sid}/check`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: "{}", signal: AbortSignal.timeout(8000),
+        });
+        const d = await r.json();
+        if (d && d.ok && d.token) {
+          return await pullFromMisskey(d.token);
+        }
+      } catch {}
+    }
+    return { ok: false, reason: "Hết thời gian chờ — thử lại và bấm Đồng ý trên web nhé" };
+  } finally {
+    _miauthPolling = false;
+  }
+}
+
 function profileSummary(profile) {
   const parts = [];
   if (profile.misskey_summary) parts.push(`HỒ SƠ BUMBEE.ASIA:\n${profile.misskey_summary}`);
@@ -4003,6 +4033,7 @@ function createWindow() {
   });
   ipcMain.handle("vocab-profile:attach-path", (_event, p) => processCvFile(String(p || "")));
   ipcMain.handle("vocab-profile:connect-misskey", (_event, token) => pullFromMisskey(token));
+  ipcMain.handle("vocab-profile:login-misskey", () => startMisskeyLogin());
   ipcMain.handle("vocab-profile:curate", () => runProfileCuration(true));
   ipcMain.handle("vocab-profile:close", () => {
     if (profileWin && !profileWin.isDestroyed()) profileWin.close();
