@@ -4034,6 +4034,11 @@ function createWindow() {
   ipcMain.handle("vocab-profile:attach-path", (_event, p) => processCvFile(String(p || "")));
   ipcMain.handle("vocab-profile:connect-misskey", (_event, token) => pullFromMisskey(token));
   ipcMain.handle("vocab-profile:login-misskey", () => startMisskeyLogin());
+  ipcMain.handle("vocab-profile:resync-misskey", () => {
+    const tk = (readVocabDb().settings.profile || {}).misskey_token;
+    if (!tk) return { ok: false, reason: "Chưa kết nối bumbee.asia" };
+    return pullFromMisskey(tk);
+  });
   ipcMain.handle("vocab-profile:curate", () => runProfileCuration(true));
   ipcMain.handle("vocab-profile:close", () => {
     if (profileWin && !profileWin.isDestroyed()) profileWin.close();

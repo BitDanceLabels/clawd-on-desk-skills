@@ -36,7 +36,11 @@ async function load() {
         setCvStatus(`✓ CV hiện tại: ${p.profile.cv_file}${chars ? ` (${chars} ký tự đã trích)` : ""}`, true);
       }
     }
-    if (p && p.misskeyConnected) setMsk(`✓ Đang kết nối bumbee.asia: @${p.misskeyUser}`, true);
+    if (p && p.misskeyConnected) {
+      setMsk(`✓ Đang kết nối bumbee.asia: @${p.misskeyUser}`, true);
+      $("resyncBtn").style.display = "block";
+      $("loginBtn").textContent = "🔑 Đăng nhập lại (đổi tài khoản)";
+    }
     if (p && p.lastCurate) setStatus(`Lần AI biên soạn gần nhất: ${String(p.lastCurate).slice(0, 10)}`, false);
     if (p && p.syncUrl) {
       let box = document.getElementById("syncBox");
@@ -109,6 +113,19 @@ $("loginBtn").addEventListener("click", async () => {
 $("advToggle").addEventListener("click", () => {
   const b = $("advBox");
   b.style.display = b.style.display === "none" ? "flex" : "none";
+});
+$("resyncBtn").addEventListener("click", async () => {
+  $("resyncBtn").setAttribute("disabled", "true");
+  setMsk("🔄 Đang đọc lại hồ sơ mới nhất từ bumbee.asia…", false);
+  try {
+    const r = await api.resyncMisskey();
+    if (r && r.ok) {
+      setMsk(r.chars > 0
+        ? `✓ Đã cập nhật! AI đọc được ${r.chars} ký tự${r.notes ? ` + ${r.notes} bài đăng` : ""}. Bấm 🪄 Biên soạn ngay!`
+        : "⚠️ Hồ sơ trên web vẫn trống — vào Cài đặt → Hồ sơ trên bumbee.asia điền Giới thiệu + Trường bổ sung trước nhé.", r.chars > 0);
+    } else setMsk(`✗ ${r && r.reason || "Lỗi"}`, false);
+  } catch { setMsk("✗ Lỗi kết nối", false); }
+  $("resyncBtn").removeAttribute("disabled");
 });
 $("connectBtn").addEventListener("click", async () => {
   const token = $("misskeyToken").value.trim();
