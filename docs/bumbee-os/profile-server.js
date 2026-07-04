@@ -13,6 +13,21 @@ const PORT = 18915;
 const DATA = path.join(__dirname, "data");
 fs.mkdirSync(DATA, { recursive: true });
 
+// Chống spam tạo key (DoS đầy đĩa): giới hạn theo IP + trần tổng số hồ sơ
+const MAX_PROFILES = 50000;
+const NEW_WINDOW_MS = 60 * 60 * 1000;
+const NEW_MAX_PER_IP = 20;
+const newHits = new Map(); // ip -> [timestamps]
+function newAllowed(ip) {
+  const now = Date.now();
+  const arr = (newHits.get(ip) || []).filter((t) => now - t < NEW_WINDOW_MS);
+  if (arr.length >= NEW_MAX_PER_IP) { newHits.set(ip, arr); return false; }
+  arr.push(now); newHits.set(ip, arr);
+  return true;
+}
+setInterval(() => { const now = Date.now(); for (const [ip, arr] of newHits) { const f = arr.filter((t) => now - t < NEW_WINDOW_MS); if (f.length) newHits.set(ip, f); else newHits.delete(ip); } }, NEW_WINDOW_MS).unref();
+function profileCount() { try { return fs.readdirSync(DATA).filter((f) => f.endsWith(".json")).length; } catch { return 0; } }
+
 const FIELDS = ["profession", "passions", "books", "subjects", "facebook", "linkedin", "youtube", "website", "cv_link", "cv_text"];
 const keyOk = (k) => /^[a-f0-9]{24,64}$/.test(String(k || ""));
 const fileOf = (k) => path.join(DATA, k + ".json");
@@ -88,8 +103,16 @@ load();
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, "http://x");
+  const ip = String(req.headers["x-real-ip"] || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  const SEC = {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer",
+    "cache-control": "no-store",
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'",
+  };
   const send = (code, obj, type) => {
-    res.writeHead(code, { "content-type": type || "application/json; charset=utf-8" });
+    res.writeHead(code, { "content-type": type || "application/json; charset=utf-8", ...SEC });
     res.end(type ? obj : JSON.stringify(obj));
   };
   try {
@@ -97,7 +120,9 @@ const server = http.createServer(async (req, res) => {
       return send(200, FORM_HTML, "text/html; charset=utf-8");
     }
     if (u.pathname === "/bumbee-os/api/new" && req.method === "POST") {
-      const key = crypto.randomBytes(16).toString("hex");
+      if (!newAllowed(ip)) return send(429, { ok: false, reason: "Thử lại sau — tạo quá nhiều hồ sơ" });
+      if (profileCount() >= MAX_PROFILES) return send(507, { ok: false, reason: "Hệ thống đầy, liên hệ admin" });
+      const key = crypto.randomBytes(24).toString("hex"); // 192-bit, không đoán được
       fs.writeFileSync(fileOf(key), JSON.stringify({ profile: {}, updated_at: new Date().toISOString() }));
       return send(200, { ok: true, key });
     }
@@ -109,6 +134,11 @@ const server = http.createServer(async (req, res) => {
         return send(200, { ok: true, ...JSON.parse(fs.readFileSync(fileOf(key), "utf8")) });
       }
       if (req.method === "POST" || req.method === "PUT") {
+        // Ghi vào key mới (app desk tự sinh key) được phép, nhưng rate-limit + cap để chặn spam đầy đĩa
+        if (!fs.existsSync(fileOf(key))) {
+          if (!newAllowed(ip)) return send(429, { ok: false, reason: "Thử lại sau" });
+          if (profileCount() >= MAX_PROFILES) return send(507, { ok: false, reason: "Hệ thống đầy" });
+        }
         const body = JSON.parse((await readBody(req)) || "{}");
         const clean = {};
         for (const f of FIELDS) clean[f] = String((body.profile || {})[f] || "").slice(0, f === "cv_text" ? 8000 : 600);
