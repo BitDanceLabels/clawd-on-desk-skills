@@ -2,7 +2,23 @@
 "use strict";
 const api = window.bumbeeProfile;
 const $ = (id) => document.getElementById(id);
-const FIELDS = ["profession", "passions", "books", "subjects", "facebook", "linkedin", "youtube", "website"];
+const FIELDS = ["profession", "passions", "books", "subjects", "facebook", "linkedin", "youtube", "website", "cv_link"];
+
+function setCvStatus(msg, ok) {
+  const s = $("cvStatus");
+  s.textContent = msg;
+  s.className = "status" + (ok ? " ok" : "");
+}
+
+function showCvResult(r) {
+  if (!r) return;
+  if (r.ok) {
+    const extra = r.note ? ` — ${r.note}` : (r.chars ? ` — đã trích ${r.chars} ký tự cho AI đọc` : "");
+    setCvStatus(`✓ Đã nhận "${r.name}"${extra}`, true);
+  } else if (r.reason !== "cancelled") {
+    setCvStatus(`✗ ${r.reason || "Không nhận được file"}`, false);
+  }
+}
 
 function setStatus(msg, ok) {
   const s = $("status");
@@ -13,10 +29,36 @@ function setStatus(msg, ok) {
 async function load() {
   try {
     const p = await api.get();
-    if (p && p.ok && p.profile) FIELDS.forEach((f) => { $(f).value = p.profile[f] || ""; });
+    if (p && p.ok && p.profile) {
+      FIELDS.forEach((f) => { $(f).value = p.profile[f] || ""; });
+      if (p.profile.cv_file) {
+        const chars = (p.profile.cv_text || "").length;
+        setCvStatus(`✓ CV hiện tại: ${p.profile.cv_file}${chars ? ` (${chars} ký tự đã trích)` : ""}`, true);
+      }
+    }
     if (p && p.lastCurate) setStatus(`Lần AI biên soạn gần nhất: ${String(p.lastCurate).slice(0, 10)}`, false);
   } catch {}
 }
+
+// ── CV: kéo thả hoặc bấm chọn file ──
+const dz = $("dropzone");
+dz.addEventListener("click", async () => {
+  setCvStatus("Đang mở hộp thoại chọn file…", false);
+  showCvResult(await api.pickFile());
+});
+dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.style.borderColor = "#f4c842"; dz.style.color = "#f4c842"; });
+dz.addEventListener("dragleave", () => { dz.style.borderColor = "rgba(244,200,66,.5)"; dz.style.color = ""; });
+dz.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  dz.style.borderColor = "rgba(244,200,66,.5)"; dz.style.color = "";
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) { setCvStatus("✗ Không nhận được file", false); return; }
+  setCvStatus(`Đang xử lý "${f.name}"…`, false);
+  showCvResult(await api.attachDropped(f));
+});
+// chặn trình duyệt mở file khi thả trượt ra ngoài dropzone
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => e.preventDefault());
 
 $("saveBtn").addEventListener("click", async () => {
   const profile = {};

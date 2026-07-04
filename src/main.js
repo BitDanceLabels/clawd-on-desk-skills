@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer, Notification } = require("electron");
+const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer, Notification, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -2372,9 +2372,47 @@ function profileSummary(profile) {
   if (profile.passions) parts.push(`Đam mê/sở thích: ${profile.passions}`);
   if (profile.books) parts.push(`Sách/thư viện thích: ${profile.books}`);
   if (profile.subjects) parts.push(`Chủ đề muốn giỏi: ${profile.subjects}`);
-  const links = ["facebook", "linkedin", "youtube", "website"].map((k) => profile[k]).filter(Boolean);
+  const links = ["facebook", "linkedin", "youtube", "website", "cv_link"].map((k) => profile[k]).filter(Boolean);
   if (links.length) parts.push(`Links: ${links.join(" ")}`);
+  if (profile.cv_text) parts.push(`NỘI DUNG CV:\n${String(profile.cv_text).slice(0, 2000)}`);
   return parts.join("\n");
+}
+
+// Nhận file CV (pdf/docx/txt/ảnh): copy vào userData, trích text để AI hiểu hồ sơ
+function processCvFile(filePath) {
+  const { execFileSync } = require("child_process");
+  if (!filePath || !fs.existsSync(filePath)) return { ok: false, reason: "Không thấy file" };
+  const ext = path.extname(filePath).toLowerCase();
+  const destDir = path.join(app.getPath("userData"), "profile-files");
+  fs.mkdirSync(destDir, { recursive: true });
+  const dest = path.join(destDir, `cv${ext}`);
+  fs.copyFileSync(filePath, dest);
+  let text = "";
+  let note = "";
+  try {
+    if ([".txt", ".md"].includes(ext)) {
+      text = fs.readFileSync(dest, "utf8");
+    } else if ([".docx", ".doc", ".rtf", ".html", ".htm"].includes(ext)) {
+      text = execFileSync("/usr/bin/textutil", ["-convert", "txt", "-stdout", dest], { timeout: 20000 }).toString();
+    } else if (ext === ".pdf") {
+      try {
+        text = execFileSync("pdftotext", [dest, "-"], { timeout: 20000, env: { ...process.env, PATH: process.env.PATH + ":/opt/homebrew/bin:/usr/local/bin" } }).toString();
+      } catch { note = "Không trích được chữ từ PDF (thiếu pdftotext) — đã lưu file."; }
+    } else if ([".png", ".jpg", ".jpeg", ".webp", ".heic"].includes(ext)) {
+      note = "Đã lưu ảnh CV. Bản trích chữ từ ảnh (OCR) sẽ bổ sung sau — anh có thể dán thêm nội dung chính vào ô Đam mê.";
+    } else {
+      note = `Định dạng ${ext} chưa hỗ trợ trích chữ — đã lưu file.`;
+    }
+  } catch (e) {
+    note = "Lỗi trích chữ: " + String(e && e.message || e).slice(0, 80);
+  }
+  text = String(text || "").replace(/\s+\n/g, "\n").trim().slice(0, 6000);
+  const db = readVocabDb();
+  db.settings.profile = db.settings.profile || {};
+  db.settings.profile.cv_file = path.basename(filePath);
+  if (text) db.settings.profile.cv_text = text;
+  writeVocabDb(db);
+  return { ok: true, name: path.basename(filePath), chars: text.length, note };
 }
 
 // AI đọc hồ sơ → soạn 8-10 từ/cụm giao tiếp chuyên nghiệp đúng lĩnh vực → addParsedTerms
@@ -3834,14 +3872,29 @@ function createWindow() {
   });
   ipcMain.handle("vocab-profile:save", (_event, profile = {}) => {
     const db = readVocabDb();
+    const prev = db.settings.profile || {};
     const clean = {};
-    for (const k of ["profession", "passions", "books", "subjects", "facebook", "linkedin", "youtube", "website"]) {
+    for (const k of ["profession", "passions", "books", "subjects", "facebook", "linkedin", "youtube", "website", "cv_link"]) {
       clean[k] = String(profile[k] || "").slice(0, 600);
     }
+    // giữ lại phần CV đã trích (không nằm trong form)
+    if (prev.cv_text) clean.cv_text = prev.cv_text;
+    if (prev.cv_file) clean.cv_file = prev.cv_file;
     db.settings.profile = clean;
     writeVocabDb(db);
     return { ok: true };
   });
+  // Đính kèm CV: qua hộp thoại chọn file hoặc đường dẫn file kéo-thả
+  ipcMain.handle("vocab-profile:pick-file", async () => {
+    const r = await dialog.showOpenDialog({
+      title: "Chọn file CV",
+      properties: ["openFile"],
+      filters: [{ name: "CV", extensions: ["pdf", "docx", "doc", "rtf", "txt", "md", "png", "jpg", "jpeg", "webp", "heic"] }],
+    });
+    if (r.canceled || !r.filePaths.length) return { ok: false, reason: "cancelled" };
+    return processCvFile(r.filePaths[0]);
+  });
+  ipcMain.handle("vocab-profile:attach-path", (_event, p) => processCvFile(String(p || "")));
   ipcMain.handle("vocab-profile:curate", () => runProfileCuration(true));
   ipcMain.handle("vocab-profile:close", () => {
     if (profileWin && !profileWin.isDestroyed()) profileWin.close();
