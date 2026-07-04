@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("bumbeeProfile", {
   curate: () => ipcRenderer.invoke("vocab-profile:curate"),
   close: () => ipcRenderer.invoke("vocab-profile:close"),
   pickFile: () => ipcRenderer.invoke("vocab-profile:pick-file"),
+  onRefresh: (cb) => ipcRenderer.on("profile-refresh", () => { try { cb(); } catch {} }),
   // File kéo-thả: Electron mới bỏ file.path — phải lấy qua webUtils trong preload
   attachDropped: (file) => {
     try {

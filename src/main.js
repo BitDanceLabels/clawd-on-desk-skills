@@ -148,7 +148,7 @@ function savePrefs() {
     rabbitIntervalMin: _rabbit ? _rabbit.getIntervalMin() : rabbitIntervalMin,
     characterSkin,
     vocabAutoChallenge, vocabChallengeIntervalMin, vocabReverseMode,
-    vocabGameType, challengeWinPos,
+    vocabGameType, challengeWinPos, profileSyncKey,
     vocabAutoSource, vocabAutoSourceIntervalSec,
   };
   try { fs.writeFileSync(PREFS_PATH, JSON.stringify(data)); } catch {}
@@ -2346,8 +2346,59 @@ function addParsedTerms(parsed, source) {
 // ── Hồ sơ đam mê: AI hiểu user → định kỳ biên soạn từ vựng đúng lĩnh vực ────
 let profileWin = null;
 let _profileCurating = false;
+// Đồng bộ hồ sơ với web form (gateway.bumbee.asia/bumbee-os) qua private key
+const PROFILE_SYNC_BASE = process.env.BUMBEE_OS_PROFILE_URL || "https://gateway.bumbee.asia/bumbee-os";
+let profileSyncKey = null; // persist trong clawd-prefs.json
+
+function ensureProfileSyncKey() {
+  if (!profileSyncKey) {
+    profileSyncKey = require("crypto").randomBytes(16).toString("hex");
+    try { savePrefs(); } catch {}
+  }
+  return profileSyncKey;
+}
+
+function profileSyncUrl() {
+  return `${PROFILE_SYNC_BASE}/?key=${ensureProfileSyncKey()}`;
+}
+
+// Web mới hơn thì kéo về local (so updated_at)
+async function pullProfileFromWeb() {
+  const key = ensureProfileSyncKey();
+  const r = await fetch(`${PROFILE_SYNC_BASE}/api/profile?key=${key}`, { signal: AbortSignal.timeout(6000) });
+  const d = await r.json();
+  if (!d || !d.ok || !d.updated_at) return false;
+  const db = readVocabDb();
+  const localAt = db.settings.profile_updated_at || "1970";
+  if (String(d.updated_at) <= String(localAt)) return false;
+  const prev = db.settings.profile || {};
+  const merged = { ...prev, ...d.profile };
+  if (!merged.cv_text && prev.cv_text) merged.cv_text = prev.cv_text; // đừng mất CV đã trích local
+  db.settings.profile = merged;
+  db.settings.profile_updated_at = d.updated_at;
+  writeVocabDb(db);
+  return true;
+}
+
+// Local đổi thì đẩy lên web (fire-and-forget)
+function pushProfileToWeb() {
+  const key = ensureProfileSyncKey();
+  const db = readVocabDb();
+  fetch(`${PROFILE_SYNC_BASE}/api/profile?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ profile: db.settings.profile || {} }),
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => {});
+}
 
 function openVocabProfile() {
+  // kéo bản mới từ web (nếu có) rồi báo cửa sổ reload dữ liệu
+  pullProfileFromWeb().then((changed) => {
+    if (changed && profileWin && !profileWin.isDestroyed()) {
+      try { profileWin.webContents.send("profile-refresh"); } catch {}
+    }
+  }).catch(() => {});
   if (profileWin && !profileWin.isDestroyed()) { profileWin.show(); return; }
   const wa = screen.getPrimaryDisplay().workArea;
   profileWin = new BrowserWindow({
@@ -2411,7 +2462,9 @@ function processCvFile(filePath) {
   db.settings.profile = db.settings.profile || {};
   db.settings.profile.cv_file = path.basename(filePath);
   if (text) db.settings.profile.cv_text = text;
+  db.settings.profile_updated_at = new Date().toISOString();
   writeVocabDb(db);
+  pushProfileToWeb();
   return { ok: true, name: path.basename(filePath), chars: text.length, note };
 }
 
@@ -3522,6 +3575,9 @@ function createWindow() {
   if (prefs && prefs.challengeWinPos && Number.isFinite(prefs.challengeWinPos.x) && Number.isFinite(prefs.challengeWinPos.y)) {
     challengeWinPos = { x: prefs.challengeWinPos.x, y: prefs.challengeWinPos.y };
   }
+  if (prefs && typeof prefs.profileSyncKey === "string" && /^[a-f0-9]{24,64}$/.test(prefs.profileSyncKey)) {
+    profileSyncKey = prefs.profileSyncKey;
+  }
   if (prefs && typeof prefs.vocabAutoSource === "boolean") vocabAutoSource = prefs.vocabAutoSource;
   if (prefs && Number.isFinite(prefs.vocabAutoSourceIntervalSec)) {
     vocabAutoSourceIntervalSec = Math.max(15, Math.min(600, prefs.vocabAutoSourceIntervalSec));
@@ -3868,7 +3924,7 @@ function createWindow() {
   ipcMain.on("open-vocab-profile", () => openVocabProfile());
   ipcMain.handle("vocab-profile:get", () => {
     const db = readVocabDb();
-    return { ok: true, profile: db.settings.profile || {}, lastCurate: db.last_profile_curate || null };
+    return { ok: true, profile: db.settings.profile || {}, lastCurate: db.last_profile_curate || null, syncUrl: profileSyncUrl() };
   });
   ipcMain.handle("vocab-profile:save", (_event, profile = {}) => {
     const db = readVocabDb();
@@ -3881,7 +3937,9 @@ function createWindow() {
     if (prev.cv_text) clean.cv_text = prev.cv_text;
     if (prev.cv_file) clean.cv_file = prev.cv_file;
     db.settings.profile = clean;
+    db.settings.profile_updated_at = new Date().toISOString();
     writeVocabDb(db);
+    pushProfileToWeb();
     return { ok: true };
   });
   // Đính kèm CV: qua hộp thoại chọn file hoặc đường dẫn file kéo-thả

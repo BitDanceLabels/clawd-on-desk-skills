@@ -37,8 +37,20 @@ async function load() {
       }
     }
     if (p && p.lastCurate) setStatus(`Lần AI biên soạn gần nhất: ${String(p.lastCurate).slice(0, 10)}`, false);
+    if (p && p.syncUrl) {
+      let box = document.getElementById("syncBox");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "syncBox";
+        box.className = "status";
+        box.style.wordBreak = "break-all";
+        document.querySelector(".card").appendChild(box);
+      }
+      box.textContent = "🌐 Sửa hồ sơ từ web (điện thoại/máy khác) — tự đồng bộ: " + p.syncUrl;
+    }
   } catch {}
 }
+if (api.onRefresh) api.onRefresh(load); // web có bản mới → nạp lại form
 
 // ── CV: kéo thả hoặc bấm chọn file ──
 const dz = $("dropzone");
