@@ -333,12 +333,14 @@ el.suggSpeak.addEventListener("click", () => { if (suggPhrase) speak(suggPhrase)
 el.suggNext.addEventListener("click", loadSuggestion);
 document.getElementById("profileBtn").addEventListener("click", () => api.openProfile());
 
-// ── Kéo thả cửa sổ: fallback JS khi -webkit-app-region không hoạt động ──
-// (nếu native drag ăn thì mousedown không bao giờ tới đây — hai cơ chế không đụng nhau)
+// ── Kéo thả cửa sổ: CHỈ khi bấm vào thanh trên cùng (.top) ──
+// Quan trọng: không bắt chuột ở vùng nội dung, nếu không sẽ nuốt mất thao tác scroll.
 let dragMove = false, dragLX = 0, dragLY = 0;
 document.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
-  if (e.target.closest("button, input, select, label, .choice, .wchoice, .speak, .btn, .x")) return;
+  const top = e.target.closest(".top");
+  if (!top) return; // chỉ kéo từ thanh tiêu đề
+  if (e.target.closest(".x")) return; // trừ nút đóng
   dragMove = true; dragLX = e.screenX; dragLY = e.screenY;
 });
 window.addEventListener("mousemove", (e) => {

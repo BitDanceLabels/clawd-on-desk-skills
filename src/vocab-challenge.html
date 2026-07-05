@@ -39,10 +39,13 @@
     overscroll-behavior: contain;
     scrollbar-color: rgba(147, 161, 181, .55) transparent;
     animation: pop .18s ease;
-    -webkit-app-region: drag; /* nắm chỗ trống nào trên card cũng kéo được */
+    /* KHÔNG để cả card là vùng kéo — nếu không sẽ nuốt mất thao tác scroll.
+       Chỉ thanh .top mới kéo được (xem bên dưới). */
   }
-  /* mọi thứ bấm được thì không nằm trong vùng kéo */
-  button, input, select, label, .choice, .wchoice, .speak, .btn { -webkit-app-region: no-drag; }
+  /* thanh cuộn luôn hiện rõ để không bị che chữ */
+  .card::-webkit-scrollbar { width: 10px; }
+  .card::-webkit-scrollbar-thumb { background: rgba(147,161,181,.5); border-radius: 6px; }
+  .card::-webkit-scrollbar-track { background: transparent; }
   @keyframes pop { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
   /* Thanh trên cùng = vùng kéo thả cửa sổ */
   .top {
