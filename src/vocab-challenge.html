@@ -39,9 +39,11 @@
     overscroll-behavior: contain;
     scrollbar-color: rgba(147, 161, 181, .55) transparent;
     animation: pop .18s ease;
-    /* KHÔNG để cả card là vùng kéo — nếu không sẽ nuốt mất thao tác scroll.
-       Chỉ thanh .top mới kéo được (xem bên dưới). */
+    /* Viền + khoảng trống của thẻ = vùng kéo cửa sổ.
+       Nội dung (con của .card) = no-drag để scroll/bấm bình thường. */
+    -webkit-app-region: drag;
   }
+  .card > * { -webkit-app-region: no-drag; }
   /* thanh cuộn luôn hiện rõ để không bị che chữ */
   .card::-webkit-scrollbar { width: 10px; }
   .card::-webkit-scrollbar-thumb { background: rgba(147,161,181,.5); border-radius: 6px; }

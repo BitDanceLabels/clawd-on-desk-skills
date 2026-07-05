@@ -338,9 +338,11 @@ document.getElementById("profileBtn").addEventListener("click", () => api.openPr
 let dragMove = false, dragLX = 0, dragLY = 0;
 document.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
-  const top = e.target.closest(".top");
-  if (!top) return; // chỉ kéo từ thanh tiêu đề
-  if (e.target.closest(".x")) return; // trừ nút đóng
+  // Chỉ kéo khi bấm trúng NỀN thẻ (viền/khoảng trống) hoặc thanh .top —
+  // KHÔNG kéo khi bấm trúng nội dung (để scroll/bấm/chọn hoạt động).
+  const onFrame = (e.target === el.card) || !!e.target.closest(".top");
+  if (!onFrame) return;
+  if (e.target.closest(".x, button, input, select")) return;
   dragMove = true; dragLX = e.screenX; dragLY = e.screenY;
 });
 window.addEventListener("mousemove", (e) => {
