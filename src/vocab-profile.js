@@ -56,6 +56,7 @@ async function load() {
         setCvStatus(`✓ CV hiện tại: ${p.profile.cv_file}${chars ? ` (${chars} ký tự đã trích)` : ""}`, true);
       }
     }
+    if (p && p.telegramUrl) _telegramUrl = p.telegramUrl;
     if (p && p.misskeyConnected) {
       setMsk(`✓ Đang kết nối bumbee.asia: @${p.misskeyUser}`, true);
       $("resyncBtn").style.display = "block";
@@ -166,6 +167,9 @@ function setMsk(msg, ok) {
   s.textContent = msg;
   s.className = "status" + (ok ? " ok" : "");
 }
+
+let _telegramUrl = "";
+$("tgBtn").addEventListener("click", () => { if (_telegramUrl && api.openUrl) api.openUrl(_telegramUrl); });
 
 $("closeBtn").addEventListener("click", () => api.close());
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") api.close(); });

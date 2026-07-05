@@ -3999,8 +3999,15 @@ function createWindow() {
     const p = db.settings.profile || {};
     return {
       ok: true, profile: p, lastCurate: db.last_profile_curate || null, syncUrl: profileSyncUrl(),
+      telegramUrl: `${PROFILE_SYNC_BASE}/telegram?key=${ensureProfileSyncKey()}`,
       misskeyUser: p.misskey_user || "", misskeyConnected: !!p.misskey_token, misskeyBase: MISSKEY_BASE,
     };
+  });
+  ipcMain.handle("vocab-profile:open-url", (_event, url) => {
+    const u = String(url || "");
+    if (!/^https:\/\/(gateway\.)?bumbee\.asia\//.test(u)) return { ok: false };
+    require("electron").shell.openExternal(u);
+    return { ok: true };
   });
   ipcMain.handle("vocab-profile:save", (_event, profile = {}) => {
     const db = readVocabDb();
