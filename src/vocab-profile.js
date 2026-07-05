@@ -4,6 +4,26 @@ const api = window.bumbeeProfile;
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["profession", "passions", "books", "subjects", "facebook", "linkedin", "youtube", "website", "cv_link"];
 
+// ── Kéo cửa sổ: chỉ khi bấm trúng nền thẻ (viền/khoảng trống) hoặc thanh .top ──
+(function () {
+  const card = $("card");
+  let dragging = false, lx = 0, ly = 0;
+  document.addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || !api.moveBy) return;
+    const onFrame = (e.target === card) || !!e.target.closest(".top");
+    if (!onFrame) return;
+    if (e.target.closest("#closeBtn, button, input, textarea, select")) return;
+    dragging = true; lx = e.screenX; ly = e.screenY;
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const dx = e.screenX - lx, dy = e.screenY - ly;
+    if (dx || dy) { api.moveBy(dx, dy); lx = e.screenX; ly = e.screenY; }
+  });
+  window.addEventListener("mouseup", () => { dragging = false; });
+  window.addEventListener("blur", () => { dragging = false; });
+})();
+
 function setCvStatus(msg, ok) {
   const s = $("cvStatus");
   s.textContent = msg;

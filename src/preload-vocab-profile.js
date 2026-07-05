@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("bumbeeProfile", {
   connectMisskey: (token) => ipcRenderer.invoke("vocab-profile:connect-misskey", token),
   loginMisskey: () => ipcRenderer.invoke("vocab-profile:login-misskey"),
   resyncMisskey: () => ipcRenderer.invoke("vocab-profile:resync-misskey"),
+  moveBy: (dx, dy) => ipcRenderer.send("vocab-profile:move-by", { dx, dy }),
   // File kéo-thả: Electron mới bỏ file.path — phải lấy qua webUtils trong preload
   attachDropped: (file) => {
     try {

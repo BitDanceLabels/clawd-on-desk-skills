@@ -4044,6 +4044,13 @@ function createWindow() {
     if (profileWin && !profileWin.isDestroyed()) profileWin.close();
     return { ok: true };
   });
+  ipcMain.on("vocab-profile:move-by", (_event, d = {}) => {
+    if (!profileWin || profileWin.isDestroyed()) return;
+    const dx = Math.round(Number(d.dx) || 0), dy = Math.round(Number(d.dy) || 0);
+    if (!dx && !dy) return;
+    const [x, y] = profileWin.getPosition();
+    profileWin.setPosition(x + dx, y + dy);
+  });
   // User types an unknown word/phrase in the popup → AI enriches it into the vocab db.
   // Bản nháp dài/nhiều từ → AI bóc tách từng từ đáng học + tạo thẻ câu chú giải nghĩa VI.
   ipcMain.handle("vocab-challenge:add", async (_event, payload = {}) => {
