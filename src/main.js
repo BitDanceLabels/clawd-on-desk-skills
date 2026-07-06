@@ -1578,6 +1578,7 @@ async function addVocabItems(payload) {
     items.push(item);
   }
   writeVocabDb(db);
+  if (created.length) scheduleTmaSync();
   return { ok: true, created, items, total: db.words.length, db };
 }
 
@@ -2341,6 +2342,95 @@ function addParsedTerms(parsed, source) {
     }
   });
   return { created, total: readVocabDb().words.length };
+}
+
+// ── Đồng bộ kho từ vựng với Telegram bot (TMA) qua profileSyncKey ───────────
+// 2 chiều trong 1 round-trip: đẩy toàn bộ kho local lên, server gộp với kho
+// Telegram (theo term, tiến độ SRS giữ bản học nhiều hơn) rồi trả kho đã gộp.
+// Liên kết 1 lần: gửi "/lienket <profileSyncKey>" cho bot Telegram.
+const VOCAB_TMA_SYNC_URL = process.env.BUMBEE_APP_SYNC_URL || "https://gateway.bumbee.asia/bumbee-app/api/desk-sync";
+let _vocabTmaSyncing = false;
+let _vocabTmaSyncTimer = null;
+
+function mergeVocabLists(base, incoming) {
+  const byTerm = new Map();
+  for (const w of base) {
+    const t = String(w?.term || "").trim().toLowerCase();
+    if (t) byTerm.set(t, w);
+  }
+  for (const inc of incoming) {
+    if (!inc || typeof inc !== "object") continue;
+    const t = String(inc.term || "").trim().toLowerCase();
+    if (!t || t.length > 90) continue;
+    const cur = byTerm.get(t);
+    if (!cur) { byTerm.set(t, inc); continue; }
+    const incBetter = (inc.review_count || 0) > (cur.review_count || 0) ||
+      ((inc.review_count || 0) === (cur.review_count || 0) &&
+        String(inc.last_reviewed || inc.updated_at || "") > String(cur.last_reviewed || cur.updated_at || ""));
+    const keep = incBetter ? { ...inc } : { ...cur };
+    const other = incBetter ? cur : inc;
+    keep.id = cur.id; // giữ id local để cửa sổ game đang mở không gãy
+    const kl = keep.lesson || {}, ol = other.lesson || {};
+    keep.lesson = { ...ol, ...kl };
+    for (const f of ["meaning_vi", "meaning_en", "pronunciation"]) if (!kl[f] && ol[f]) keep.lesson[f] = ol[f];
+    byTerm.set(t, keep);
+  }
+  return [...byTerm.values()];
+}
+
+async function syncVocabWithTma() {
+  if (_vocabTmaSyncing) return { ok: false, reason: "busy" };
+  _vocabTmaSyncing = true;
+  try {
+    const db = readVocabDb();
+    const r = await fetch(VOCAB_TMA_SYNC_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key: ensureProfileSyncKey(), words: db.words || [] }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const d = await r.json();
+    if (!d || !d.ok || !Array.isArray(d.words)) return { ok: false, reason: (d && d.reason) || "sync_failed" };
+    const fresh = readVocabDb(); // đọc lại: không đè thay đổi phát sinh trong lúc chờ mạng
+    const before = (fresh.words || []).length;
+    fresh.words = mergeVocabLists(fresh.words || [], d.words)
+      .map((w) => normalizeStoredVocabItem(w, fresh.settings));
+    writeVocabDb(fresh);
+    return { ok: true, total: fresh.words.length, added: fresh.words.length - before };
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  } finally {
+    _vocabTmaSyncing = false;
+  }
+}
+
+// Gọi sau khi kho từ đổi (thêm từ) — gom nhiều thay đổi thành 1 lần sync
+function scheduleTmaSync(delayMs = 20000) {
+  if (_vocabTmaSyncTimer) clearTimeout(_vocabTmaSyncTimer);
+  _vocabTmaSyncTimer = setTimeout(() => {
+    _vocabTmaSyncTimer = null;
+    syncVocabWithTma().catch(() => {});
+  }, delayMs);
+}
+
+async function syncVocabTmaInteractive() {
+  const r = await syncVocabWithTma();
+  if (r.ok) {
+    dialog.showMessageBox({
+      type: "info", title: "Bumbee English",
+      message: `Đồng bộ xong! Kho từ hiện có ${r.total} từ` + (r.added > 0 ? ` (+${r.added} từ mới kéo về từ Telegram).` : "."),
+    });
+  } else if (r.reason === "not_linked" || r.reason === "bad_key") {
+    const key = ensureProfileSyncKey();
+    try { require("electron").clipboard.writeText(`/lienket ${key}`); } catch {}
+    dialog.showMessageBox({
+      type: "warning", title: "Bumbee English",
+      message: "Chưa liên kết với bot Telegram.",
+      detail: `Mở bot Telegram và gửi tin nhắn:\n\n/lienket ${key}\n\n(đã copy sẵn vào clipboard — chỉ cần dán vào chat bot rồi bấm đồng bộ lại)`,
+    });
+  } else if (r.reason !== "busy") {
+    dialog.showMessageBox({ type: "warning", title: "Bumbee English", message: "Đồng bộ thất bại: " + r.reason });
+  }
 }
 
 // ── Hồ sơ đam mê: AI hiểu user → định kỳ biên soạn từ vựng đúng lĩnh vực ────
@@ -3563,6 +3653,7 @@ const _menuCtx = {
   getVocabAutoSource: () => vocabAutoSource,
   setVocabAutoSource: (v) => setVocabAutoSource(!!v),
   grabVocabClipboard: () => ensureAutoSource().grabClipboard(true),
+  syncVocabTma: () => { syncVocabTmaInteractive().catch(() => {}); },
   openBumbeePhaseHub: openPhaseHub,
   openBumbeeOs,
   visionCaptureRunning: () => _visionCapture.isRunning(),
@@ -4535,6 +4626,10 @@ if (!gotTheLock) {
 
     // Start vocab auto-challenge scheduler (pops only if user enabled it)
     startChallengeScheduler();
+
+    // Đồng bộ từ vựng với Telegram bot: sau khi mở 15s + mỗi 30 phút
+    setTimeout(() => syncVocabWithTma().catch(() => {}), 15000);
+    setInterval(() => syncVocabWithTma().catch(() => {}), 30 * 60 * 1000);
 
     // Start vocab auto-source watcher (mines clipboard only if user enabled it)
     ensureAutoSource().start();

@@ -122,6 +122,7 @@ const i18n = {
     bumbeeAutoChallenge: "🎯 Tự động nảy game học",
     bumbeeAutoSource: "Auto-mine vocab from clipboard 📋",
     bumbeeGrabClipboard: "Mine clipboard now",
+    bumbeeSyncTma: "🔄 Đồng bộ từ vựng với Telegram",
     bumbeeOpenPhaseHub: "Open Phase Hub…",
     bumbeeStatus: "Connection Status…",
     bumbeeReloadSkills: "Reload Skills ({n})",
@@ -201,6 +202,7 @@ const i18n = {
     bumbeeAutoChallenge: "自动弹出挑战 🎯",
     bumbeeAutoSource: "从剪贴板自动挖词 📋",
     bumbeeGrabClipboard: "立即挖取剪贴板",
+    bumbeeSyncTma: "同步词汇到 Telegram 🔄",
     bumbeeOpenOs: "打开 Bumbee OS…",
     bumbeeOpenPhaseHub: "打开 Phase Hub…",
     bumbeeStatus: "连接状态…",
@@ -443,6 +445,11 @@ module.exports = function initMenu(ctx) {
         label: t("bumbeeGrabClipboard"),
         enabled: typeof ctx.grabVocabClipboard === "function",
         click: () => { try { ctx.grabVocabClipboard && ctx.grabVocabClipboard(); } catch {} },
+      },
+      {
+        label: t("bumbeeSyncTma"),
+        enabled: typeof ctx.syncVocabTma === "function",
+        click: () => { try { ctx.syncVocabTma && ctx.syncVocabTma(); } catch {} },
       },
       {
         label: t("bumbeeOpenPhaseHub"),
