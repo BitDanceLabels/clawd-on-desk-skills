@@ -117,6 +117,7 @@ const i18n = {
     bumbee: "Bumbee Hub",
     bumbeeOpenChat: "💬 Mở Bumbee Chat…",
     bumbeeOpenOs: "🐝 Mở Bumbee OS…",
+    bumbeeOpenDashboard: "📊 Dashboard điều hành…",
     bumbeeOpenVocab: "📇 Lướt thẻ từ vựng…",
     bumbeeOpenChallenge: "🎮 Chơi game từ vựng (bật lại)…",
     bumbeeAutoChallenge: "🎯 Tự động nảy game học",
@@ -204,6 +205,7 @@ const i18n = {
     bumbeeGrabClipboard: "立即挖取剪贴板",
     bumbeeSyncTma: "同步词汇到 Telegram 🔄",
     bumbeeOpenOs: "打开 Bumbee OS…",
+    bumbeeOpenDashboard: "打开经营仪表盘…",
     bumbeeOpenPhaseHub: "打开 Phase Hub…",
     bumbeeStatus: "连接状态…",
     bumbeeReloadSkills: "重载技能 ({n})",
@@ -410,6 +412,13 @@ module.exports = function initMenu(ctx) {
         enabled: typeof ctx.openBumbeeOs === "function",
         click: () => {
           if (ctx.openBumbeeOs) ctx.openBumbeeOs();
+        },
+      },
+      {
+        label: t("bumbeeOpenDashboard"),
+        enabled: typeof ctx.openBumbeeDashboard === "function",
+        click: () => {
+          if (ctx.openBumbeeDashboard) ctx.openBumbeeDashboard();
         },
       },
       {

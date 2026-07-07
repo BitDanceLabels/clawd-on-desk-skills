@@ -179,6 +179,7 @@ let vocabWin;
 let challengeWin;  // auto-pop vocab challenge popup
 let phaseHubWin;
 let bumbeeOsWin;
+let bumbeeDashboardWin;
 let donationSettingsWin;
 let sceneViewerWin;
 let chatAutoHideTimer = null;
@@ -2940,6 +2941,38 @@ function openBumbeeOs() {
   });
 }
 
+function openBumbeeDashboard() {
+  if (bumbeeDashboardWin && !bumbeeDashboardWin.isDestroyed()) {
+    bumbeeDashboardWin.show();
+    bumbeeDashboardWin.focus();
+    return;
+  }
+
+  const primary = screen.getPrimaryDisplay().workArea;
+  bumbeeDashboardWin = new BrowserWindow({
+    width: Math.min(1120, Math.max(880, primary.width - 140)),
+    height: Math.min(820, Math.max(640, primary.height - 140)),
+    minWidth: 780,
+    minHeight: 560,
+    title: "Dashboard điều hành",
+    show: false,
+    backgroundColor: "#F1EEEA",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  bumbeeDashboardWin.loadFile(path.join(__dirname, "bumbee-dashboard.html"));
+  bumbeeDashboardWin.once("ready-to-show", () => {
+    if (bumbeeDashboardWin && !bumbeeDashboardWin.isDestroyed()) bumbeeDashboardWin.show();
+  });
+  bumbeeDashboardWin.on("closed", () => {
+    bumbeeDashboardWin = null;
+  });
+}
+
 function openSceneViewer() {
   if (sceneViewerWin && !sceneViewerWin.isDestroyed()) {
     sceneViewerWin.show();
@@ -3656,6 +3689,7 @@ const _menuCtx = {
   syncVocabTma: () => { syncVocabTmaInteractive().catch(() => {}); },
   openBumbeePhaseHub: openPhaseHub,
   openBumbeeOs,
+  openBumbeeDashboard,
   visionCaptureRunning: () => _visionCapture.isRunning(),
   toggleVisionCapture: () => {
     if (_visionCapture.isRunning()) _visionCapture.stop();

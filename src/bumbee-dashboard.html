@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BitDanceLabels — Dashboard điều hành</title>
+</head>
+<body>
+<style>
+:root{
+  --plum:#714B67; --plum-d:#5e3f56; --teal:#017E84; --bg:#F1EEEA; --card:#FFFFFF;
+  --ink:#111827; --mut:#6B7280; --line:#E5E1DB; --ok:#2E7D32; --warn:#B45309; --bad:#B91C1C;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;padding-bottom:48px}
+.intro{max-width:1060px;margin:20px auto 8px;padding:0 16px}
+.intro h1{font-size:19px;font-weight:600;margin:0 0 4px}
+.intro p{color:var(--mut);margin:0;font-size:13.5px}
+.tag{display:inline-block;background:var(--plum);color:#fff;border-radius:4px;font-size:11.5px;font-weight:600;padding:2px 8px;vertical-align:middle;margin-left:6px}
+.screen{max-width:1060px;margin:20px auto;padding:0 16px}
+.cap{font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 0 8px;font-weight:600}
+.frame{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.onav{background:var(--plum);color:#fff;display:flex;align-items:center;gap:2px;padding:0 12px;height:44px;font-size:13.5px;flex-wrap:wrap}
+.onav .grid9{width:16px;height:16px;display:inline-grid;grid-template-columns:repeat(3,4px);gap:1.5px;margin-right:10px}
+.onav .grid9 i{background:#fff;opacity:.9;border-radius:1px;width:4px;height:4px}
+.onav .app{font-weight:600;margin-right:14px}
+.onav a{color:#fff;text-decoration:none;opacity:.85;padding:12px 10px}
+.onav a.on{opacity:1;border-bottom:3px solid #fff;padding-bottom:9px;font-weight:600}
+.onav .sp{flex:1}
+.onav .avatar{background:var(--teal);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+.ctl{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.btn{background:var(--plum);color:#fff;border:0;border-radius:6px;padding:7px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--plum-d)}
+.btn:focus-visible,.facet button:focus-visible,.srch input:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.crumb{font-size:15px;font-weight:600}
+.srch{flex:1;min-width:200px;display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:5px 10px;background:#FBFAF8}
+.srch input{border:0;background:none;flex:1;font-size:13.5px;outline-offset:2px;min-width:80px}
+.facet{display:inline-flex;align-items:center;gap:4px;background:#EDE7EB;color:var(--plum);border-radius:4px;font-size:12px;font-weight:600;padding:2px 6px}
+.facet button{border:0;background:none;color:var(--plum);cursor:pointer;font-size:12px;padding:0}
+.pager{color:var(--mut);font-size:12.5px;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;color:var(--mut);font-weight:600;font-size:12.5px;padding:8px 12px;border-bottom:1px solid var(--line);background:#FBFAF8;white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid #F0EDE8;vertical-align:middle}
+tbody tr:hover{background:#F7F4F1}
+tr:last-child td{border-bottom:0}
+.sku{font-family:var(--mono);font-size:12.5px;color:var(--mut)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.badge{display:inline-block;border-radius:99px;font-size:11.5px;font-weight:600;padding:2px 10px;border:1px solid}
+.b-ok{color:var(--ok);border-color:#A5D6A7;background:#EDF7EE}
+.b-warn{color:var(--warn);border-color:#FCD34D;background:#FEF7E6}
+.b-bad{color:var(--bad);border-color:#FCA5A5;background:#FDEEEE}
+.b-mut{color:var(--mut);border-color:var(--line);background:#F6F4F1}
+.tagm{display:inline-block;background:#EDE7EB;color:var(--plum);border-radius:4px;font-size:11.5px;font-weight:600;padding:2px 8px}
+.kwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;padding:14px}
+.kcard{border:1px solid var(--line);border-radius:8px;padding:12px;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.kcard .t{font-weight:600;font-size:13.5px}
+.kcard .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:24px;font-weight:600;margin:2px 0}
+.kcard .s{font-size:12.5px;color:var(--mut)}
+.chart{padding:0 14px 16px}
+.chart .bars{display:flex;align-items:flex-end;gap:26px;height:120px;padding:10px 6px 0}
+.chart .b{width:52px;background:var(--plum);border-radius:3px 3px 0 0;position:relative}
+.chart .b.t2{background:var(--teal)}
+.chart .b span{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:11.5px;font-family:var(--mono);white-space:nowrap}
+.chart .lbls{display:flex;gap:26px;padding:6px 6px 0;border-top:1px solid var(--line);margin-top:0}
+.chart .lbls div{width:52px;font-size:11.5px;color:var(--mut);text-align:center}
+.form{display:grid;grid-template-columns:1.1fr .9fr;gap:0}
+@media(max-width:760px){.form{grid-template-columns:1fr}}
+.fmain{padding:16px 18px}
+.fmain h3{margin:0 0 2px;font-size:19px;font-weight:600}
+.fmain .ph{font-family:var(--mono);color:var(--teal);font-weight:600}
+.frow{display:grid;grid-template-columns:130px 1fr;gap:6px;font-size:13.5px;margin-top:10px}
+.frow dt{color:var(--mut)} .frow dd{margin:0}
+.chatter{border-left:1px solid var(--line);padding:16px 18px;background:#FBFAF8}
+.chatter h4{margin:0 0 10px;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.msg{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:8px}
+.msg .m{color:var(--mut);font-size:11.5px}
+.note{max-width:1060px;margin:8px auto 0;padding:0 16px;color:var(--mut);font-size:13px}
+</style>
+
+<div class="intro">
+  <h1>Dashboard điều hành trên nền Odoo <span class="tag">BẢN DEMO — mô phỏng giao diện Odoo, số liệu giả lập</span></h1>
+  <p>Đây là 3 màn hình cậu sẽ thấy thật trên bitdancegroup Odoo sau khi đồng bộ kho. Cái chỉnh được: tên menu, cột hiển thị, trường trong phiếu, bộ lọc, khối dashboard. Cái Odoo cố định: khung layout, màu tổng thể (có sẵn chế độ tối).</p>
+</div>
+
+<div class="screen">
+  <p class="cap">Màn hình 1 — Tổng quan (app Dashboard của Odoo)</p>
+  <div class="frame">
+    <div class="onav">
+      <span class="grid9" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="app">Bumbee Điều hành</span>
+      <a class="on" href="#" onclick="return false">Tổng quan</a><a href="#" onclick="return false">Kho hàng</a><a href="#" onclick="return false">CRM</a><a href="#" onclick="return false">Kênh</a><a href="#" onclick="return false">Báo cáo</a>
+      <span class="sp"></span><span class="avatar">N</span>
+    </div>
+    <div class="kwrap">
+      <div class="kcard"><div class="t">Doanh thu tháng 7</div><div class="v">12.500.000₫</div><div class="s">▲ 18% so tháng 6</div></div>
+      <div class="kcard"><div class="t">Lead trong phễu</div><div class="v">7</div><div class="s">2 lead treo &gt; 2 ngày</div></div>
+      <div class="kcard"><div class="t">Sản phẩm trong kho</div><div class="v">6</div><div class="s">3 phiếu chưa chốt giá</div></div>
+      <div class="kcard"><div class="t">Người đã chạm luỹ kế</div><div class="v">18.420</div><div class="s">mục tiêu 7.000.000</div></div>
+    </div>
+    <div class="chart">
+      <p class="cap" style="padding-left:6px">Doanh thu theo dự án (₫, tháng 7)</p>
+      <div class="bars">
+        <div class="b" style="height:100px"><span>9,5tr</span></div>
+        <div class="b t2" style="height:32px"><span>3tr</span></div>
+        <div class="b t2" style="height:1px"><span>0</span></div>
+        <div class="b t2" style="height:1px"><span>0</span></div>
+      </div>
+      <div class="lbls"><div>Nhạc</div><div>Đào tạo</div><div>Bumbee OS</div><div>AdSense</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="screen">
+  <p class="cap">Màn hình 2 — Kho hàng (app Inventory, list view + trường tuỳ chỉnh)</p>
+  <div class="frame">
+    <div class="ctl">
+      <button class="btn">Mới</button>
+      <span class="crumb">Sản phẩm</span>
+      <div class="srch"><span aria-hidden="true">🔍</span><span class="facet">Loại: Tất cả <button aria-label="Xoá bộ lọc">✕</button></span><input id="pf" placeholder="Tìm SKU, tên, trạng thái…" aria-label="Tìm sản phẩm"></div>
+      <span class="pager" id="pgr">1-6 / 6</span>
+    </div>
+    <table id="pt">
+      <thead><tr><th>SKU</th><th>Sản phẩm</th><th>Loại</th><th>Trạng thái</th><th>QA</th><th style="text-align:right">Giá bán</th><th>Bài PR</th></tr></thead>
+      <tbody>
+      <tr><td class="sku">MUS-001</td><td>3 Không</td><td><span class="tagm">Nhạc</span></td><td><span class="badge b-ok">Nhập kho</span></td><td class="sku">1/5</td><td class="num"><span class="badge b-bad">chưa chốt</span></td><td class="sku">❓</td></tr>
+      <tr><td class="sku">MUS-002</td><td>Em Là Bài Hát Của Anh</td><td><span class="tagm">Nhạc</span></td><td><span class="badge b-ok">Nhập kho</span></td><td class="sku">1/5</td><td class="num"><span class="badge b-bad">chưa chốt</span></td><td class="sku">❓</td></tr>
+      <tr><td class="sku">MUS-003</td><td>Nơi Tình Yêu Đón Chờ</td><td><span class="tagm">Nhạc</span></td><td><span class="badge b-ok">Nhập kho</span></td><td class="sku">1/5</td><td class="num"><span class="badge b-bad">chưa chốt</span></td><td class="sku">❓</td></tr>
+      <tr><td class="sku">SW-001</td><td>Skill làm Podcast</td><td><span class="tagm">Skill</span></td><td><span class="badge b-warn">Demo OK</span></td><td class="sku">3/4</td><td class="num">1.500.000₫/th</td><td class="sku">✅</td></tr>
+      <tr><td class="sku">SW-002</td><td>Skill MV AI + visuals</td><td><span class="tagm">Skill</span></td><td><span class="badge b-warn">Demo OK</span></td><td class="sku">3/4</td><td class="num">2.000.000₫/th</td><td class="sku">✅</td></tr>
+      <tr><td class="sku">DV-001</td><td>Đào tạo khoá học AI</td><td><span class="tagm">Dịch vụ</span></td><td><span class="badge b-mut">Chờ nhập phiếu</span></td><td class="sku">—</td><td class="num">3.000.000₫</td><td class="sku">❓</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Bấm dòng nào là mở phiếu sản phẩm đầy đủ 14 trường, sửa trực tiếp — đó là tính năng gốc của Odoo, không phải code thêm. Sản phẩm để chế độ ẩn khỏi website nên không ảnh hưởng xét duyệt AdSense.</p>
+</div>
+
+<div class="screen">
+  <p class="cap">Màn hình 3 — CRM: tra khách theo SĐT (gõ thử vào ô tìm)</p>
+  <div class="frame">
+    <div class="ctl">
+      <button class="btn">Mới</button>
+      <span class="crumb">Khách hàng</span>
+      <div class="srch"><span aria-hidden="true">🔍</span><input id="cf" placeholder="Gõ SĐT… vd 0903" aria-label="Tìm khách hàng theo số điện thoại"></div>
+      <span class="pager" id="cpg"></span>
+    </div>
+    <div id="cform" class="form"></div>
+  </div>
+  <p class="note">Đây là form khách hàng chuẩn của Odoo: thông tin bên trái, dòng thời gian giao dịch (chatter) bên phải — mọi lần demo, báo giá, thanh toán đều nằm ở đó. Có app Odoo trên điện thoại, tra SĐT ngay khi đang gặp khách.</p>
+</div>
+
+<script>
+const rows=[...document.querySelectorAll('#pt tbody tr')],pgr=document.getElementById('pgr');
+document.getElementById('pf').addEventListener('input',e=>{
+  const q=e.target.value.toLowerCase();let n=0;
+  rows.forEach(r=>{const hit=r.textContent.toLowerCase().includes(q);r.style.display=hit?'':'none';if(hit)n++});
+  pgr.textContent=`1-${n} / ${n}`;
+});
+const CUST=[
+ {n:"Chị Lan",org:"Shop mỹ phẩm Lan Beauty",p:"0903221884",st:"Chờ chốt",cls:"b-warn",need:"Gói AI trực tin nhắn Zalo/FB",hist:[["06/07","Gửi báo giá 1.500.000₫/tháng — hẹn trả lời 09/07"],["05/07","Xem demo 5 phút qua Zalo — phản hồi tốt"],["04/07","Nhắn DEMO từ bài quảng cáo Facebook"]]},
+ {n:"Anh Minh",org:"Studio nhạc indie",p:"0987654321",st:"Lead mới",cls:"b-ok",need:"Skill MV AI cho MV mới",hist:[["06/07","Hỏi giá skill MV AI qua Facebook — chưa gửi demo"]]},
+ {n:"Cô Hạnh",org:"Trung tâm tiếng Anh Sunrise",p:"0912345678",st:"Đã chốt",cls:"b-ok",need:"Khoá đào tạo AI cho giáo viên",hist:[["03/07","Đã thanh toán 3.000.000₫ — lịch dạy 15/07"],["01/07","Chốt khoá đào tạo sau buổi demo"]]},
+ {n:"aiservices GPU",org:"Đối tác hạ tầng",p:"0938000111",st:"Supplier",cls:"b-mut",need:"Thuê GPU 3090Ti xử lý nhạc",hist:[["01/07","Gia hạn thuê GPU tháng 7"]]}
+];
+const cform=document.getElementById('cform'),cpg=document.getElementById('cpg');
+function fmt(p){return p.replace(/(\d{4})(\d{3})(\d{3})/,"$1 $2 $3")}
+function showC(q){
+  const hits=CUST.filter(c=>!q||c.p.includes(q)||c.n.toLowerCase().includes(q)||c.org.toLowerCase().includes(q));
+  cpg.textContent=`${hits.length} / ${CUST.length}`;
+  if(!hits.length){cform.innerHTML='<div class="fmain"><p style="color:var(--mut)">Không thấy khách nào — bấm "Mới" để thêm.</p></div>';return}
+  const c=hits[0];
+  cform.innerHTML=`<div class="fmain"><h3>${c.n} <span class="badge ${c.cls}">${c.st}</span></h3>
+   <div class="ph">${fmt(c.p)}</div>
+   <dl class="frow"><dt>Đơn vị</dt><dd>${c.org}</dd><dt>Nhu cầu</dt><dd>${c.need}</dd><dt>Phụ trách</dt><dd>Nhựt (CEO) · AI marketing-hunter theo dõi</dd></dl>
+   ${hits.length>1?`<p style="color:var(--mut);font-size:12.5px;margin-top:12px">+ ${hits.length-1} khách khác khớp — gõ thêm số để thu hẹp</p>`:''}</div>
+   <div class="chatter"><h4>Dòng thời gian giao dịch</h4>${c.hist.map(h=>`<div class="msg"><div class="m">${h[0]}</div>${h[1]}</div>`).join('')}</div>`;
+}
+document.getElementById('cf').addEventListener('input',e=>showC(e.target.value.trim().toLowerCase()));
+showC('');
+</script>
+
+</body>
+</html>
