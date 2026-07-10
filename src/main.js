@@ -1446,7 +1446,29 @@ function fallbackLesson(term, settings) {
       { type: "recall", prompt: `Say one natural English sentence with "${term}".`, answer: term },
       { type: "meaning", prompt: `What situation is "${term}" useful for?`, answer: goal },
     ],
+    needs_ai: true,
   };
+}
+
+async function wiktionaryLesson(term, settings) {
+  if (!_smart || typeof _smart.wiktionaryDefinition !== "function") return null;
+  try {
+    const wikt = await _smart.wiktionaryDefinition(term, "en");
+    const groups = Array.isArray(wikt?.definitions) ? wikt.definitions : [];
+    const defs = groups.flatMap((group) => (group.definitions || []).filter((d) => String(d?.text || "").trim()));
+    if (!defs.length) return null;
+    const lesson = fallbackLesson(term, settings);
+    lesson.meaning_en = String(defs[0].text).trim().slice(0, 500);
+    const realExamples = defs.flatMap((d) => d.examples || []).map((x) => String(x).trim()).filter(Boolean);
+    if (realExamples.length) lesson.examples = [...realExamples, ...lesson.examples].slice(0, 6);
+    lesson.quiz = [
+      { type: "recall", prompt: `Say one natural English sentence with "${term}".`, answer: realExamples[0] || term },
+      { type: "meaning", prompt: `What does "${term}" mean?`, answer: lesson.meaning_en },
+    ];
+    return lesson;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeStoredLesson(term, lesson, settings) {
@@ -1501,7 +1523,7 @@ async function enrichVocabTerm(term, settings, sourceNote) {
   if (!_smart) return lesson;
   try {
     const result = await _smart.chat({
-      mode: "english",
+      mode: "english_card",
       query: [
         "Create a compact vocabulary learning card as strict JSON only.",
         `Target language: ${settings.targetLanguage || "en"}. Native language: ${settings.nativeLanguage || "vi"}.`,
@@ -1520,7 +1542,7 @@ async function enrichVocabTerm(term, settings, sourceNote) {
     const raw = String(result.answer || result.reply || "").trim();
     const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
     const parsed = jsonText ? JSON.parse(jsonText) : null;
-    if (!parsed || typeof parsed !== "object") return lesson;
+    if (!parsed || typeof parsed !== "object") return (await wiktionaryLesson(term, settings)) || lesson;
     return {
       meaning_en: String(parsed.meaning_en || parsed.meaning || lesson.meaning_en).slice(0, 500),
       meaning_vi: String(parsed.meaning_vi || "").slice(0, 300),
@@ -1534,7 +1556,7 @@ async function enrichVocabTerm(term, settings, sourceNote) {
       })).filter((q) => q.prompt) : lesson.quiz,
     };
   } catch {
-    return lesson;
+    return (await wiktionaryLesson(term, settings)) || lesson;
   }
 }
 

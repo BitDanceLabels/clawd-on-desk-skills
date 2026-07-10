@@ -505,6 +505,20 @@ module.exports = function initIntelligentLayer(opts) {
       };
     }
 
+    if (mode === "english_card") {
+      // Vocab-card generation: câu prompt là chỉ dẫn, KHÔNG được tra Wiktionary theo từ đầu câu.
+      const sys = "You generate English vocabulary learning cards. Reply with strict JSON only — no markdown, no explanation, no text outside the JSON object.";
+      if (!proxycliUrl) return { mode: "english_card", error: "ProxyCLI chưa được cấu hình." };
+      try {
+        const { data, model, switched } = await proxycliChatWithFallback(query, sys, context);
+        const answer = extractAnswer(data);
+        if (answer) return { mode: "english_card", answer, source: { type: "proxycli", model, switched } };
+        return { mode: "english_card", error: "Empty answer from proxycli." };
+      } catch (e) {
+        return { mode: "english_card", error: `Chat lỗi: ${e.message}` };
+      }
+    }
+
     if (mode === "english") {
       // Try Wiktionary trước, fallback gateway
       const word = query.trim().split(/\s+/)[0];
