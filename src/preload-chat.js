@@ -31,4 +31,5 @@ contextBridge.exposeInMainWorld("bumbeeChat", {
   visionStatus: () => ipcRenderer.invoke("vision:status"),
   visionStartCapture: (opts) => ipcRenderer.invoke("vision:start-capture", opts),
   visionStopCapture: () => ipcRenderer.invoke("vision:stop-capture"),
+  speakLocal: (payload) => ipcRenderer.invoke("bumbee-chat:speak", payload),
 });

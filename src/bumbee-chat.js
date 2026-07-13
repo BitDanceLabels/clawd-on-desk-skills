@@ -862,21 +862,32 @@ function setBusy(busy) {
   pushActivityState();
 }
 
-function speak(text) {
-  if (!speakingEnabled || !("speechSynthesis" in window)) return;
+// Try the local high-quality voice (VieNeu-TTS via bsay in main). If it isn't
+// available (non-macOS, bsay missing), fall back to the built-in Web Speech API.
+async function speakLocalOrFallback(text, { lang, rate, voice } = {}) {
+  const clean = String(text || "").slice(0, 900);
+  if (!clean) return;
+  try {
+    if (window.bumbeeChat && window.bumbeeChat.speakLocal) {
+      const res = await window.bumbeeChat.speakLocal({ text: clean, voice });
+      if (res && res.ok) return; // local voice handled it
+    }
+  } catch (_) { /* fall through to Web Speech */ }
+  if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text.slice(0, 900));
-  utterance.lang = "vi-VN";
+  const utterance = new SpeechSynthesisUtterance(clean.slice(0, lang === "en-US" ? 500 : 900));
+  utterance.lang = lang;
+  if (rate) utterance.rate = rate;
   window.speechSynthesis.speak(utterance);
 }
 
+function speak(text) {
+  if (!speakingEnabled) return;
+  speakLocalOrFallback(text, { lang: "vi-VN", voice: "Phạm Tuyên" });
+}
+
 function speakEnglish(text) {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(String(text || "").slice(0, 500));
-  utterance.lang = "en-US";
-  utterance.rate = 0.92;
-  window.speechSynthesis.speak(utterance);
+  speakLocalOrFallback(text, { lang: "en-US", rate: 0.92, voice: "Minh Đức" });
 }
 
 async function refreshStatus() {

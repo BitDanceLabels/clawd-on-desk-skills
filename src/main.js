@@ -2117,6 +2117,35 @@ function updateBumbeeChatActivity(payload) {
   }
 }
 
+// Local high-quality Vietnamese/English TTS via the `bsay` command (VieNeu-TTS).
+// Returns { ok: true } when local speech played, or { ok: false } so the renderer
+// can fall back to the built-in Web Speech API. macOS only (bsay lives in PATH).
+let _bsayProc = null;
+function speakLocalTTS(payload) {
+  try {
+    if (process.platform !== "darwin") return { ok: false };
+    const text = String(payload?.text || "").slice(0, 900).trim();
+    if (!text) return { ok: false };
+    const voice = String(payload?.voice || "Phạm Tuyên");
+    const { spawn } = require("child_process");
+    // Cancel any in-flight speech so new lines interrupt old ones (like speechSynthesis.cancel()).
+    if (_bsayProc && !_bsayProc.killed) { try { _bsayProc.kill(); } catch (_) {} }
+    const proc = spawn("bsay", ["-v", voice, text], { stdio: "ignore", detached: false });
+    _bsayProc = proc;
+    proc.on("error", () => { _bsayProc = null; }); // bsay missing → renderer falls back
+    proc.on("exit", () => { if (_bsayProc === proc) _bsayProc = null; });
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (ok) => { if (!settled) { settled = true; resolve({ ok }); } };
+      proc.on("error", () => done(false));
+      proc.on("spawn", () => done(true)); // spawned OK → local TTS owns this line
+      setTimeout(() => done(true), 400);
+    });
+  } catch (_) {
+    return { ok: false };
+  }
+}
+
 function openBumbeeChat() {
   if (chatWin && !chatWin.isDestroyed()) {
     clearChatAutoHide();
@@ -4027,6 +4056,7 @@ function createWindow() {
   ipcMain.on("move-bubble-by", (event, dx, dy) => _perm.handleMoveBubble(event, dx, dy));
   ipcMain.on("permission-decide", (event, behavior) => _perm.handleDecide(event, behavior));
   ipcMain.handle("bumbee-chat:send", (_event, payload) => sendBumbeeChat(payload));
+  ipcMain.handle("bumbee-chat:speak", (_event, payload) => speakLocalTTS(payload));
   ipcMain.on("bumbee-chat:activity", (_event, payload) => updateBumbeeChatActivity(payload));
   // Multi-session chat (persisted)
   ipcMain.handle("bumbee-chat:list-sessions", () => listChatSessions());
