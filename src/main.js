@@ -2128,9 +2128,18 @@ function speakLocalTTS(payload) {
     if (!text) return { ok: false };
     const voice = String(payload?.voice || "Phạm Tuyên");
     const { spawn } = require("child_process");
+    // Resolve bsay by absolute path — a Finder-launched GUI app has a minimal PATH
+    // that omits /opt/homebrew/bin, so spawn("bsay") would ENOENT and fall back.
+    const bsayCandidates = [
+      path.join(os.homedir(), "Bumbee/tts-local/bsay"),
+      "/opt/homebrew/bin/bsay",
+      "/usr/local/bin/bsay",
+    ];
+    const bsayBin = bsayCandidates.find((p) => { try { return fs.existsSync(p); } catch (_) { return false; } });
+    if (!bsayBin) return { ok: false }; // not installed → renderer uses Web Speech
     // Cancel any in-flight speech so new lines interrupt old ones (like speechSynthesis.cancel()).
     if (_bsayProc && !_bsayProc.killed) { try { _bsayProc.kill(); } catch (_) {} }
-    const proc = spawn("bsay", ["-v", voice, text], { stdio: "ignore", detached: false });
+    const proc = spawn(bsayBin, ["-v", voice, text], { stdio: "ignore", detached: false });
     _bsayProc = proc;
     proc.on("error", () => { _bsayProc = null; }); // bsay missing → renderer falls back
     proc.on("exit", () => { if (_bsayProc === proc) _bsayProc = null; });
