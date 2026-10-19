@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob: data:; worker-src 'self' blob:;">
+  <title>JAVIS</title>
+  <link rel="stylesheet" href="javis-chat.css">
+</head>
+<body>
+  <header class="top">
+    <img class="logo" src="icon.png" alt="">
+    <div class="who">
+      <b>JAVIS</b>
+      <small id="status-line">Đang kiểm tra…</small>
+    </div>
+    <button id="btn-settings" class="ib" title="Cài đặt · Ghép đôi JAVIS">⚙︎</button>
+  </header>
+
+  <section id="view-chat" class="view">
+    <p class="intro">Trò chuyện cùng trợ lý JAVIS — cùng phiên chat với JAVIS trên web.</p>
+    <p id="credit" class="credit" hidden>
+      <span lang="en">This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc.</span>
+      <span>Nhân vật mẫu © Live2D Inc.</span>
+    </p>
+    <div id="companion-host"></div>
+  </section>
+
+  <section id="view-pair" class="view" hidden>
+    <h2>Ghép đôi JAVIS</h2>
+    <p class="muted">Ghép máy này với tài khoản JAVIS để chat chung với web. Khoá thiết bị được mã hoá trên máy, không hiển thị ra đây.</p>
+    <div id="pair-state" class="card"></div>
+
+    <div class="card">
+      <h3>1 · Ghép bằng mã / QR</h3>
+      <p class="muted">Bấm bắt đầu, rồi duyệt mã trên JAVIS web (quét QR bằng điện thoại đã đăng nhập, hoặc mở trang duyệt trên máy này).</p>
+      <button id="btn-pair-start" class="primary">Bắt đầu ghép đôi</button>
+      <div id="pair-code" hidden>
+        <div class="code" id="user-code"></div>
+        <img id="pair-qr" alt="QR ghép đôi" hidden>
+        <p class="muted" id="pair-progress">Đang chờ duyệt…</p>
+        <div class="row">
+          <button id="btn-pair-open">Mở trang duyệt</button>
+          <button id="btn-pair-cancel">Huỷ</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>2 · Dán khoá thiết bị</h3>
+      <p class="muted">Nếu đã có khoá thiết bị JAVIS (jvk_…), dán vào đây.</p>
+      <div class="row">
+        <input id="paste-key" type="password" autocomplete="off" spellcheck="false" placeholder="Dán khoá thiết bị">
+        <button id="btn-paste">Lưu</button>
+      </div>
+    </div>
+
+    <details class="card">
+      <summary>Nâng cao</summary>
+      <label class="muted" for="gateway">Gateway JAVIS</label>
+      <div class="row">
+        <input id="gateway" type="url" spellcheck="false">
+        <button id="btn-gateway">Lưu</button>
+      </div>
+      <button id="btn-unpair" class="danger">Huỷ ghép đôi máy này</button>
+    </details>
+
+    <button id="btn-back" class="link">← Quay lại chat</button>
+  </section>
+
+  <script src="javis-chat.js"></script>
+</body>
+</html>

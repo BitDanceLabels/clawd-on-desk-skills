@@ -4,6 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { writeJsonAtomic } = require("./json-writer");
 const MARKER = "gemini-hook.js";
 
 const GEMINI_HOOK_EVENTS = [
@@ -16,20 +17,6 @@ const GEMINI_HOOK_EVENTS = [
   "Notification",
   "PreCompress",
 ];
-
-function writeJsonAtomic(filePath, data) {
-  const dir = path.dirname(filePath);
-  const base = path.basename(filePath);
-  const tmpPath = path.join(dir, `.${base}.${process.pid}.${Date.now()}.tmp`);
-  fs.mkdirSync(dir, { recursive: true });
-  try {
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-    fs.renameSync(tmpPath, filePath);
-  } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch {}
-    throw err;
-  }
-}
 
 /**
  * Register Clawd hooks into ~/.gemini/settings.json
@@ -77,16 +64,23 @@ function registerGeminiHooks(options = {}) {
     const arr = settings.hooks[event];
     let found = false;
     let stalePath = false;
+    // Flat entries ({ command }) and nested groups ({ matcher, hooks: [{ command }] })
+    const candidates = [];
     for (const entry of arr) {
       if (!entry || typeof entry !== "object") continue;
-      const cmd = entry.command || "";
+      candidates.push(entry);
+      if (Array.isArray(entry.hooks)) {
+        for (const hook of entry.hooks) if (hook && typeof hook === "object") candidates.push(hook);
+      }
+    }
+    for (const entry of candidates) {
+      const cmd = typeof entry.command === "string" ? entry.command : "";
       if (!cmd.includes(MARKER)) continue;
       found = true;
       if (cmd !== desiredCommand) {
         entry.command = desiredCommand;
         stalePath = true;
       }
-      break;
     }
 
     if (found) {
@@ -109,7 +103,7 @@ function registerGeminiHooks(options = {}) {
   }
 
   if (!options.silent) {
-    console.log(`Clawd Gemini hooks → ${settingsPath}`);
+    console.log(`JAVIS Gemini hooks → ${settingsPath}`);
     console.log(`  Added: ${added}, updated: ${updated}, skipped: ${skipped}`);
   }
 

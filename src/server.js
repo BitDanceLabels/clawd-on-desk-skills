@@ -208,7 +208,7 @@ function buildSkillsHtml(skills, wikiCount) {
     <div id="entriesList"><div class="entries-empty">Bấm Refresh để load entries...</div></div>
   </div>
 </main>
-<footer>Bumbee on Desk — Skills &amp; Wiki Knowledge Store • <a href="/health" style="color:#444">health</a> • <a href="/wiki/entries" style="color:#444">API</a></footer>
+<footer>JAVIS — Skills &amp; Wiki Knowledge Store • <a href="/health" style="color:#444">health</a> • <a href="/wiki/entries" style="color:#444">API</a></footer>
 
 <script>
 const PORT = location.port || 23333;
@@ -498,13 +498,13 @@ function startHttpServer() {
       req.on("end", () => {
         if (tooLarge) {
           ctx.permLog("SKIPPED: permission payload too large");
-          ctx.sendPermissionResponse(res, "deny", "Permission request too large for Clawd bubble; answer in terminal");
+          ctx.sendPermissionResponse(res, "deny", "Permission request too large for JAVIS bubble; answer in terminal");
           return;
         }
 
         if (ctx.doNotDisturb) {
           ctx.permLog("SKIPPED: DND mode");
-          ctx.sendPermissionResponse(res, "deny", "Clawd is in Do Not Disturb mode");
+          ctx.sendPermissionResponse(res, "deny", "JAVIS is in Do Not Disturb mode");
           return;
         }
 

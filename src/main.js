@@ -1,4 +1,9 @@
 const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer, Notification, dialog } = require("electron");
+// Keep the pre-JAVIS userData folder (prefs, vocab, chat history, cookies) — before anything reads it.
+require("./user-data-path").pinUserDataPath(app);
+// javis-desk:// serves the JAVIS chat page and proxies /fleet/* (must be registered before ready).
+require("./javis-companion-host").registerJavisScheme(require("electron").protocol);
+const javisBrand = require("./javis-brand");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -201,7 +206,7 @@ let assistantMode24x7 = false;
 let petHidden = false;
 let rabbitEnabled = false;
 let rabbitIntervalMin = 60;
-let characterSkin = "clawd";  // "clawd" | "bunny" — switches the pet character
+let characterSkin = javisBrand.DEFAULT_CHARACTER_SKIN;  // "live2d:hiyori" (default) | "clawd" | "bunny" | live2d:* | vrm:*
 // ── Vocab auto-challenge (Phase 1) ──
 let vocabAutoChallenge = true;         // scheduler pops challenges on an interval (default ON)
 let vocabChallengeIntervalMin = 20;    // minutes between auto-pops
@@ -2155,6 +2160,59 @@ function speakLocalTTS(payload) {
   }
 }
 
+// ── JAVIS assistant chat (same <javis-companion> + /fleet/chat session as JAVIS web) ──
+let _javisHost = null;
+function getJavisHost() {
+  if (_javisHost) return _javisHost;
+  if (!app.isReady()) return null;
+  const { net, safeStorage, shell } = require("electron");
+  _javisHost = require("./javis-companion-host").initJavisCompanionHost({
+    app, BrowserWindow, ipcMain, session, net, safeStorage, shell,
+    getBounds: (w, h) => getChatBoundsNearPet(w, h),
+  });
+  return _javisHost;
+}
+
+function openJavisChat() {
+  const host = getJavisHost();
+  if (host) host.openChat();
+}
+
+function openJavisPairing() {
+  const host = getJavisHost();
+  if (host) host.openPairing();
+}
+
+function showCharacterCredit() {
+  if (javisBrand.isLive2DSampleSkin(_skinScanner.findById(characterSkin))) {
+    sendToRenderer("show-character-credit", {
+      text: javisBrand.LIVE2D_CREDIT_SHORT,
+      vi: javisBrand.LIVE2D_CREDIT_VI,
+    });
+  }
+}
+
+function showAboutJavis() {
+  const detail = [
+    `Version ${app.getVersion()}`,
+    "Trợ lý JAVIS trên máy tính — BitDance Labels.",
+    "",
+    "Nhân vật mặc định: Hiyori (nhân vật mẫu Live2D, giữ nguyên thiết kế).",
+    javisBrand.LIVE2D_CREDIT,
+    javisBrand.LIVE2D_CREDIT_VI,
+    "",
+    "Based on Clawd on Desk (MIT, rullerzhou-afk). See LICENSES.md.",
+  ].join("\n");
+  dialog.showMessageBox({
+    type: "info",
+    title: "About JAVIS",
+    message: "JAVIS",
+    detail,
+    buttons: ["OK"],
+    icon: path.join(__dirname, "..", "assets", "icons", "128x128.png"),
+  }).catch(() => {});
+}
+
 function openBumbeeChat() {
   if (chatWin && !chatWin.isDestroyed()) {
     clearChatAutoHide();
@@ -2174,7 +2232,7 @@ function openBumbeeChat() {
     y: bounds.y,
     minWidth: 380,
     minHeight: 560,
-    title: "Bumbee English Coach",
+    title: "JAVIS · English Coach",
     show: false,
     backgroundColor: "#111318",
     webPreferences: {
@@ -2615,7 +2673,7 @@ async function startMisskeyLogin() {
   if (_miauthPolling) return { ok: false, reason: "Đang chờ đăng nhập…" };
   const { shell } = require("electron");
   const sid = require("crypto").randomUUID();
-  const url = `${MISSKEY_BASE}/miauth/${sid}?name=${encodeURIComponent("Bumbee On Desk")}&permission=read:account`;
+  const url = `${MISSKEY_BASE}/miauth/${sid}?name=${encodeURIComponent("JAVIS")}&permission=read:account`;
   try { await shell.openExternal(url); } catch { return { ok: false, reason: "Không mở được trình duyệt" }; }
   _miauthPolling = true;
   try {
@@ -3253,6 +3311,7 @@ const _permCtx = {
     const s = sessions.get(sessionId);
     if (s && s.sourcePid) focusTerminalWindow(s.sourcePid, s.cwd, s.editor, s.pidChain);
   },
+  // Coach bubble "Play now" opens the English Coach (legacy chat with the vocab game).
   openBumbeeChat: () => openBumbeeChat(),
 };
 const _perm = require("./permission")(_permCtx);
@@ -3333,7 +3392,7 @@ function setCharacterSkin(skinId) {
 
 function listAvailableSkins() {
   const builtin = [
-    { id: "clawd", type: "svg", name: "Clawd" },
+    { id: "clawd", type: "svg", name: "Crab" },
     { id: "bunny", type: "svg", name: "Bunny" },
   ];
   const scanned = _skinScanner.scanAll();
@@ -3725,7 +3784,9 @@ const _menuCtx = {
   listAvailableSkins: () => listAvailableSkins(),
   openSkinAssetsFolder: (kind) => {
     const { shell } = require("electron");
-    const root = _skinScanner.getAssetRoot();
+    // User characters go to userData (kept across updates). The bundled Live2D
+    // sample folder is never opened, so the sample model files are not exported.
+    const root = _skinScanner.getUserCharacterRoot();
     const target = kind === "vrm"
       ? path.join(root, "vrm")
       : path.join(root, "live2d");
@@ -3738,7 +3799,11 @@ const _menuCtx = {
   getSkills: () => _skills,
   getSmart: () => _smart,
   getWiki: () => _wiki,
-  openBumbeeChat,
+  openBumbeeChat: () => openJavisChat(),
+  openJavisChat: () => openJavisChat(),
+  openJavisPairing: () => openJavisPairing(),
+  openEnglishCoach: () => openBumbeeChat(),
+  showAbout: () => showAboutJavis(),
   openBumbeeVocab: openVocabTinder,
   openBumbeeChallenge: openVocabChallenge,
   getVocabAutoChallenge: () => vocabAutoChallenge,
@@ -3751,9 +3816,9 @@ const _menuCtx = {
   openBumbeeOs,
   openBumbeeDashboard,
   visionCaptureRunning: () => _visionCapture.isRunning(),
+  // Auto-capture stays off (owner decision); this can only stop a running capture.
   toggleVisionCapture: () => {
     if (_visionCapture.isRunning()) _visionCapture.stop();
-    else _visionCapture.start();
   },
 };
 const _menu = require("./menu")(_menuCtx);
@@ -4051,7 +4116,8 @@ function createWindow() {
     }
     if (best) focusTerminalWindow(best.sourcePid, best.cwd, best.editor, best.pidChain);
   });
-  ipcMain.on("open-bumbee-chat", openBumbeeChat);
+  // Pet click → JAVIS chat (+ Live2D credit under the character).
+  ipcMain.on("open-bumbee-chat", () => { showCharacterCredit(); openJavisChat(); });
   ipcMain.on("open-bumbee-vision", openBumbeeVision);
   ipcMain.on("open-bumbee-vocab", openVocabTinder);
   ipcMain.on("open-bumbee-phase-hub", openPhaseHub);
@@ -4321,7 +4387,8 @@ function createWindow() {
     if (Number.isFinite(cfg.intervalSec)) { vocabAutoSourceIntervalSec = Math.max(15, Math.min(600, Math.round(cfg.intervalSec))); savePrefs(); }
     return { ok: true, auto: vocabAutoSource, intervalSec: vocabAutoSourceIntervalSec };
   });
-  ipcMain.handle("vision:start-capture", (_event, opts) => { _visionCapture.start(opts); return { ok: true }; });
+  // Automatic screen capture is disabled by owner decision (off by default, hidden from menus).
+  ipcMain.handle("vision:start-capture", () => ({ ok: false, disabled: true }));
   ipcMain.handle("vision:stop-capture", () => { _visionCapture.stop(); return { ok: true }; });
   ipcMain.handle("vision:status", () => _visionCapture.stats());
   ipcMain.handle("vision:capture-now", () => _visionCapture.captureNow());
@@ -4640,6 +4707,31 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(() => {
+    getJavisHost();
+    // Dev-only (never in packaged builds): JAVIS_DEV_OPEN=chat,pair,about,credit opens
+    // windows at start-up for headless screenshot checks.
+    if (!app.isPackaged && process.env.JAVIS_DEV_OPEN) {
+      const want = new Set(process.env.JAVIS_DEV_OPEN.split(","));
+      setTimeout(() => {
+        if (want.has("credit")) showCharacterCredit();
+        if (want.has("chat")) openJavisChat();
+        if (want.has("pair")) openJavisPairing();
+        if (want.has("about")) showAboutJavis();
+      }, 4000);
+    }
+    try {
+      app.setAboutPanelOptions({
+        applicationName: "JAVIS",
+        applicationVersion: app.getVersion(),
+        credits: `${javisBrand.LIVE2D_CREDIT}\n${javisBrand.LIVE2D_CREDIT_VI}`,
+        copyright: "BitDance Labels · based on Clawd on Desk (MIT)",
+      });
+    } catch {}
+    // In-place update from "Clawd on Desk": the app bundle path changed, so refresh
+    // the login item if the user had 24/7 mode (which enables start-on-login).
+    if (app.isPackaged && !isLinux && assistantMode24x7) {
+      try { app.setLoginItemSettings({ openAtLogin: true }); } catch {}
+    }
     permDebugLog = path.join(app.getPath("userData"), "permission-debug.log");
     updateDebugLog = path.join(app.getPath("userData"), "update-debug.log");
     if (isMac && systemPreferences?.askForMediaAccess) {
@@ -4659,8 +4751,9 @@ if (!gotTheLock) {
     configureDisplayCapturePermissions(session.defaultSession);
     createWindow();
     if (LEARN_ON_START) {
+      // Start-up chat is now the JAVIS assistant (shows "Ghép đôi JAVIS" until paired).
       setTimeout(() => {
-        if (!app.isQuitting) openBumbeeChat();
+        if (!app.isQuitting) openJavisChat();
       }, 900);
       setTimeout(() => {
         if (!isQuitting) triggerCoachInteraction("welcome");

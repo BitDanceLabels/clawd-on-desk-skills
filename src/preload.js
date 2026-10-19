@@ -17,4 +17,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   resumeFromReaction: () => ipcRenderer.send("resume-from-reaction"),
   // Live2D / VRM skin switching
   onSkinChange: (cb) => ipcRenderer.on("skin-change", (_, skin) => cb(skin)),
+  // Live2D sample credit under the character (JAVIS)
+  onShowCharacterCredit: (cb) => ipcRenderer.on("show-character-credit", (_, credit) => cb(credit)),
 });

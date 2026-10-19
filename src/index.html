@@ -5,12 +5,14 @@
   <!-- file: protocol assets need 'self', WebGL/Live2D need img-src data: + blob: -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: blob: data:; style-src 'self' 'unsafe-inline'; img-src 'self' file: blob: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' file: blob: data:; worker-src 'self' blob:;">
   <link rel="stylesheet" href="styles.css">
-  <title>Clawd</title>
+  <title>JAVIS</title>
 </head>
 <body>
   <div id="pet-container">
     <object id="clawd" type="image/svg+xml" data="../assets/svg/clawd-idle-follow.svg"></object>
   </div>
+  <!-- Live2D sample-data credit, shown briefly under the character when it is clicked -->
+  <div id="character-credit" hidden><span lang="en"></span><span></span></div>
   <!-- Live2D Cubism Core (Live2D Inc proprietary, downloaded by `npm run setup:live2d`) -->
   <script src="../assets/live2d/runtime/live2dcubismcore.min.js" onerror="window.__live2dCoreMissing=true"></script>
   <!-- Renderer bundles (Pixi+Live2D, three+VRM) — built by `npm run build:renderer` -->

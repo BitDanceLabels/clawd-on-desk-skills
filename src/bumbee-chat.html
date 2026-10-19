@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: blob: data:; style-src 'self' 'unsafe-inline'; img-src 'self' file: blob: data:; media-src 'self' blob: data:; script-src 'self'; connect-src 'self' file: blob: data: https://vision.bumbee.asia wss://vision.bumbee.asia;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="bumbee-chat.css">
-  <title>Bumbee Chat</title>
+  <title>JAVIS · English Coach</title>
 </head>
 <body>
   <main class="app-shell">
@@ -190,7 +190,8 @@
         <button id="voiceBtn" type="button" title="Record microphone">Mic</button>
         <button id="liveBtn" type="button" title="Live conversation mode">Live</button>
         <button id="screenBtn" type="button" title="Capture screen context for AI chat">Screen</button>
-        <button id="visionTrackBtn" type="button" title="Toggle vision auto-capture tracking">Vision Track: OFF</button>
+        <!-- Vision auto-capture is disabled by owner decision; button kept hidden so the script still finds it. -->
+        <button id="visionTrackBtn" type="button" hidden>Vision Track: OFF</button>
         <button id="visionBtn" type="button" title="Open Bumbee Vision">Vision</button>
         <button id="studioSetupBtn" type="button" title="Create or verify ~/Bumbee/bumbee-wiki-studio">Setup Studio</button>
         <button id="studioSyncBtn" type="button" title="Sync Obsidian Studio vault">Sync Studio</button>

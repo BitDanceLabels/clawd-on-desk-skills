@@ -24,6 +24,20 @@ if (window.electronAPI.onSkinChange) {
   });
 }
 
+// Live2D Free Material License credit — small text under the character on click.
+if (window.electronAPI.onShowCharacterCredit) {
+  const creditEl = document.getElementById("character-credit");
+  let creditTimer = null;
+  window.electronAPI.onShowCharacterCredit((credit) => {
+    if (!creditEl || !credit) return;
+    creditEl.children[0].textContent = credit.text || "";
+    creditEl.children[1].textContent = credit.vi || "";
+    creditEl.hidden = false;
+    clearTimeout(creditTimer);
+    creditTimer = setTimeout(() => { creditEl.hidden = true; }, 6000);
+  });
+}
+
 window.electronAPI.onMiniModeChange((enabled, edge) => {
   miniLeftFlip = enabled && edge === "left";
   container.classList.toggle("mini-left", miniLeftFlip);

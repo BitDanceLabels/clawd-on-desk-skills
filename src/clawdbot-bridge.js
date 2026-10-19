@@ -69,7 +69,7 @@ module.exports = function initClawdbotBridge(opts) {
     const payload = {
       source: "clawd-on-desk",
       chat_id: chatId,
-      title: title || "Clawd notification",
+      title: title || "JAVIS notification",
       message: message || "",
       level: level || "info",
       session_id: sessionId || null,
@@ -106,7 +106,7 @@ module.exports = function initClawdbotBridge(opts) {
     const cwd = (sessionData && sessionData.cwd) || "";
     const agentId = (sessionData && (sessionData.agentId || sessionData.agent_id)) || "claude-code";
     pushNotification({
-      title: state === "error" ? "Clawd: error" : state === "attention" ? "Clawd: attention" : "Clawd: notification",
+      title: state === "error" ? "JAVIS: error" : state === "attention" ? "JAVIS: attention" : "JAVIS: notification",
       message: cwd ? `Session ${sid} — ${cwd}` : `Session ${sid}`,
       level: state === "error" ? "error" : state === "attention" ? "warning" : "info",
       sessionId: sid,

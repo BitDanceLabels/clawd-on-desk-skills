@@ -4,6 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { writeJsonAtomic } = require("./json-writer");
 const MARKER = "cursor-hook.js";
 
 const CURSOR_HOOK_EVENTS = [
@@ -19,20 +20,6 @@ const CURSOR_HOOK_EVENTS = [
   "afterAgentThought",
   "stop",
 ];
-
-function writeJsonAtomic(filePath, data) {
-  const dir = path.dirname(filePath);
-  const base = path.basename(filePath);
-  const tmpPath = path.join(dir, `.${base}.${process.pid}.${Date.now()}.tmp`);
-  fs.mkdirSync(dir, { recursive: true });
-  try {
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-    fs.renameSync(tmpPath, filePath);
-  } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch {}
-    throw err;
-  }
-}
 
 /**
  * Register Clawd hooks into ~/.cursor/hooks.json
@@ -92,7 +79,6 @@ function registerCursorHooks(options = {}) {
         entry.command = desiredCommand;
         stalePath = true;
       }
-      break;
     }
 
     if (found) {
@@ -115,7 +101,7 @@ function registerCursorHooks(options = {}) {
   }
 
   if (!options.silent) {
-    console.log(`Clawd Cursor hooks → ${hooksPath}`);
+    console.log(`JAVIS Cursor hooks → ${hooksPath}`);
     console.log(`  Added: ${added}, updated: ${updated}, skipped: ${skipped}`);
   }
 

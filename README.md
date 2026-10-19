@@ -1,7 +1,15 @@
 <p align="center">
-  <img src="assets/tray-icon.png" width="128" alt="Clawd">
+  <img src="assets/icons/128x128.png" width="128" alt="JAVIS">
 </p>
-<h1 align="center">Clawd on Desk</h1>
+<h1 align="center">JAVIS (desktop)</h1>
+
+> **JAVIS** is the rebranded *Clawd on Desk / Bumbee On Desk* (BitDance Labels): Hiyori (Live2D sample
+> model) is the default character, chat is the shared JAVIS assistant (`<javis-companion>`, same
+> `/fleet/chat` session as JAVIS web, pairing in *Ghép đôi JAVIS*). Data folder, appId and update
+> channel are unchanged, so it updates in place. Builds: `scripts/build-mac.sh`, `scripts/build-win.ps1`.
+> Credits: see `LICENSES.md` — This content uses sample data owned and copyrighted by Live2D Inc.
+
+<h2 align="center">Clawd on Desk (original README)</h2>
 <p align="center">
   <a href="README.zh-CN.md">中文版</a>
 </p>
