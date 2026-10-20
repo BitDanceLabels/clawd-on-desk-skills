@@ -13,6 +13,8 @@
   </div>
   <!-- Live2D sample-data credit, shown briefly under the character when it is clicked -->
   <div id="character-credit" hidden><span lang="en"></span><span></span></div>
+  <!-- "Có việc mới" note from JAVIS (0.12.0) -->
+  <div id="javis-note" hidden></div>
   <!-- Live2D Cubism Core (Live2D Inc proprietary, downloaded by `npm run setup:live2d`) -->
   <script src="../assets/live2d/runtime/live2dcubismcore.min.js" onerror="window.__live2dCoreMissing=true"></script>
   <!-- Renderer bundles (Pixi+Live2D, three+VRM) — built by `npm run build:renderer` -->
@@ -22,5 +24,6 @@
   <script src="vrm-renderer.js"></script>
   <script src="skin-manager.js"></script>
   <script src="renderer.js"></script>
+  <script src="javis-speech-renderer.js"></script>
 </body>
 </html>

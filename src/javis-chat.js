@@ -17,6 +17,18 @@ const PAIR_MESSAGES = {
   error: "Không kết nối được gateway JAVIS (đã thử 3 lần, dừng). Kiểm tra Tailscale rồi thử lại.",
 };
 
+let verifyUrl = "";
+
+function markStep(n) {
+  // n = the step the user is on (1..3); 4 = done.
+  for (let i = 1; i <= 3; i++) {
+    const li = $(`step-${i}`);
+    if (!li) continue;
+    li.classList.toggle("done", i < n);
+    li.classList.toggle("current", i === n);
+  }
+}
+
 function setStatusLine(s) {
   const el = $("status-line");
   if (!s.paired) { el.textContent = "Chưa ghép đôi"; el.className = "warn"; return; }
@@ -120,30 +132,49 @@ async function startPairing() {
   const r = await api.pairStart();
   $("btn-pair-start").disabled = false;
   if (!r || !r.ok) {
-    $("pair-code").hidden = false;
-    $("user-code").textContent = "";
-    $("pair-qr").hidden = true;
-    $("pair-progress").textContent = `Không xin được mã ghép đôi (${(r && r.error) || "lỗi"}).`;
+    $("pair-code").hidden = true;
+    $("pair-progress").textContent = `Không xin được mã ghép đôi (${(r && r.error) || "lỗi"}). Kiểm tra mạng rồi bấm lại.`;
+    markStep(1);
     return;
   }
   $("pair-code").hidden = false;
   $("user-code").textContent = r.userCode;
   $("pair-qr").hidden = !r.qr;
   if (r.qr) $("pair-qr").src = r.qr;
-  $("btn-pair-open").onclick = () => api.pairOpenBrowser(r.verifyUrl);
+  verifyUrl = r.verifyUrl;
+  $("btn-pair-start").textContent = "Lấy mã mới";
+  $("btn-pair-cancel").hidden = false;
   $("pair-progress").textContent = PAIR_MESSAGES.pending;
+  markStep(2);
+}
+
+async function openVerifyPage() {
+  // No code yet: get one first so the web page opens with it filled in.
+  if (!verifyUrl) await startPairing();
+  if (!verifyUrl) return;
+  await api.pairOpenBrowser(verifyUrl);
+  markStep(3);
 }
 
 function wire() {
   $("btn-settings").onclick = () => show($("view-pair").hidden ? "pair" : "chat");
   $("btn-back").onclick = () => show("chat");
   $("btn-pair-start").onclick = () => void startPairing();
-  $("btn-pair-cancel").onclick = async () => { await api.pairCancel(); $("pair-code").hidden = true; };
+  $("btn-pair-open").onclick = () => void openVerifyPage();
+  $("btn-pair-cancel").onclick = async () => {
+    await api.pairCancel();
+    verifyUrl = "";
+    $("pair-code").hidden = true;
+    $("btn-pair-cancel").hidden = true;
+    $("btn-pair-start").textContent = "Lấy mã ghép đôi";
+    $("pair-progress").textContent = "Đã huỷ.";
+    markStep(1);
+  };
   $("btn-paste").onclick = async () => {
     const input = $("paste-key");
     const r = await api.pairPasteKey(input.value);
     input.value = "";
-    if (!r || !r.ok) { $("pair-progress").textContent = "Khoá không hợp lệ."; $("pair-code").hidden = false; return; }
+    if (!r || !r.ok) { $("pair-progress").textContent = "Khoá không hợp lệ."; return; }
     unmountCompanion();
     await refresh();
     show("chat");
@@ -164,6 +195,8 @@ function wire() {
   api.onPairUpdate(async (u) => {
     $("pair-progress").textContent = PAIR_MESSAGES[u.status] || u.status;
     if (u.status === "approved") {
+      markStep(4);
+      verifyUrl = "";
       $("pair-code").hidden = true;
       unmountCompanion();
       await refresh();
@@ -175,12 +208,17 @@ function wire() {
     await refresh();
     show("pair");
   });
-  api.onShowView((v) => show(v === "pair" ? "pair" : "chat"));
+  api.onShowView((v) => {
+    show(v === "pair" || v === "pair-web" ? "pair" : "chat");
+    if (v === "pair-web") void openVerifyPage();
+  });
+  markStep(1);
   setInterval(updateCredit, 2000);
 }
 
 (async () => {
   wire();
   const s = await refresh();
-  show(location.hash === "#pair" || !s.paired || s.authError ? "pair" : "chat");
+  show(location.hash === "#pair" || location.hash === "#pair-web" || !s.paired || s.authError ? "pair" : "chat");
+  if (location.hash === "#pair-web") void openVerifyPage();
 })();

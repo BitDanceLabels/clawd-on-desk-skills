@@ -53,3 +53,4 @@ assets/live2d/*/
 !assets/live2d/haru/**
 assets/vrm/*/
 assets/vrm/*.vrm
+e2e-out/

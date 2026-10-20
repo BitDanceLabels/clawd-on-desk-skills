@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+  <title>AI Clipboard</title>
+  <link rel="stylesheet" href="javis-tools.css">
+</head>
+<body>
+  <header class="top">
+    <img src="icon.png" alt="">
+    <div class="who"><b>AI Clipboard</b><small id="sub">Chép ở máy này, dán ở máy kia</small></div>
+  </header>
+  <main>
+    <section id="s-not-paired" class="card hidden">
+      <p><b>Cần ghép đôi máy này với JAVIS trước.</b></p>
+      <p class="muted">Ghép một lần (3 bước: lấy mã → mở trang duyệt trên web → bấm Duyệt) là dùng được Clipboard.</p>
+      <button id="btn-pair" class="primary">Ghép đôi ngay</button>
+    </section>
+    <section id="s-offline" class="card hidden">
+      <p class="warn">Chưa kết nối được máy chủ JAVIS. Kiểm tra mạng rồi bấm Thử lại.</p>
+      <button id="btn-retry">Thử lại</button>
+    </section>
+    <section id="s-no-clip" class="card hidden">
+      <p><b>Tài khoản chưa có AI Clipboard.</b></p>
+      <p class="muted">Tạo Clipboard ngay trên máy này. Khoá mã hoá nằm trên máy, máy chủ chỉ giữ bản mã.</p>
+      <button id="btn-create" class="primary">Tạo AI Clipboard</button>
+    </section>
+    <section id="s-need-key" class="card hidden">
+      <p><b>Nối máy này vào AI Clipboard của anh</b></p>
+      <ol class="steps">
+        <li><b>Trên máy đang dùng Clipboard</b><span class="muted">Mở AI Clipboard → Thêm máy → Chép link.</span></li>
+        <li><b>Dán link vào ô dưới</b><span class="muted">Link có dạng …/clip#p=…</span></li>
+      </ol>
+      <div class="row"><input id="link" type="password" autocomplete="off" spellcheck="false" placeholder="Dán link ghép Clipboard"><button id="btn-link" class="primary">Nối</button></div>
+    </section>
+    <section id="s-ready" class="hidden">
+      <div class="card">
+        <label class="muted" for="quick">Ô dán nhanh — gửi sang mọi máy của anh</label>
+        <textarea id="quick" placeholder="Dán hoặc gõ vào đây (Ctrl/⌘+V)…"></textarea>
+        <div class="row wrap" style="margin-top:8px">
+          <button id="btn-from-sys">📋 Lấy chữ vừa chép</button>
+          <span style="flex:1"></span>
+          <button id="btn-send" class="primary">Gửi sang máy khác</button>
+        </div>
+        <p class="muted" id="send-msg" style="margin:8px 0 0"></p>
+      </div>
+      <p class="muted">Mới nhất <span id="paused" class="warn"></span></p>
+      <ul id="recent" class="items"></ul>
+    </section>
+    <p class="muted" id="msg"></p>
+  </main>
+  <footer>
+    <span>Phím tắt: <span class="kbd" id="kbd">⌘⇧⌥V</span></span><span class="sp"></span>
+    <button id="btn-web" class="small">Mở trang Clipboard đầy đủ</button>
+  </footer>
+  <script src="javis-clip-page.js"></script>
+</body>
+</html>

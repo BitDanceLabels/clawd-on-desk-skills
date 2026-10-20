@@ -102,3 +102,23 @@ body.solid-pet {
   pointer-events: none;
 }
 #character-credit[hidden] { display: none; }
+
+#javis-note {
+  position: fixed;
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+  max-width: 90%;
+  z-index: 51;
+  padding: 5px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1d2340;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font: 600 11px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  text-align: center;
+  pointer-events: none;
+  animation: javis-note-in 0.25s ease-out;
+}
+#javis-note[hidden] { display: none; }
+@keyframes javis-note-in { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }

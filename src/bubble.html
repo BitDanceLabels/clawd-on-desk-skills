@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
@@ -228,15 +228,15 @@ body { padding: 6px; }
 <body>
 <div class="card" id="card">
   <div class="header">
-    <span class="header-title">Permission Request</span>
+    <span class="header-title">Xin quyền</span>
     <span class="tool-pill" id="toolPill"></span>
   </div>
 
   <div class="command-block" id="commandBlock"></div>
   
   <div class="actions">
-    <button class="btn btn-allow" id="btnAllow">Allow</button>
-    <button class="btn btn-deny" id="btnDeny">Deny</button>
+    <button class="btn btn-allow" id="btnAllow">Cho phép</button>
+    <button class="btn btn-deny" id="btnDeny">Từ chối</button>
   </div>
   
   <div class="suggestions" id="suggestions"></div>
@@ -274,10 +274,15 @@ function truncate(s, max) {
   return s.slice(0, max - 1) + "\u2026";
 }
 
+// Pick a string by language (vi default since 0.12.0).
+function L(lang, vi, en, zh) {
+  return lang === "zh" ? zh : lang === "en" ? en : vi;
+}
+
 function getSuggestionLabel(s, lang) {
   if (s.type === "setMode") {
-    if (s.mode === "acceptEdits") return lang === "zh" ? "\u81EA\u52A8\u63A5\u53D7\u7F16\u8F91" : "Auto-accept edits";
-    if (s.mode === "plan") return lang === "zh" ? "\u5207\u6362\u5230 Plan \u6A21\u5F0F" : "Switch to plan mode";
+    if (s.mode === "acceptEdits") return L(lang, "Tự nhận mọi chỉnh sửa", "Auto-accept edits", "\u81EA\u52A8\u63A5\u53D7\u7F16\u8F91");
+    if (s.mode === "plan") return L(lang, "Chuyển sang lập kế hoạch", "Switch to plan mode", "\u5207\u6362\u5230 Plan \u6A21\u5F0F");
     return s.mode;
   }
   if (s.type === "addRules") {
@@ -288,13 +293,13 @@ function getSuggestionLabel(s, lang) {
     if (rc) {
       if (rc.includes("**")) {
         const dir = rc.split("**")[0].replace(/[\\/]$/, "").split(/[\\/]/).pop() || rc;
-        return lang === "zh" ? `\u5141\u8BB8 ${tn} \u5728 ${dir}/` : `Allow ${tn} in ${dir}/`;
+        return L(lang, `Cho phép ${tn} trong ${dir}/`, `Allow ${tn} in ${dir}/`, `\u5141\u8BB8 ${tn} \u5728 ${dir}/`);
       }
       const short = rc.length > 30 ? rc.slice(0, 29) + "\u2026" : rc;
-      return lang === "zh" ? `\u59CB\u7EC8\u5141\u8BB8 \`${short}\`` : `Always allow \`${short}\``;
+      return L(lang, `Luôn cho phép \`${short}\``, `Always allow \`${short}\``, `\u59CB\u7EC8\u5141\u8BB8 \`${short}\``);
     }
   }
-  return lang === "zh" ? "\u59CB\u7EC8\u5141\u8BB8" : "Always allow";
+  return L(lang, "Luôn cho phép", "Always allow", "\u59CB\u7EC8\u5141\u8BB8");
 }
 
 function disableAll() {
@@ -317,7 +322,7 @@ function show(data) {
 
   if (elicitationMode) {
     // Elicitation mode — show question with "Go to Terminal" button
-    headerTitle.textContent = data.lang === "zh" ? "\u9700\u8981\u8F93\u5165" : "Needs Input";
+    headerTitle.textContent = L(data.lang, "Cần anh trả lời", "Needs Input", "\u9700\u8981\u8F93\u5165");
     toolPill.style.display = "none";
 
     // Extract question text from toolInput.questions
@@ -327,7 +332,7 @@ function show(data) {
     }
     commandBlock.textContent = questionText || JSON.stringify(data.toolInput);
 
-    btnAllow.textContent = data.lang === "zh" ? "\u524D\u5F80\u7EC8\u7AEF" : "Go to Terminal";
+    btnAllow.textContent = L(data.lang, "Mở cửa sổ lệnh", "Go to Terminal", "\u524D\u5F80\u7EC8\u7AEF");
     btnAllow.disabled = false;
     btnDeny.style.display = "none";
     suggestionsContainer.innerHTML = "";
@@ -337,12 +342,12 @@ function show(data) {
 
   // Codex notify mode — informational bubble with Dismiss button only
   if (data.toolName === "CodexExec") {
-    headerTitle.textContent = data.lang === "zh" ? "Codex \u6743\u9650\u8BF7\u6C42" : "Codex Permission";
+    headerTitle.textContent = L(data.lang, "Codex xin quyền", "Codex Permission", "Codex \u6743\u9650\u8BF7\u6C42");
     toolPill.textContent = "CODEX";
     toolPill.setAttribute("data-tool", "CodexExec");
     toolPill.style.display = "";
     commandBlock.textContent = (data.toolInput && data.toolInput.command) || "(unknown)";
-    btnAllow.textContent = data.lang === "zh" ? "\u77E5\u9053\u4E86" : "Got it";
+    btnAllow.textContent = L(data.lang, "Đã biết", "Got it", "\u77E5\u9053\u4E86");
     btnAllow.disabled = false;
     btnDeny.style.display = "none";
     suggestionsContainer.innerHTML = "";
@@ -356,10 +361,10 @@ function show(data) {
     toolPill.textContent = "PLAY";
     toolPill.setAttribute("data-tool", "Agent");
     toolPill.style.display = "";
-    commandBlock.textContent = (data.toolInput && data.toolInput.message) || "Ready for a quick English challenge?";
-    btnAllow.textContent = "Play now";
+    commandBlock.textContent = (data.toolInput && data.toolInput.message) || L(data.lang, "Chơi nhanh một ván ôn từ tiếng Anh nhé?", "Ready for a quick English challenge?", "\u6765\u4E00\u5C40\u82F1\u8BED\u5C0F\u6311\u6218\uFF1F");
+    btnAllow.textContent = L(data.lang, "Chơi ngay", "Play now", "\u73B0\u5728\u5F00\u59CB");
     btnAllow.disabled = false;
-    btnDeny.textContent = "Later";
+    btnDeny.textContent = L(data.lang, "Để sau", "Later", "\u7A0D\u540E");
     btnDeny.style.display = "";
     suggestionsContainer.innerHTML = "";
     revealCard();
@@ -370,8 +375,8 @@ function show(data) {
 
   // Header
   headerTitle.textContent = isPlanReview
-    ? (data.lang === "zh" ? "\u8BA1\u5212\u5BA1\u6279" : "Plan Review")
-    : "Permission Request";
+    ? L(data.lang, "Duyệt kế hoạch", "Plan Review", "\u8BA1\u5212\u5BA1\u6279")
+    : L(data.lang, "Xin quyền", "Permission Request", "\u6743\u9650\u8BF7\u6C42");
   toolPill.style.display = isPlanReview ? "none" : "";
   btnDeny.style.display = isPlanReview ? "none" : "";
 
@@ -383,8 +388,8 @@ function show(data) {
   commandBlock.textContent = formatDetail(data.toolName, data.toolInput);
 
   // Button labels
-  btnAllow.textContent = data.lang === "zh" ? "\u6279\u51C6" : (isPlanReview ? "Approve" : "Allow");
-  btnDeny.textContent = data.lang === "zh" ? "\u62D2\u7EDD" : (isPlanReview ? "Reject" : "Deny");
+  btnAllow.textContent = L(data.lang, isPlanReview ? "Duyệt" : "Cho phép", isPlanReview ? "Approve" : "Allow", "\u6279\u51C6");
+  btnDeny.textContent = L(data.lang, isPlanReview ? "Không duyệt" : "Từ chối", isPlanReview ? "Reject" : "Deny", "\u62D2\u7EDD");
 
   // Dynamic suggestion buttons
   suggestionsContainer.innerHTML = "";
@@ -392,7 +397,7 @@ function show(data) {
     // "Go to Terminal" button — deny + focus terminal
     const btn = document.createElement("button");
     btn.className = "btn-suggestion";
-    btn.textContent = data.lang === "zh" ? "\u524D\u5F80\u7EC8\u7AEF" : "Go to Terminal";
+    btn.textContent = L(data.lang, "Mở cửa sổ lệnh", "Go to Terminal", "\u524D\u5F80\u7EC8\u7AEF");
     btn.addEventListener("click", () => {
       disableAll();
       window.bubbleAPI.decide("deny-and-focus");

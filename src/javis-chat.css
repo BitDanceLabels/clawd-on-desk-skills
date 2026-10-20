@@ -21,3 +21,11 @@ button.link{background:none;border:0;color:var(--fg2);padding:0}
 .code{margin:12px 0 8px;font:600 28px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.12em;color:var(--gold);text-align:center}
 #pair-qr{display:block;margin:0 auto 8px;width:180px;height:180px;border-radius:10px;background:#fff}
 .ok{color:#8fe3a8}.warn{color:#ffcf7a}
+.steps{list-style:none;padding:12px;counter-reset:none}
+.steps li{position:relative;padding:4px 0 10px 30px;border-left:2px solid var(--line);margin-left:10px}
+.steps li:last-child{padding-bottom:0}
+.steps li::before{content:"";position:absolute;left:-9px;top:4px;width:16px;height:16px;border-radius:50%;background:var(--bg3);border:2px solid var(--fg3)}
+.steps li.current::before{border-color:var(--gold);background:var(--gold)}
+.steps li.done::before{content:"✓";color:#0b2a14;font:700 11px/16px system-ui;text-align:center;background:#8fe3a8;border-color:#8fe3a8}
+.steps li b{display:block;margin-bottom:2px}
+.steps li .muted{margin-bottom:6px}

@@ -73,6 +73,11 @@ function resolveStaticPath(pathname, roots) {
   if (rel === "/" || rel === "/index.html") return path.join(roots.src, "javis-chat.html");
   if (rel === "/javis-chat.js" || rel === "/javis-chat.css") return path.join(roots.src, rel.slice(1));
   if (rel === "/icon.png") return path.join(roots.assets, "icons", "128x128.png");
+  // 0.12.0 tool windows: Việc chờ anh, Thư ký đọc báo cáo, AI Clipboard.
+  let t = rel.match(/^\/(inbox|secretary|clip)\.html$/);
+  if (t) return path.join(roots.src, `javis-${t[1]}.html`);
+  t = rel.match(/^\/(javis-(?:inbox|secretary|clip)-page\.js|javis-tools\.css)$/);
+  if (t) return path.join(roots.src, t[1]);
   let m = rel.match(/^\/ui\/(javis-companion[A-Za-z0-9_.-]*\.js)$/);
   if (m) return path.join(roots.assets, "javis-companion", "ui", m[1]);
   if (rel === "/live2d/live2dcubismcore.min.js") return path.join(roots.assets, "live2d", "runtime", "live2dcubismcore.min.js");
@@ -226,6 +231,46 @@ function createFleetProxy({ keyStore, configStore, fetchImpl, onAuthError = () =
 }
 
 /**
+ * Main-process calls to the gateway (Việc chờ anh, báo cáo, giọng đọc, Clipboard) with the
+ * same device key and the same "rejected key" flag as the proxy: once the gateway answers
+ * 401 nothing else is sent until the user pairs again. A 403 is returned to the caller
+ * (e.g. an owner ticket that only the owner's web session may decide) and does not unpair.
+ */
+function createGatewayClient({ keyStore, configStore, fetchImpl, proxyState, onAuthError = () => {} }) {
+  function headersFor(creds, extra = {}) {
+    return { Authorization: `Bearer ${creds.key}`, [CLIENT_ID_HEADER]: "javis-desktop", ...extra };
+  }
+
+  async function request(method, pathname, body, { raw = false } = {}) {
+    const creds = keyStore.read();
+    if (!creds) return { status: 0, data: { error: "not_paired" }, notPaired: true };
+    if (proxyState && proxyState.authError) return { status: 401, data: { error: "pairing_rejected" } };
+    const init = { method, headers: headersFor(creds, body !== undefined ? { "Content-Type": "application/json" } : {}) };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    const res = await fetchImpl(configStore.getGateway() + pathname, init);
+    if (res.status === 401) {
+      if (proxyState) proxyState.authError = true;
+      onAuthError(401);
+    }
+    if (raw) {
+      const buffer = res.ok ? await res.arrayBuffer() : null;
+      return { status: res.status, buffer, contentType: res.headers.get("content-type") || "" };
+    }
+    let data = null;
+    try { data = await res.json(); } catch {}
+    return { status: res.status, data: data || {} };
+  }
+
+  function openStream() {
+    const creds = keyStore.read();
+    if (!creds || (proxyState && proxyState.authError)) return Promise.resolve({ status: 401, ok: false });
+    return fetchImpl(configStore.getGateway() + "/fleet/stream", { method: "GET", headers: headersFor(creds, { Accept: "text/event-stream" }) });
+  }
+
+  return { request, openStream, isPaired: () => !!keyStore.read() && !(proxyState && proxyState.authError) };
+}
+
+/**
  * Device-code pairing: start → show code/QR → poll until approved/denied/expired.
  * Network errors: up to MAX_FAILURES with back-off, then stop and report.
  */
@@ -327,7 +372,7 @@ function createPairing({ keyStore, configStore, fetchImpl, onUpdate, onPaired, s
  * Wire everything into the Electron app. Returns { openChat, openPairing }.
  */
 function initJavisCompanionHost(deps) {
-  const { app, BrowserWindow, ipcMain, session, net, safeStorage, shell, getBounds, onOpen } = deps;
+  const { app, BrowserWindow, ipcMain, session, net, safeStorage, shell, getBounds, onOpen, onPairChange = () => {} } = deps;
   const roots = { src: __dirname, assets: path.resolve(__dirname, "..", "assets") };
   const userDataDir = app.getPath("userData");
   const keyStore = createKeyStore({ userDataDir, safeStorage });
@@ -341,7 +386,7 @@ function initJavisCompanionHost(deps) {
     keyStore,
     configStore,
     fetchImpl: (url, init) => net.fetch(url, init),
-    onAuthError: (status) => send("javis:auth-error", { status }),
+    onAuthError: (status) => { send("javis:auth-error", { status }); onPairChange("rejected"); },
     log: (msg) => console.warn(msg),
   });
   const pairing = createPairing({
@@ -350,7 +395,14 @@ function initJavisCompanionHost(deps) {
     fetchImpl: (url, init) => net.fetch(url, init),
     clientName: `JAVIS Desktop · ${os.hostname()}`,
     onUpdate: (u) => send("javis:pair-update", u),
-    onPaired: () => proxy.reset(),
+    onPaired: () => { proxy.reset(); onPairChange("paired"); },
+  });
+  const gatewayClient = createGatewayClient({
+    keyStore,
+    configStore,
+    fetchImpl: (url, init) => net.fetch(url, init),
+    proxyState: proxy.state,
+    onAuthError: (st) => { send("javis:auth-error", { status: st }); onPairChange("rejected"); },
   });
 
   session.defaultSession.protocol.handle(SCHEME, async (request) => {
@@ -429,6 +481,7 @@ function initJavisCompanionHost(deps) {
     keyStore.save(key.trim());
     pairing.stop();
     proxy.reset();
+    onPairChange("paired");
     return { ok: true, status: status() };
   });
   ipcMain.handle("javis:unpair", (e) => {
@@ -436,6 +489,7 @@ function initJavisCompanionHost(deps) {
     pairing.stop();
     keyStore.clear();
     proxy.reset();
+    onPairChange("unpaired");
     return { ok: true, status: status() };
   });
 
@@ -489,9 +543,13 @@ function initJavisCompanionHost(deps) {
 
   return {
     openChat: () => open(null),
-    openPairing: () => open("pair"),
+    // { web: true } = also get a code and open the approval page in the browser.
+    openPairing: (opts = {}) => open(opts && opts.web ? "pair-web" : "pair"),
     getWindow: () => win,
     status,
+    keyStore,
+    configStore,
+    gatewayClient,
   };
 }
 
@@ -502,5 +560,5 @@ module.exports = {
   MAX_FAILURES,
   registerJavisScheme,
   initJavisCompanionHost,
-  __test: { normalizeGateway, isPlausibleDeviceKey, resolveStaticPath, createKeyStore, createConfigStore, createFleetProxy, createPairing },
+  __test: { normalizeGateway, isPlausibleDeviceKey, resolveStaticPath, createKeyStore, createConfigStore, createFleetProxy, createPairing, createGatewayClient },
 };

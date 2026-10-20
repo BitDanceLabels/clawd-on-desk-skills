@@ -26,33 +26,41 @@
   </section>
 
   <section id="view-pair" class="view" hidden>
-    <h2>Ghép đôi JAVIS</h2>
-    <p class="muted">Ghép máy này với tài khoản JAVIS để chat chung với web. Khoá thiết bị được mã hoá trên máy, không hiển thị ra đây.</p>
+    <h2>Ghép đôi máy này với JAVIS</h2>
+    <p class="muted">Ghép xong là chat chung với JAVIS web, xem Việc chờ anh, nghe báo cáo và dùng AI Clipboard. Khoá thiết bị được mã hoá trên máy, không hiện ra đây.</p>
     <div id="pair-state" class="card"></div>
 
-    <div class="card">
-      <h3>1 · Ghép bằng mã / QR</h3>
-      <p class="muted">Bấm bắt đầu, rồi duyệt mã trên JAVIS web (quét QR bằng điện thoại đã đăng nhập, hoặc mở trang duyệt trên máy này).</p>
-      <button id="btn-pair-start" class="primary">Bắt đầu ghép đôi</button>
-      <div id="pair-code" hidden>
-        <div class="code" id="user-code"></div>
-        <img id="pair-qr" alt="QR ghép đôi" hidden>
-        <p class="muted" id="pair-progress">Đang chờ duyệt…</p>
-        <div class="row">
-          <button id="btn-pair-open">Mở trang duyệt</button>
-          <button id="btn-pair-cancel">Huỷ</button>
+    <ol class="steps card" id="pair-steps">
+      <li id="step-1">
+        <b>Bước 1 · Lấy mã ghép đôi</b>
+        <p class="muted">Bấm nút dưới đây, máy sẽ hiện một mã và mã QR.</p>
+        <button id="btn-pair-start" class="primary">Lấy mã ghép đôi</button>
+        <div id="pair-code" hidden>
+          <div class="code" id="user-code"></div>
+          <img id="pair-qr" alt="QR ghép đôi" hidden>
         </div>
-      </div>
-    </div>
+      </li>
+      <li id="step-2">
+        <b>Bước 2 · Mở trang duyệt trên web</b>
+        <p class="muted">Quét QR bằng điện thoại đã đăng nhập JAVIS, hoặc bấm nút để mở trang duyệt trên máy này.</p>
+        <button id="btn-pair-open">Mở trang duyệt trên web</button>
+      </li>
+      <li id="step-3">
+        <b>Bước 3 · Bấm "Duyệt" trên web</b>
+        <p class="muted">Kiểm tra mã trên web giống mã ở bước 1 rồi bấm Duyệt. App tự nhận, anh không cần làm gì thêm.</p>
+        <p class="muted" id="pair-progress">Chưa bắt đầu.</p>
+        <button id="btn-pair-cancel" hidden>Huỷ</button>
+      </li>
+    </ol>
 
-    <div class="card">
-      <h3>2 · Dán khoá thiết bị</h3>
+    <details class="card">
+      <summary>Cách khác · Dán khoá thiết bị</summary>
       <p class="muted">Nếu đã có khoá thiết bị JAVIS (jvk_…), dán vào đây.</p>
       <div class="row">
         <input id="paste-key" type="password" autocomplete="off" spellcheck="false" placeholder="Dán khoá thiết bị">
         <button id="btn-paste">Lưu</button>
       </div>
-    </div>
+    </details>
 
     <details class="card">
       <summary>Nâng cao</summary>

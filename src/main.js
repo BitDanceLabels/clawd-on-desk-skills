@@ -61,7 +61,12 @@ const SIZES = {
 };
 const BUMBEE_VISION_URL = "https://vision.bumbee.asia/login";
 
-let lang = "en";
+const { langFromPrefs, LANG_PREFS_VERSION, translate } = require("./i18n");
+const { placeAvoiding } = require("./window-layout");
+const deskToolsMod = require("./javis-desk-tools");
+// Vietnamese by default (0.12.0); English / Chinese stay selectable in the menu.
+let lang = "vi";
+let clipShortcut = deskToolsMod.DEFAULT_CLIP_SHORTCUT;
 
 async function websocketDataToText(data) {
   if (typeof data === "string") return data;
@@ -145,7 +150,7 @@ function savePrefs() {
   const { x, y } = win.getBounds();
   const data = {
     x, y, size: currentSize,
-    miniMode: _mini.getMiniMode(), miniEdge: _mini.getMiniEdge(), preMiniX: _mini.getPreMiniX(), preMiniY: _mini.getPreMiniY(), lang,
+    miniMode: _mini.getMiniMode(), miniEdge: _mini.getMiniEdge(), preMiniX: _mini.getPreMiniX(), preMiniY: _mini.getPreMiniY(), lang, langV: LANG_PREFS_VERSION, clipShortcut,
     showTray, showDock,
     autoStartWithClaude, bubbleFollowPet, hideBubbles, showSessionId,
     ghostMode, assistantMode24x7,
@@ -2169,18 +2174,155 @@ function getJavisHost() {
   _javisHost = require("./javis-companion-host").initJavisCompanionHost({
     app, BrowserWindow, ipcMain, session, net, safeStorage, shell,
     getBounds: (w, h) => getChatBoundsNearPet(w, h),
+    onPairChange: (kind) => {
+      if (_deskTools) _deskTools.onPairChange(kind);
+      rebuildAllMenus();
+    },
   });
   return _javisHost;
 }
 
 function openJavisChat() {
   const host = getJavisHost();
-  if (host) host.openChat();
+  if (!host) return;
+  host.openChat();
+  watchForVocabLayout(host.getWindow());
 }
 
-function openJavisPairing() {
+function openJavisPairing(opts) {
   const host = getJavisHost();
-  if (host) host.openPairing();
+  if (!host) return;
+  host.openPairing(opts);
+  watchForVocabLayout(host.getWindow());
+}
+
+// ── 0.12.0: Việc chờ anh · Thư ký đọc báo cáo · AI Clipboard ──
+let _deskTools = null;
+function getDeskTools() {
+  if (_deskTools) return _deskTools;
+  const host = getJavisHost();
+  if (!host) return null;
+  const { shell, clipboard, safeStorage } = require("electron");
+  _deskTools = deskToolsMod.initDeskTools({
+    app, BrowserWindow, ipcMain, shell, clipboard, safeStorage,
+    spawn: require("child_process").spawn,
+    host,
+    getBounds: (w, h) => getToolBoundsNearPet(w, h),
+    sendToCharacter: (channel, payload) => sendToRenderer(channel, payload),
+    isDoNotDisturb: () => doNotDisturb,
+    isPetHidden: () => petHidden,
+    onMenuChange: () => scheduleMenuRebuild(),
+    openPairing: (opts) => openJavisPairing(opts),
+    t: (k) => translate(lang, k),
+    getClipShortcut: () => clipShortcut,
+    onWindowCreated: (w) => watchForVocabLayout(w),
+  });
+  return _deskTools;
+}
+
+// Tool windows open next to the character without covering the chat or each other.
+function getToolBoundsNearPet(width, height) {
+  const near = getChatBoundsNearPet(width, height);
+  const rect = { x: near.x, y: near.y, width, height };
+  const area = screen.getDisplayMatching(rect).workArea;
+  const others = layoutObstacles();
+  if (win && !win.isDestroyed() && win.isVisible()) others.push(win.getBounds());
+  const spot = placeAvoiding(rect, others, area);
+  return spot || near;
+}
+
+let _menuRebuildTimer = null;
+function scheduleMenuRebuild() {
+  if (_menuRebuildTimer) return;
+  _menuRebuildTimer = setTimeout(() => { _menuRebuildTimer = null; try { rebuildAllMenus(); } catch {} }, 250);
+}
+
+let _lastMenuInboxRefresh = 0;
+function inboxForMenu() {
+  const tools = _deskTools;
+  if (!tools) return { paired: false, count: 0, loaded: false };
+  const snap = tools.inboxSnapshot();
+  // Opening the menu is a real user action: refresh, at most once a minute.
+  if (snap.paired && Date.now() - _lastMenuInboxRefresh > 60 * 1000) {
+    _lastMenuInboxRefresh = Date.now();
+    void tools.refreshInbox("menu");
+  }
+  return snap;
+}
+
+function registerClipShortcut() {
+  if (!clipShortcut) return true;
+  try {
+    return globalShortcut.register(clipShortcut, () => { const tools = getDeskTools(); if (tools) tools.openClipboard(); });
+  } catch (err) {
+    console.warn("JAVIS: failed to register AI Clipboard shortcut:", err.message);
+    return false;
+  }
+}
+
+function setClipShortcut(acc) {
+  const next = acc === "" ? "" : deskToolsMod.normalizeClipShortcut(acc);
+  if (clipShortcut) { try { globalShortcut.unregister(clipShortcut); } catch {} }
+  const prev = clipShortcut;
+  clipShortcut = next;
+  if (next && !registerClipShortcut()) {
+    dialog.showMessageBox({ type: "warning", title: "JAVIS", message: translate(lang, "shortcutTaken").replace("{shortcut}", deskToolsMod.shortcutLabel(next)), buttons: [translate(lang, "ok")] }).catch(() => {});
+    clipShortcut = prev;
+    if (prev) registerClipShortcut();
+  }
+  savePrefs();
+  rebuildAllMenus();
+}
+
+// The vocab game panel floats on top: keep it clear of the chat / JAVIS windows.
+// It steps aside (or hides until they close) and comes back on its own.
+let _challengeHiddenForChat = false;
+let _challengeAutoMovedAt = 0;
+function layoutObstacles() {
+  const list = [];
+  const host = _javisHost;
+  const add = (w) => { if (w && !w.isDestroyed() && w.isVisible() && !w.isMinimized()) list.push(w.getBounds()); };
+  if (host) add(host.getWindow());
+  add(chatWin);
+  if (_deskTools) for (const w of _deskTools.windows()) add(w);
+  return list;
+}
+
+function keepVocabClearOfChat() {
+  if (!challengeWin || challengeWin.isDestroyed()) return;
+  const obstacles = layoutObstacles();
+  if (!obstacles.length) {
+    if (_challengeHiddenForChat) { _challengeHiddenForChat = false; challengeWin.showInactive(); }
+    return;
+  }
+  if (!challengeWin.isVisible() && !_challengeHiddenForChat) return;
+  const b = challengeWin.getBounds();
+  const area = screen.getDisplayMatching(b).workArea;
+  const spot = placeAvoiding(b, obstacles, area);
+  if (!spot) {
+    if (challengeWin.isVisible()) challengeWin.hide();
+    _challengeHiddenForChat = true;
+    return;
+  }
+  if (spot.x !== b.x || spot.y !== b.y) {
+    _challengeAutoMovedAt = Date.now();
+    challengeWin.setBounds({ ...b, x: spot.x, y: spot.y });
+  }
+  if (_challengeHiddenForChat) { _challengeHiddenForChat = false; challengeWin.showInactive(); }
+}
+
+let _layoutTimer = null;
+function scheduleVocabLayout() {
+  clearTimeout(_layoutTimer);
+  _layoutTimer = setTimeout(keepVocabClearOfChat, 150);
+}
+
+const _layoutWatched = new WeakSet();
+function watchForVocabLayout(w) {
+  if (!w || w.isDestroyed() || _layoutWatched.has(w)) { scheduleVocabLayout(); return; }
+  _layoutWatched.add(w);
+  for (const ev of ["show", "hide", "moved", "move", "resize", "minimize", "restore", "closed"]) w.on(ev, scheduleVocabLayout);
+  scheduleVocabLayout();
 }
 
 function showCharacterCredit() {
@@ -2193,22 +2335,23 @@ function showCharacterCredit() {
 }
 
 function showAboutJavis() {
+  const tr = (k) => translate(lang, k);
   const detail = [
-    `Version ${app.getVersion()}`,
-    "Trợ lý JAVIS trên máy tính — BitDance Labels.",
+    tr("version").replace("{version}", app.getVersion()),
+    tr("aboutBody"),
     "",
-    "Nhân vật mặc định: Hiyori (nhân vật mẫu Live2D, giữ nguyên thiết kế).",
+    tr("aboutCharacter"),
     javisBrand.LIVE2D_CREDIT,
     javisBrand.LIVE2D_CREDIT_VI,
     "",
-    "Based on Clawd on Desk (MIT, rullerzhou-afk). See LICENSES.md.",
+    tr("aboutBased"),
   ].join("\n");
   dialog.showMessageBox({
     type: "info",
-    title: "About JAVIS",
+    title: tr("aboutTitle"),
     message: "JAVIS",
     detail,
-    buttons: ["OK"],
+    buttons: [tr("ok")],
     icon: path.join(__dirname, "..", "assets", "icons", "128x128.png"),
   }).catch(() => {});
 }
@@ -2244,6 +2387,7 @@ function openBumbeeChat() {
   });
 
   chatWin.loadFile(path.join(__dirname, "bumbee-chat.html"));
+  watchForVocabLayout(chatWin);
   chatWin.once("ready-to-show", () => {
     if (chatWin && !chatWin.isDestroyed()) chatWin.show();
   });
@@ -2871,7 +3015,9 @@ function openVocabChallenge() {
   const bounds = getVocabChallengeBounds(challengeWinPos);
   if (challengeWin && !challengeWin.isDestroyed()) {
     challengeWin.setBounds(bounds);
+    _challengeHiddenForChat = false;
     challengeWin.showInactive();
+    keepVocabClearOfChat();
     try { challengeWin.webContents.send("challenge-refresh"); } catch {}
     return;
   }
@@ -2900,16 +3046,18 @@ function openVocabChallenge() {
   challengeWin.loadFile(path.join(__dirname, "vocab-challenge.html"));
   challengeWin.once("ready-to-show", () => {
     if (challengeWin && !challengeWin.isDestroyed()) challengeWin.showInactive();
+    keepVocabClearOfChat();
   });
   let movedSaveTimer = null;
   challengeWin.on("moved", () => {
     if (!challengeWin || challengeWin.isDestroyed()) return;
+    if (Date.now() - _challengeAutoMovedAt < 800) return; // stepped aside for the chat: not the user's spot
     const b = challengeWin.getBounds();
     challengeWinPos = { x: b.x, y: b.y };
     if (movedSaveTimer) clearTimeout(movedSaveTimer);
     movedSaveTimer = setTimeout(() => { try { savePrefs(); } catch {} }, 600);
   });
-  challengeWin.on("closed", () => { challengeWin = null; });
+  challengeWin.on("closed", () => { challengeWin = null; _challengeHiddenForChat = false; });
 }
 
 function closeVocabChallenge() {
@@ -3803,6 +3951,16 @@ const _menuCtx = {
   openJavisChat: () => openJavisChat(),
   openJavisPairing: () => openJavisPairing(),
   openEnglishCoach: () => openBumbeeChat(),
+  getInbox: () => inboxForMenu(),
+  openInbox: () => { const tools = getDeskTools(); if (tools) tools.openInbox(); },
+  readReport: () => { const tools = getDeskTools(); if (tools) void tools.readReport(); },
+  stopReading: () => { if (_deskTools) _deskTools.stopReading(); },
+  isReading: () => !!(_deskTools && _deskTools.isReading()),
+  openClipboard: () => { const tools = getDeskTools(); if (tools) tools.openClipboard(); },
+  getClipShortcut: () => clipShortcut,
+  setClipShortcut: (acc) => setClipShortcut(acc),
+  clipShortcutChoices: deskToolsMod.CLIP_SHORTCUTS,
+  shortcutLabel: (acc) => deskToolsMod.shortcutLabel(acc),
   showAbout: () => showAboutJavis(),
   openBumbeeVocab: openVocabTinder,
   openBumbeeChallenge: openVocabChallenge,
@@ -3871,7 +4029,8 @@ function notifyBumbeeSystemBootstrap(result) {
 function createWindow() {
   const prefs = loadPrefs();
   if (prefs && SIZES[prefs.size]) currentSize = prefs.size;
-  if (prefs && (prefs.lang === "en" || prefs.lang === "zh")) lang = prefs.lang;
+  lang = langFromPrefs(prefs);
+  if (prefs) clipShortcut = deskToolsMod.normalizeClipShortcut(prefs.clipShortcut);
   // macOS: restore tray/dock visibility from prefs
   if (isMac && prefs) {
     if (typeof prefs.showTray === "boolean") showTray = prefs.showTray;
@@ -4708,6 +4867,9 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     getJavisHost();
+    const tools = getDeskTools();
+    if (tools) tools.startWatching();
+    registerClipShortcut();
     // Dev-only (never in packaged builds): JAVIS_DEV_OPEN=chat,pair,about,credit opens
     // windows at start-up for headless screenshot checks.
     if (!app.isPackaged && process.env.JAVIS_DEV_OPEN) {
@@ -4717,7 +4879,46 @@ if (!gotTheLock) {
         if (want.has("chat")) openJavisChat();
         if (want.has("pair")) openJavisPairing();
         if (want.has("about")) showAboutJavis();
+        if (want.has("inbox") && tools) tools.openInbox();
+        if (want.has("report") && tools) void tools.readReport();
+        if (want.has("clip") && tools) tools.openClipboard();
+        if (want.has("vocab")) openVocabChallenge();
       }, 4000);
+    }
+    // Dev-only test hooks for the Playwright tester (never in packaged builds):
+    // read/click native menu items, which Playwright cannot reach.
+    if (!app.isPackaged && process.env.JAVIS_TEST_HOOKS === "1") {
+      const flatten = (menu, out = []) => {
+        for (const it of menu.items) {
+          if (it.type === "separator") continue;
+          out.push(it);
+          if (it.submenu) flatten(it.submenu, out);
+        }
+        return out;
+      };
+      const contextItems = () => { buildContextMenu(); return flatten(contextMenu); };
+      globalThis.__javisTest = {
+        contextLabels: () => contextItems().map((i) => i.label),
+        clickMenu: (prefix) => {
+          const it = contextItems().find((i) => i.label.startsWith(prefix));
+          if (!it) return false;
+          it.click();
+          return true;
+        },
+        popupMenu: () => showPetContextMenu(),
+        closeMenu: () => { try { contextMenu.closePopup(); } catch {} },
+        lang: () => lang,
+        dnd: (on) => (on ? _menuCtx.enableDoNotDisturb() : _menuCtx.disableDoNotDisturb()),
+        clipShortcut: () => ({ acc: clipShortcut, registered: !!clipShortcut && globalShortcut.isRegistered(clipShortcut) }),
+        bounds: () => ({
+          chat: _javisHost && _javisHost.getWindow() && !_javisHost.getWindow().isDestroyed() ? _javisHost.getWindow().getBounds() : null,
+          challenge: challengeWin && !challengeWin.isDestroyed() ? { ...challengeWin.getBounds(), visible: challengeWin.isVisible() } : null,
+          pet: win && !win.isDestroyed() ? win.getBounds() : null,
+        }),
+        openVocabChallenge: () => openVocabChallenge(),
+        openChat: () => openJavisChat(),
+        isReading: () => !!(_deskTools && _deskTools.isReading()),
+      };
     }
     try {
       app.setAboutPanelOptions({
