@@ -4,7 +4,7 @@
 // Quay video x11grab, chụp ảnh màn đầu / đã đăng nhập, ghi kết quả JSON.
 "use strict";
 const { _electron: electron } = require("playwright-core");
-const { spawn, execFileSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -33,9 +33,11 @@ function caption(text) {
   console.log(`== ${text}`);
 }
 
-function shot(name) {
+// Window-only screenshot (rendered by Chromium, not read back from the X server: xvfb has
+// no compositor, so a transparent window can keep stale pixels of a hidden note).
+async function windowShot(page, name) {
   fs.mkdirSync(SHOTS, { recursive: true });
-  execFileSync("import", ["-window", "root", path.join(SHOTS, name)]);
+  await page.screenshot({ path: path.join(SHOTS, name) });
 }
 
 function gw(method, p, body) {
@@ -146,7 +148,7 @@ async function main() {
     check(2, "Cô bé nhắc nhẹ 1 lần", notes1.filter((t) => /phiên đăng nhập JAVIS hết hạn/.test(t)).length >= 1, notes1.join(" | "));
     const inboxWin = app.windows().find((p) => p.url().includes("inbox.html"));
     if (inboxWin) await inboxWin.close();
-    shot("login-0-khoa-cu-bi-tu-choi.png");
+    await windowShot(chat, "login-0-khoa-cu-bi-tu-choi.png");
     await sleep(2000);
 
     // ── 3 · Luồng A: trình duyệt + PKCE ──
@@ -183,7 +185,7 @@ async function main() {
     const session = JSON.parse(fs.readFileSync(path.join(ud, "javis-session.json"), "utf8"));
     check(3, "refresh_token lưu trong userData; access_token không ghi ra đĩa", !!(session.enc || session.plain) && !fs.readFileSync(path.join(ud, "javis-session.json"), "utf8").includes("jat_"));
     check(3, "Khoá cũ đã được thay bằng phiên mới", !fs.existsSync(path.join(ud, "javis-device-key.json")));
-    shot("login-2-da-dang-nhap.png");
+    await windowShot(chat, "login-2-da-dang-nhap.png");
     await sleep(2500);
 
     // ── 4 · Refresh tự động khi gặp 401 ──
@@ -266,7 +268,7 @@ async function main() {
       parts.lines === 1 && JSON.stringify(parts.buttons) === JSON.stringify(["Đăng nhập JAVIS", "Hoặc nhận mã qua email"]), JSON.stringify(parts));
     check(7, "Đăng xuất → menu 'Đăng nhập JAVIS…'", (await hook(app, "contextLabels")).includes("🔑 Đăng nhập JAVIS…"));
     check(7, "Đăng xuất đã thu hồi trên gateway", JSON.parse(await gw("GET", "/__auth-log")).includes("revoke"), "streams mở: " + (await gw("GET", "/__streams")));
-    shot("login-1-man-dau.png");
+    await windowShot(chat, "login-1-man-dau.png");
     await sleep(3000);
     caption("Xong · Đăng nhập 1 lần, dùng lâu dài");
     await sleep(2500);
