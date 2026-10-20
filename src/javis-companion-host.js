@@ -246,8 +246,8 @@ function createFleetProxy({ auth, configStore, fetchImpl, log = () => {} }) {
 /**
  * Main-process calls to the gateway (Việc chờ anh, báo cáo, giọng đọc, Clipboard) with the
  * same sign-in as the proxy. A 401 refreshes the access token and retries once; if that is
- * rejected too the session ends (login screen). A 403 is returned to the caller (e.g. an
- * owner ticket that only the owner's web session may decide) and does not sign out.
+ * rejected too the session ends (login screen). A 403 is returned to the caller (machine
+ * tokens cannot approve anything) and does not sign out. A 429 carries `retryAfter` (seconds).
  */
 function createGatewayClient({ auth, configStore, fetchImpl }) {
   function headersFor(token, extra = {}) {
@@ -283,7 +283,14 @@ function createGatewayClient({ auth, configStore, fetchImpl }) {
     }
     let data = null;
     try { data = await res.json(); } catch {}
-    return { status: res.status, data: data || {} };
+    const out = { status: res.status, data: data || {} };
+    if (res.status === 429) {
+      // Retry-After in seconds (the gateway sends 60); an HTTP date is accepted too.
+      const h = res.headers && typeof res.headers.get === "function" ? res.headers.get("retry-after") : null;
+      const secs = h === null || h === undefined || h === "" ? NaN : Number(h);
+      out.retryAfter = Number.isFinite(secs) ? secs : (h && Date.parse(h) ? Math.max(1, Math.ceil((Date.parse(h) - Date.now()) / 1000)) : null);
+    }
+    return out;
   }
 
   const liveStreams = new Set();

@@ -174,13 +174,13 @@ function initDeskTools(deps) {
 
   handle("javis-tools:inbox-get", async () => inbox.snapshot());
   handle("javis-tools:inbox-refresh", async () => inbox.refresh({ reason: "manual" }));
-  handle("javis-tools:inbox-approve", async (id) => inbox.approve(String(id || "")));
   handle("javis-tools:open-web", async (url) => {
     // Only the JAVIS web (or the gateway's own pages) — never arbitrary links.
     let u;
     try { u = new URL(String(url || WEB_BASE)); } catch { return { ok: false }; }
+    // Plus the exact `link` of a line in "Việc chờ anh" (CONTRACT v1.1: approving happens on the web).
     const allowed = [new URL(WEB_BASE).origin, new URL(host.configStore.getGateway()).origin];
-    if (!allowed.includes(u.origin)) return { ok: false };
+    if (!allowed.includes(u.origin) && !(u.protocol === "https:" && inbox.hasLink(String(url)))) return { ok: false };
     await shell.openExternal(u.href);
     return { ok: true };
   });

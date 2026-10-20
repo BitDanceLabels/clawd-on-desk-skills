@@ -44,17 +44,15 @@ function fakeClient(routes) {
   };
 }
 
-const HOME = {
-  data: [
-    { id: "idea_a", title: "Duyệt lịch đăng 11.11", state: "waiting", can_approve: true, importance: "P1", due: "2026-10-21" },
-    { id: "idea_b", title: "Viết kịch bản inbox", state: "doing", can_approve: false },
-    { id: "idea_c", title: "Chốt thumbnail MV", state: "waiting", can_approve: false, importance: "P2" },
-    { id: "idea_d", title: "Đã xong", state: "done" },
+// GET /fleet/desk/pending (CONTRACT.md v1.1): 7 fields per item, sorted by the gateway.
+const DUE = 1761000000;
+const PENDING = {
+  items: [
+    { id: "idea_a", title: "Duyệt lịch đăng 11.11", kind: "task", status: "waiting", due: DUE, urgency: "high", link: "https://javis.bumbee.asia/?task=idea_a" },
+    { id: "tk_1", title: "Chi 200k chạy thử quảng cáo", kind: "approval", status: "pending", due: null, urgency: "normal", link: "https://javis.bumbee.asia/?ticket=tk_1" },
+    { id: "idea_c", title: "Chốt thumbnail MV", kind: "task", status: "todo", due: null, urgency: "normal", link: "javascript:alert(1)" },
   ],
-  approvals: [
-    { id: "tk_1", title: "Chi 200k chạy thử quảng cáo", state: "open", urgent: false, items: [{ n: 1 }, { n: 2 }] },
-    { id: "tk_2", title: "Đã quyết", state: "approved" },
-  ],
+  total: 3, scope: "home", at: DUE,
 };
 
 describe("1 · Menu tiếng Việt", () => {
@@ -100,15 +98,21 @@ describe("1 · Menu tiếng Việt", () => {
 });
 
 describe("2 · Việc chờ anh", () => {
-  it("summarizes /fleet/home/tasks: waiting tasks + open tickets, one line each", () => {
-    const s = inboxMod.summarizeHome(HOME);
-    assert.deepStrictEqual(s.items.map((i) => i.id), ["idea_a", "idea_c", "tk_1"]);
+  it("summarizes /fleet/desk/pending: keeps the gateway order, 7 fields, badge = total", () => {
+    const s = inboxMod.summarizePending(PENDING);
+    assert.deepStrictEqual(s.items.map((i) => i.id), ["idea_a", "tk_1", "idea_c"]);
     assert.strictEqual(s.count, 3);
-    assert.strictEqual(s.approvable, 1);
-    const tk = s.items.find((i) => i.id === "tk_1");
-    assert.strictEqual(tk.canApprove, false, "owner tickets are decided on the web only");
-    assert.strictEqual(tk.webUrl, "https://javis.bumbee.asia/?ticket=tk_1");
-    assert.strictEqual(tk.questions, 2);
+    assert.strictEqual(s.scope, "home");
+    const [a, tk, c] = s.items;
+    assert.deepStrictEqual([a.kind, a.urgent, a.due, a.status], ["task", true, DUE, "waiting"]);
+    assert.deepStrictEqual([tk.kind, tk.urgent, tk.due], ["approval", false, null]);
+    assert.strictEqual(tk.webUrl, "https://javis.bumbee.asia/?ticket=tk_1", "opens the gateway's link");
+    assert.strictEqual(c.webUrl, "https://javis.bumbee.asia/?approvals=1", "non-https link falls back to the web");
+    assert.ok(!("canApprove" in a), "nothing is approvable with a machine token");
+    // items capped at 50 by the gateway, total is the real number
+    const many = inboxMod.summarizePending({ items: PENDING.items, total: 73, scope: "workspace" });
+    assert.deepStrictEqual([many.count, many.shown, many.scope], [73, 3, "workspace"]);
+    assert.strictEqual(inboxMod.summarizePending({ items: [{ id: "x", title: "y".repeat(300) }] }).items[0].title.length, 140);
   });
 
   it("only notifies for new items, never on first load, while sleeping or hidden", () => {
@@ -119,33 +123,82 @@ describe("2 · Việc chờ anh", () => {
     assert.strictEqual(inboxMod.shouldNotify({ newCount: 2, firstLoad: false, doNotDisturb: false, petHidden: true }), false);
   });
 
-  it("refresh → approve (POST /fleet/ideas/<id>/task/approve) removes the line", async () => {
-    const client = fakeClient({ "GET /fleet/home/tasks": { status: 200, data: HOME }, "POST /fleet/ideas/idea_a/task/approve": { status: 200, data: {} } });
+  it("refresh reads GET /fleet/desk/pending; no approve call exists; links are allow-listed", async () => {
+    const client = fakeClient({ "GET /fleet/desk/pending": { status: 200, data: PENDING } });
     const news = [];
     const box = inboxMod.createInbox({ client, isPaired: () => true, onNew: (n) => news.push(n), ...fakeTimers() });
     const s1 = await box.refresh();
     assert.strictEqual(s1.count, 3);
     assert.strictEqual(news[0].firstLoad, true);
-    const r = await box.approve("idea_a");
-    assert.deepStrictEqual(r, { ok: true });
-    assert.strictEqual(box.snapshot().count, 2);
-    assert.deepStrictEqual(client.calls.at(-1), { method: "POST", path: "/fleet/ideas/idea_a/task/approve", body: { actor: "owner", via: "desktop" } });
-    // a ticket cannot be approved from the app
-    assert.strictEqual((await box.approve("tk_1")).error, "not_found");
+    assert.deepStrictEqual(client.calls, [{ method: "GET", path: "/fleet/desk/pending", body: undefined }]);
+    assert.strictEqual(box.approve, undefined);
+    assert.strictEqual(box.hasLink("https://javis.bumbee.asia/?ticket=tk_1"), true);
+    assert.strictEqual(box.hasLink("https://evil.test/"), false);
+    const page = fs.readFileSync(path.join(__dirname, "..", "src", "javis-inbox-page.js"), "utf8");
+    assert.ok(page.includes('"Mở để duyệt"') && !page.includes("inboxApprove"));
+    const preload = fs.readFileSync(path.join(__dirname, "..", "src", "preload-javis-tools.js"), "utf8");
+    assert.ok(!preload.includes("approve"));
   });
 
-  it("403 on approve sends the owner to the web instead of unpairing", async () => {
-    const client = fakeClient({ "GET /fleet/home/tasks": { status: 200, data: HOME }, "POST /fleet/ideas/idea_a/task/approve": { status: 403, data: {} } });
-    const box = inboxMod.createInbox({ client, isPaired: () => true, ...fakeTimers() });
-    await box.refresh();
-    const r = await box.approve("idea_a");
-    assert.strictEqual(r.error, "web_only");
-    assert.ok(r.webUrl.startsWith("https://javis.bumbee.asia/"));
+  it("automatic refreshes (menu, stream events) stay ≤ 1 per minute; opening the window goes through", async () => {
+    let t = 1_000_000;
+    let n = 0;
+    const client = fakeClient({ "GET /fleet/desk/pending": () => { n++; return { status: 200, data: PENDING }; } });
+    const timers = fakeTimers();
+    const box = inboxMod.createInbox({ client, isPaired: () => true, now: () => t, ...timers });
+    await box.refresh({ reason: "start" });
+    t += 10_000;
+    await box.refresh({ reason: "menu" });
+    assert.strictEqual(n, 1, "menu within a minute: no call");
+    await box.refresh({ reason: "event" });
+    assert.strictEqual(n, 1);
+    assert.strictEqual(timers.q.length, 1, "event deferred to the end of the minute");
+    assert.strictEqual(timers.q[0].ms, 50_000);
+    await box.refresh({ reason: "open" });
+    assert.strictEqual(n, 2, "owner opened the window");
+    t += 60_000;
+    await timers.runNext();
+    assert.strictEqual(n, 3);
+  });
+
+  it("429: waits Retry-After, one retry per wait, at most 3 tries, nothing called in between", async () => {
+    let t = 5_000_000;
+    let n = 0;
+    const client = fakeClient({ "GET /fleet/desk/pending": () => { n++; return { status: 429, data: { detail: "chậm lại" }, retryAfter: 60 }; } });
+    const timers = fakeTimers();
+    const box = inboxMod.createInbox({ client, isPaired: () => true, now: () => t, ...timers });
+    const s = await box.refresh({ reason: "open" });
+    assert.strictEqual(s.error, "rate_limited");
+    assert.strictEqual(s.retryAt, t + 60_000);
+    assert.strictEqual(timers.q[0].ms, 60_000);
+    await box.refresh({ reason: "manual" });
+    assert.strictEqual(n, 1, "Làm mới during Retry-After: no call");
+    t += 60_000; await timers.runNext();
+    t += 60_000; await timers.runNext();
+    assert.strictEqual(n, 3);
+    assert.strictEqual(timers.q.length, 0, "no 4th try");
+    assert.strictEqual(box.state.stoppedUntilEvent, true);
+    // Retry-After missing → 60 s default
+    const c2 = fakeClient({ "GET /fleet/desk/pending": { status: 429, data: {} } });
+    const t2 = fakeTimers();
+    await inboxMod.createInbox({ client: c2, isPaired: () => true, ...t2 }).refresh();
+    assert.strictEqual(t2.q[0].ms, 60_000);
+  });
+
+  it("401 after the client's refresh → 'pairing_rejected' (login screen); 403 does not sign out", async () => {
+    const c401 = fakeClient({ "GET /fleet/desk/pending": { status: 401, data: { detail: "x", login: true } } });
+    const t1 = fakeTimers();
+    const s1 = await inboxMod.createInbox({ client: c401, isPaired: () => true, ...t1 }).refresh();
+    assert.strictEqual(s1.error, "pairing_rejected");
+    assert.strictEqual(t1.q.length, 0, "no retry loop on 401");
+    const c403 = fakeClient({ "GET /fleet/desk/pending": { status: 403, data: {} } });
+    const s2 = await inboxMod.createInbox({ client: c403, isPaired: () => true, ...fakeTimers() }).refresh();
+    assert.strictEqual(s2.error, "forbidden");
   });
 
   it("network errors: 3 tries with growing back-off, then stop until a real event", async () => {
     let n = 0;
-    const client = fakeClient({ "GET /fleet/home/tasks": () => { n++; return { status: 502, data: {} }; } });
+    const client = fakeClient({ "GET /fleet/desk/pending": () => { n++; return { status: 502, data: {} }; } });
     const timers = fakeTimers();
     const box = inboxMod.createInbox({ client, isPaired: () => true, ...timers });
     await box.refresh();
@@ -206,11 +259,11 @@ describe("3 · Thư ký đọc báo cáo", () => {
         waiting_owner: [{ title: "Duyệt lịch đăng 11.11" }],
         reminders_today: [{ text: "Gọi chị Lan 15h" }],
       },
-      inbox: inboxMod.summarizeHome(HOME),
+      inbox: inboxMod.summarizePending(PENDING),
     });
     assert.ok(r.seconds <= 90, `${r.seconds}s`);
     assert.match(r.text, /^Chào anh\. Báo cáo hôm nay, thứ Ba, ngày 20 tháng 10\./);
-    assert.match(r.text, /Chờ anh duyệt 3 việc: Duyệt lịch đăng 11\.11; Chốt thumbnail MV; Chi 200k/);
+    assert.match(r.text, /Chờ anh duyệt 3 việc: Duyệt lịch đăng 11\.11; Chi 200k chạy thử quảng cáo; Chốt thumbnail MV/);
     assert.ok(!r.text.includes("Rất cũ"), "only goals finished in the last 24h");
     assert.match(r.text, /Nhắc việc hôm nay 1 việc: Gọi chị Lan 15h\./);
   });
@@ -407,6 +460,26 @@ describe("5 · Cửa sổ không đè nhau + ghép đôi dễ hơn", () => {
     assert.strictEqual(r("/../main.js", roots), null);
   });
 
+  it("gateway client: 429 carries Retry-After seconds; the app never calls /fleet/home/tasks", async () => {
+    const { createAuth } = require("../src/javis-auth");
+    const auth = createAuth({
+      fetchImpl: async () => { throw new Error("no"); }, getGateway: () => "http://gw.test",
+      sessionStore: { read: () => null, save() {}, clear() {} },
+      legacyStore: { read: () => ({ key: "jvk_FAKEFAKEFAKEFAKE" }), save() {}, clear() {} },
+    });
+    auth.init();
+    const c = host.__test.createGatewayClient({
+      auth, configStore: { getGateway: () => "http://gw.test" },
+      fetchImpl: async () => new Response('{"detail":"chậm lại"}', { status: 429, headers: { "Retry-After": "60" } }),
+    });
+    const r = await c.request("GET", "/fleet/desk/pending");
+    assert.deepStrictEqual([r.status, r.retryAfter], [429, 60]);
+    const srcDir = path.join(__dirname, "..", "src");
+    for (const f of ["javis-inbox.js", "javis-desk-tools.js", "javis-companion-host.js", "main.js"]) {
+      assert.ok(!fs.readFileSync(path.join(srcDir, f), "utf8").includes("/fleet/home/tasks"), f);
+    }
+  });
+
   it("gateway client: old key rejected (401) stops every later call; 403 does not sign out", async () => {
     let calls = 0;
     let status = 403;
@@ -423,12 +496,12 @@ describe("5 · Cửa sổ không đè nhau + ghép đôi dễ hơn", () => {
       configStore: { getGateway: () => "http://gw.test" },
       fetchImpl: async (url, init) => { calls++; assert.strictEqual(init.headers.Authorization, "Bearer jvk_FAKEFAKEFAKEFAKE"); return { status, ok: false, headers: new Map(), json: async () => ({}) }; },
     });
-    assert.strictEqual((await c.request("POST", "/fleet/ideas/x/task/approve", {})).status, 403);
+    assert.strictEqual((await c.request("POST", "/fleet/orders/x/approve", {})).status, 403);
     assert.strictEqual(auth.getState().state, "signed_in");
     status = 401;
-    await c.request("GET", "/fleet/home/tasks");
+    await c.request("GET", "/fleet/desk/pending");
     assert.strictEqual(auth.getState().state, "expired");
-    await c.request("GET", "/fleet/home/tasks");
+    await c.request("GET", "/fleet/desk/pending");
     assert.strictEqual(calls, 2, "no call after 401");
     assert.strictEqual(c.isPaired(), false);
   });

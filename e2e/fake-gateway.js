@@ -7,6 +7,9 @@
 //   POST /__expire-access      → every access token expires (next call: 401 → refresh)
 //   POST /__revoke-all         → every device revoked (refresh answers relogin:true)
 //   POST /__revoke-legacy      → old jvk_ keys rejected
+//   POST /__rate-limit {n}     → the next n GET /fleet/desk/pending answer 429 (Retry-After: 60)
+// CONTRACT.md v1.1: machine tokens only READ GET /fleet/desk/pending; /fleet/home/tasks stays 401
+// for them and every approve route answers 403.
 "use strict";
 const http = require("http");
 const { createFakeAuth } = require("./fake-auth");
@@ -16,10 +19,11 @@ const auth = createFakeAuth({ legacyKeys: ["jvk_FAKEFAKEFAKEFAKEFAKEFAKE"], acce
 const log = [];
 const streams = new Set();
 let seq = 0;
+let rateLimit = 0;
 
 const now = () => Date.now() / 1000;
 const tasks = [
-  { id: "idea_lich1111", title: "Duyệt lịch đăng mùa sale 11.11 cho shop hoa", state: "waiting", can_approve: true, importance: "P1", due: "2026-10-22" },
+  { id: "idea_lich1111", title: "Duyệt lịch đăng mùa sale 11.11 cho shop hoa", state: "waiting", can_approve: true, importance: "P1", due: Date.parse("2026-10-22T17:00:00+07:00") / 1000 },
   { id: "idea_thumbmv", title: "Chốt thumbnail MV The N77 Quantum", state: "waiting", can_approve: true, importance: "P2" },
   { id: "idea_kichban", title: "Kịch bản trực inbox cho tiệm bánh", state: "doing", can_approve: false },
   { id: "idea_pitch", title: "Cập nhật số liệu pitch nhà đầu tư", state: "waiting", can_approve: false, importance: "P2" },
@@ -81,6 +85,20 @@ document.getElementById("deny").onclick = () => { location.href = req.redirect_u
 </script></body></html>`;
 }
 
+// GET /fleet/desk/pending body: exactly the 7 contract fields, urgent first then nearest due.
+function deskPending() {
+  const items = [
+    ...tasks.filter((t) => t.state !== "done").map((t) => ({ id: t.id, title: t.title.slice(0, 140), kind: "task", status: t.state,
+      due: typeof t.due === "number" ? t.due : null, urgency: t.importance === "P0" || t.importance === "P1" ? "high" : "normal",
+      link: `https://javis.bumbee.asia/?task=${encodeURIComponent(t.id)}` })),
+    ...tickets.filter((k) => k.state === "open").map((k) => ({ id: k.id, title: k.title.slice(0, 140), kind: "approval", status: "pending",
+      due: null, urgency: k.urgent ? "high" : "normal", link: `https://javis.bumbee.asia/?ticket=${encodeURIComponent(k.id)}` })),
+  ];
+  const rank = (i) => (i.urgency === "high" ? 0 : 1);
+  items.sort((a, b) => rank(a) - rank(b) || (a.due || Infinity) - (b.due || Infinity));
+  return { items: items.slice(0, 50), total: items.length, scope: "home", at: now() };
+}
+
 function push(type, data) {
   const ev = { id: ++seq, type, data, at: now() };
   for (const res of streams) res.write(`id: ${ev.id}\nevent: ${type}\ndata: ${JSON.stringify(ev)}\n\n`);
@@ -104,6 +122,7 @@ http.createServer((req, res) => {
       return json({ ok: true, id });
     }
     if (p === "/__mail") return json(auth.outbox);
+    if (p === "/__rate-limit") { rateLimit = Number(b.n || 1); return json({ ok: true }); }
     if (p === "/__streams") return json({ open: streams.size });
     if (p === "/__auth-log") return json(auth.log);
     if (p === "/__expire-access") { auth.expireAccess(); return json({ ok: true }); }
@@ -121,14 +140,18 @@ http.createServer((req, res) => {
       res.on("close", () => streams.delete(res));
       return;
     }
-    if (p === "/fleet/home/tasks") return json({ data: tasks, resuggest: [], approvals: tickets, autodispatch: false, now: now() });
-    const ap = p.match(/^\/fleet\/ideas\/([^/]+)\/task\/approve$/);
-    if (ap && req.method === "POST") {
-      const t = tasks.find((x) => x.id === ap[1]);
-      if (!t) return json({ detail: "idea not found" }, 404);
-      t.state = "doing"; t.can_approve = false;
-      return json({ ...t, routing: { approved_by: b.actor || "owner" } });
+    if (p === "/fleet/desk/pending" && req.method === "GET") {
+      if (rateLimit > 0) {
+        rateLimit--;
+        res.writeHead(429, { "Content-Type": "application/json", "Retry-After": "60" });
+        res.end(JSON.stringify({ detail: "quá 30 lần/phút" }));
+        return;
+      }
+      return json(deskPending());
     }
+    // Machine tokens: the owner's Home list stays closed, nothing can be approved.
+    if (p === "/fleet/home/tasks") return json({ detail: "unauthorized" }, 401);
+    if (req.method === "POST" && /\/approve$/.test(p)) return json({ detail: "duyệt trên web" }, 403);
     if (p === "/fleet/report/morning") {
       const t = now();
       return json({

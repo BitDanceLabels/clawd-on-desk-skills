@@ -8,7 +8,6 @@ const on = (ch) => (cb) => ipcRenderer.on(`javis-tools:${ch}`, (_e, v) => cb(v))
 contextBridge.exposeInMainWorld("javisTools", {
   inboxGet: call("inbox-get"),
   inboxRefresh: call("inbox-refresh"),
-  inboxApprove: call("inbox-approve"),
   onInbox: on("inbox"),
   openWeb: call("open-web"),
   login: call("login"),

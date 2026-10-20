@@ -198,7 +198,7 @@ async function main() {
     }).catch(() => null);
     const log2 = (await gw("GET", "/__log")).split("\n").slice(before - 1);
     const alog2 = JSON.parse(await gw("GET", "/__auth-log"));
-    check(4, "Gặp 401 → gọi /refresh → gọi lại thành công", alog2.includes("refresh") && log2.filter((l) => l.startsWith("GET /fleet/home/tasks")).length >= 2, log2.join(" ; ").slice(0, 200));
+    check(4, "Gặp 401 → gọi /refresh → gọi lại thành công", alog2.includes("refresh") && log2.filter((l) => l.startsWith("GET /fleet/desk/pending")).length >= 2, log2.join(" ; ").slice(0, 200));
     check(4, "Vẫn đăng nhập sau refresh", (await hook(app, "authState")).state === "signed_in" && snap && snap.loaded, JSON.stringify(snap && { loaded: snap.loaded, count: snap.count }));
     await sleep(1500);
 

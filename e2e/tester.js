@@ -128,25 +128,28 @@ async function main() {
     await sleep(500);
 
     // ── 2 · Việc chờ anh ──
-    caption("2/5 · Việc chờ anh: xem, Duyệt 1 chạm, cô bé báo việc mới");
+    caption("2/5 · Việc chờ anh: xem, Mở để duyệt trên web, cô bé báo việc mới");
     await hook(app, "clickMenu", "📋 Việc chờ anh");
     const inbox = await findWindow(app, "inbox.html");
     await inbox.waitForSelector("#list .item", { timeout: 10000 });
     await sleep(800);
     const rows = await inbox.$$eval("#list .item b", (els) => els.map((e) => e.textContent));
-    check(2, "Cửa sổ hiện mỗi việc 1 dòng (3 việc + 1 phiếu duyệt)", rows.length === 4, rows.join(" | "));
-    check(2, "Phiếu của chủ nhân chỉ có nút Mở trên web (không duyệt bằng khoá thiết bị)",
-      await inbox.$eval('#list .item[data-id="tk_ads200"]', (li) => !![...li.querySelectorAll("button")].find((b) => b.textContent === "Mở trên web") && ![...li.querySelectorAll("button")].find((b) => b.textContent === "Duyệt")));
+    check(2, "Đọc GET /fleet/desk/pending, mỗi việc 1 dòng (4 việc + 1 phiếu duyệt)", rows.length === 5 && (await gw("GET", "/__log")).includes("GET /fleet/desk/pending auth=yes"), rows.join(" | "));
+    check(2, "Việc gấp đứng đầu (gateway sắp sẵn)", rows[0].startsWith("Duyệt lịch đăng mùa sale 11.11"), rows[0]);
+    const btns = await inbox.$$eval("#list .item", (lis) => lis.map((li) => [...li.querySelectorAll("button")].map((b) => b.textContent).join("+")));
+    check(2, "Mỗi dòng đúng 1 nút 'Mở để duyệt', không còn nút Duyệt bằng token máy", btns.every((t) => t === "Mở để duyệt"), btns.join(" | "));
+    check(2, "Số việc trên badge = total", (await inbox.textContent("#count")) === "5");
     shot("2-viec-cho-anh.png");
     await sleep(3000);
     await inbox.click('#list .item[data-id="idea_lich1111"] button.primary');
-    await inbox.waitForFunction(() => !document.querySelector('#list .item[data-id="idea_lich1111"]'), null, { timeout: 8000 });
-    check(2, "Bấm Duyệt → gọi POST /fleet/ideas/<id>/task/approve, dòng biến mất", (await gw("GET", "/__log")).includes("POST /fleet/ideas/idea_lich1111/task/approve auth=yes"));
-    check(2, "Số việc giảm còn 3", (await inbox.textContent("#count")) === "3");
-    await inbox.click('#list .item[data-id="tk_ads200"] button');
+    await sleep(300);
+    await inbox.click('#list .item[data-id="tk_ads200"] button.primary');
     await sleep(300);
     const opened = await T(app, () => globalThis.__opened.slice());
-    check(2, "Mở trên web → trang phiếu trên JAVIS web", opened.includes("https://javis.bumbee.asia/?ticket=tk_ads200"), opened.join(" "));
+    check(2, "Mở để duyệt → mở đúng link của việc trên trình duyệt", opened.includes("https://javis.bumbee.asia/?task=idea_lich1111"), opened.join(" "));
+    check(2, "Mở để duyệt → phiếu mở trang phiếu trên JAVIS web", opened.includes("https://javis.bumbee.asia/?ticket=tk_ads200"), opened.join(" "));
+    const log2 = await gw("GET", "/__log");
+    check(2, "Không gọi API duyệt nào, không gọi /fleet/home/tasks", !/POST \S*approve/.test(log2.replace("/fleet/auth/desktop/approve", "")) && !log2.includes("/fleet/home/tasks"));
     await sleep(1200);
     // A new task arrives on the gateway → /fleet/stream event → refresh → the character says so.
     await gw("POST", "/__add-task", { title: "Duyệt bài Học viện: mẹo chụp ảnh sản phẩm" });
@@ -270,6 +273,22 @@ async function main() {
     const notesAsleep = await pet.evaluate(() => window.__notes.length);
     check(2, "Đang ngủ (không làm phiền) → cô bé không báo", notesAsleep === 0, `${notesAsleep} ghi chú`);
     check(1, "Menu vẫn cập nhật số việc khi đang ngủ", /^📋 Việc chờ anh \(\d+\)$/.test((await hook(app, "contextLabels"))[0]));
+
+    // ── Off-video: 429 → wait Retry-After, no hammering ──
+    await gw("POST", "/__rate-limit", { n: 1 });
+    const s429 = await hook(app, "refreshInbox");
+    check(2, "429 → báo 'máy chủ bận', hẹn lại theo Retry-After (60 giây)", s429 && s429.error === "rate_limited" && s429.retryAt - Date.now() > 50000, JSON.stringify(s429 && { error: s429.error, retryAt: s429.retryAt }));
+    await hook(app, "clickMenu", "📋 Việc chờ anh");
+    const inbox3 = await findWindow(app, "inbox.html");
+    await inbox3.waitForSelector("#error:not(.hidden)", { timeout: 8000 });
+    const errText = await inbox3.textContent("#error-text");
+    check(2, "Cửa sổ hiện 'Máy chủ đang bận…', nút Làm mới tạm khoá", /Máy chủ đang bận/.test(errText) && await inbox3.$eval("#btn-refresh", (b) => b.disabled), errText);
+    const before429 = (await gw("GET", "/__log")).split("\n").filter((l) => l.startsWith("GET /fleet/desk/pending")).length;
+    await hook(app, "refreshInbox");
+    await sleep(500);
+    const after429 = (await gw("GET", "/__log")).split("\n").filter((l) => l.startsWith("GET /fleet/desk/pending")).length;
+    check(2, "Trong thời gian chờ không gọi lại gateway", after429 === before429, `${before429} → ${after429}`);
+    shot("2b-may-chu-ban-429.png");
   } catch (err) {
     check(0, "Tester chạy hết kịch bản", false, err.stack || err.message);
   } finally {

@@ -368,13 +368,13 @@ describe("Proxy / gateway client dùng phiên đăng nhập", () => {
       if (url.includes("/fleet/auth/")) return fakeFetch(env.fake)(url, init);
       return new Response("{}", { status });
     } });
-    assert.strictEqual((await c.request("POST", "/fleet/ideas/x/task/approve", {})).status, 403);
+    assert.strictEqual((await c.request("POST", "/fleet/orders/x/approve", {})).status, 403);
     assert.strictEqual(env.auth.getState().state, "signed_in");
     status = 401;
-    await c.request("GET", "/fleet/home/tasks");
+    await c.request("GET", "/fleet/desk/pending");
     assert.strictEqual(env.auth.getState().state, "expired");
     assert.strictEqual(c.isPaired(), false);
-    const r = await c.request("GET", "/fleet/home/tasks");
+    const r = await c.request("GET", "/fleet/desk/pending");
     assert.strictEqual(r.notPaired, true);
   });
 
