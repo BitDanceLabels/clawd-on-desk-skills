@@ -1,26 +1,28 @@
 {
   "name": "clawd-on-desk",
-  "version": "0.10.3",
-  "description": "A desktop pet that reacts to your Claude Code sessions in real-time.",
+  "productName": "JAVIS",
+  "version": "0.11.0",
+  "description": "JAVIS — trợ lý AI trên máy tính (nhân vật Hiyori), phản ứng theo phiên Claude Code / Codex / Gemini / Cursor và chat chung với JAVIS web.",
   "main": "src/main.js",
   "scripts": {
     "start": "node launch.js",
     "dev": "cross-env CLAWD_DEVTOOLS=1 ELECTRON_ENABLE_LOGGING=1 node launch.js",
     "dev:quiet": "cross-env CLAWD_DEVTOOLS=0 node launch.js",
     "build:renderer": "node scripts/build-renderer-bundles.js",
-    "build": "npm run build:renderer && electron-builder --win",
-    "build:mac": "npm run build:renderer && electron-builder --mac",
-    "build:linux": "npm run build:renderer && electron-builder --linux",
-    "build:all": "npm run build:renderer && electron-builder --win --mac --linux",
+    "build": "npm run build:renderer && electron-builder --win --publish never",
+    "build:mac": "npm run build:renderer && electron-builder --mac --publish never",
+    "build:linux": "npm run build:renderer && electron-builder --linux --publish never",
+    "build:all": "npm run build:renderer && electron-builder --win --mac --linux --publish never",
     "setup:live2d": "node scripts/setup-live2d.js",
     "setup:demo-models": "node scripts/setup-demo-models.js",
     "setup:all": "node scripts/setup-live2d.js --yes && node scripts/setup-demo-models.js --yes",
     "test": "node --test test/*.test.js",
     "install:gemini-hooks": "node hooks/gemini-install.js",
-    "install:cursor-hooks": "node hooks/cursor-install.js"
+    "install:cursor-hooks": "node hooks/cursor-install.js",
+    "make:icons": "node scripts/make-icons.js"
   },
   "keywords": [
-    "clawd",
+    "javis",
     "desktop-pet",
     "electron",
     "claude-code"
@@ -30,16 +32,23 @@
   "type": "commonjs",
   "build": {
     "appId": "com.clawd.on-desk",
-    "productName": "Clawd on Desk",
+    "productName": "JAVIS",
     "afterPack": "build/afterPack.js",
     "mac": {
-      "icon": "assets/icon.png",
+      "icon": "build/icon.icns",
       "target": [
         {
           "target": "dmg",
           "arch": [
-            "x64",
-            "arm64"
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
           ]
         }
       ],
@@ -49,15 +58,15 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "LSUIElement": true,
-        "NSCameraUsageDescription": "Bumbee Chat uses the camera when you choose to attach a snapshot to a message.",
-        "NSMicrophoneUsageDescription": "Bumbee Chat uses the microphone when you turn on voice input.",
-        "NSSpeechRecognitionUsageDescription": "Bumbee Chat uses speech recognition when you turn on voice input."
+        "NSCameraUsageDescription": "JAVIS uses the camera when you choose to attach a snapshot to a message.",
+        "NSMicrophoneUsageDescription": "JAVIS uses the microphone when you turn on voice input.",
+        "NSSpeechRecognitionUsageDescription": "JAVIS uses speech recognition when you turn on voice input."
       }
     },
     "win": {
       "icon": "assets/icon.ico",
       "signAndEditExecutable": false,
-      "artifactName": "Clawd-on-Desk-Setup-${version}.${ext}",
+      "artifactName": "JAVIS-${version}-${arch}.${ext}",
       "target": [
         {
           "target": "nsis",
@@ -84,14 +93,23 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "executableName": "javis",
+      "desktop": {
+        "entry": {
+          "Name": "JAVIS",
+          "StartupWMClass": "JAVIS"
+        }
+      }
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
-      "installerHeaderIcon": "assets/icon.ico"
+      "installerHeaderIcon": "assets/icon.ico",
+      "shortcutName": "JAVIS",
+      "uninstallDisplayName": "JAVIS"
     },
     "files": [
       "src/**/*",
@@ -101,7 +119,11 @@
       "assets/vrm/**/*",
       "hooks/**/*",
       "extensions/**/*",
-      "agents/**/*"
+      "agents/**/*",
+      "assets/javis-companion/**/*",
+      "assets/icons/**/*",
+      "assets/live2d/NOTICE.txt",
+      "LICENSES.md"
     ],
     "asarUnpack": [
       "hooks/**/*",
@@ -122,7 +144,8 @@
         "repo": "clawd-on-desk-skills",
         "releaseType": "release"
       }
-    ]
+    ],
+    "artifactName": "JAVIS-${version}-${arch}.${ext}"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
@@ -136,6 +159,7 @@
     "koffi": "^2.15.2",
     "pixi-live2d-display-lipsyncpatch": "^0.5.0-ls-8",
     "pixi.js": "^7.4.3",
+    "qrcode": "^1.5.4",
     "three": "^0.184.0"
   }
 }

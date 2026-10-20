@@ -100,7 +100,7 @@ module.exports = function initRabbit(ctx) {
     if (!Notification.isSupported()) return;
     try {
       const n = new Notification({
-        title: "Clawd Rabbit 🐰",
+        title: "JAVIS Rabbit 🐰",
         body: message,
         silent: false,
       });

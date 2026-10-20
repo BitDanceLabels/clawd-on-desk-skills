@@ -6,6 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { writeJsonAtomic } = require("./json-writer");
 const { buildPermissionUrl, DEFAULT_SERVER_PORT, PERMISSION_PATH, readRuntimePort } = require("./server-config");
 
 // Hooks supported by all Claude Code versions
@@ -22,8 +23,11 @@ const CORE_HOOKS = [
   "Notification",
   // PermissionRequest: handled by HTTP_HOOKS (blocking), not command hook
   "Elicitation",
-  "WorktreeCreate",
 ];
+
+// Hooks JAVIS must never register. WorktreeCreate broke Claude session creation
+// (removed by hand 2026-10-15); any clawd-hook.js entry left for it is stripped.
+const RETIRED_HOOKS = ["WorktreeCreate"];
 
 // Hooks that require a minimum Claude Code version
 const VERSIONED_HOOKS = [
@@ -177,20 +181,6 @@ function removeMatchingCommandHooks(entries, predicate) {
   return { entries: nextEntries, removed, changed };
 }
 
-function writeJsonAtomic(filePath, data) {
-  const dir = path.dirname(filePath);
-  const base = path.basename(filePath);
-  const tmpPath = path.join(dir, `.${base}.${process.pid}.${Date.now()}.tmp`);
-  fs.mkdirSync(dir, { recursive: true });
-  try {
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-    fs.renameSync(tmpPath, filePath);
-  } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch {}
-    throw err;
-  }
-}
-
 function syncHttpHook(entries, expectedUrl) {
   let found = false;
   let changed = false;
@@ -336,6 +326,19 @@ function registerHooks(options = {}) {
   removed += reconcileResult.removed;
   changed = changed || reconcileResult.changed;
 
+  for (const event of RETIRED_HOOKS) {
+    if (!Array.isArray(settings.hooks[event])) continue;
+    const result = removeMatchingCommandHooks(
+      settings.hooks[event],
+      (command) => command.includes(MARKER)
+    );
+    if (!result.changed) continue;
+    removed += result.removed;
+    changed = true;
+    if (result.entries.length > 0) settings.hooks[event] = result.entries;
+    else delete settings.hooks[event];
+  }
+
   // Build the full hook list: core + version-compatible hooks
   const hookEvents = [...CORE_HOOKS];
   for (const { event } of supportedVersionedHooks) {
@@ -468,7 +471,7 @@ function registerHooks(options = {}) {
   if (!options.silent) {
     const versionLabel = versionInfo.status === "known" ? versionInfo.version : "unknown";
     const versionSource = versionInfo.source || "unavailable";
-    console.log(`Clawd hooks installed to ${settingsPath}`);
+    console.log(`JAVIS hooks installed to ${settingsPath}`);
     console.log(`  Claude Code version: ${versionLabel}`);
     console.log(`  Detection source: ${versionSource}`);
     if (versionInfo.status === "unknown") {
@@ -569,6 +572,8 @@ module.exports = {
   registerHooks,
   unregisterAutoStart,
   isAutoStartRegistered,
+  CORE_HOOKS,
+  RETIRED_HOOKS,
   __test: {
     getClaudeVersion,
     versionLessThan,

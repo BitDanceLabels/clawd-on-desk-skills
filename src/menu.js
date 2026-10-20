@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, screen, Menu, Tray, nativeImage } = require("electron");
 const path = require("path");
+const brand = require("./javis-brand");
 
 const isMac = process.platform === "darwin";
 const isWin = process.platform === "win32";
@@ -27,7 +28,7 @@ function linuxSetOpenAtLogin(enable) {
     const desktop = [
       "[Desktop Entry]",
       "Type=Application",
-      "Name=Clawd on Desk",
+      "Name=JAVIS",
       `Exec=${execCmd}`,
       "Hidden=false",
       "NoDisplay=false",
@@ -62,7 +63,7 @@ const i18n = {
     miniMode: "Mini Mode",
     exitMiniMode: "Exit Mini Mode",
     sleep: "Sleep (Do Not Disturb)",
-    wake: "Wake Clawd",
+    wake: "Wake JAVIS",
     startOnLogin: "Start on Login",
     startWithClaude: "Start with Claude Code",
     showInMenuBar: "Show in Menu Bar",
@@ -74,7 +75,7 @@ const i18n = {
     updateAvailableMsg: "v{version} is available. Download and install now?",
     updateAvailableMacMsg: "v{version} is available. Open the download page?",
     updateNotAvailable: "You're Up to Date",
-    updateNotAvailableMsg: "Clawd v{version} is the latest version.",
+    updateNotAvailableMsg: "JAVIS v{version} is the latest version.",
     updateDownloading: "Downloading Update…",
     updateReady: "Update Ready",
     updateReadyMsg: "v{version} has been downloaded. Restart now to update?",
@@ -99,23 +100,28 @@ const i18n = {
     sessionJustNow: "just now",
     sessionMinAgo: "{n}m ago",
     sessionHrAgo: "{n}h ago",
-    showPet: "Show Clawd",
-    hidePet: "Hide Clawd",
+    showPet: "Show JAVIS",
+    hidePet: "Hide JAVIS",
     toggleShortcut: "Toggle Shortcut: {shortcut}",
     rabbitMode: "Rabbit Mode 🐰",
     rabbitInterval: "Rabbit Interval",
     rabbitMinutes: "{n} min",
     rabbitShowNow: "Show Rabbit Now",
     character: "Character",
-    characterClawd: "Clawd (Default)",
+    characterClawd: "Crab (classic)",
+    characterHiyori: "Hiyori (default)",
+    javisOpenChat: "💬 Chat with JAVIS…",
+    javisPair: "🔗 Pair JAVIS…",
+    javisAbout: "About JAVIS",
+    javisEnglishCoach: "📚 English Coach (legacy)…",
     characterBunny: "Bunny 🐰",
     characterLive2D: "Live2D Characters",
     characterVRM: "VRM 3D Characters",
-    characterAddLive2D: "Add Live2D Folder…",
-    characterAddVRM: "Add VRM Folder…",
+    characterAddLive2D: "Add Live2D Character…",
+    characterAddVRM: "Add VRM Character…",
     characterEmpty: "(none yet — drop files in folder)",
     bumbee: "Bumbee Hub",
-    bumbeeOpenChat: "💬 Mở Bumbee Chat…",
+    bumbeeOpenChat: "💬 Mở JAVIS Chat…",
     bumbeeOpenOs: "🐝 Mở Bumbee OS…",
     bumbeeOpenDashboard: "📊 Dashboard điều hành…",
     bumbeeOpenVocab: "📇 Lướt thẻ từ vựng…",
@@ -148,7 +154,7 @@ const i18n = {
     miniMode: "极简模式",
     exitMiniMode: "退出极简模式",
     sleep: "休眠（免打扰）",
-    wake: "唤醒 Clawd",
+    wake: "唤醒 JAVIS",
     startOnLogin: "开机自启",
     startWithClaude: "随 Claude Code 启动",
     showInMenuBar: "在菜单栏显示",
@@ -160,7 +166,7 @@ const i18n = {
     updateAvailableMsg: "v{version} 已发布，是否下载并安装？",
     updateAvailableMacMsg: "v{version} 已发布，是否打开下载页面？",
     updateNotAvailable: "已是最新版本",
-    updateNotAvailableMsg: "Clawd v{version} 已是最新版本。",
+    updateNotAvailableMsg: "JAVIS v{version} 已是最新版本。",
     updateDownloading: "正在下载更新…",
     updateReady: "更新就绪",
     updateReadyMsg: "v{version} 已下载完成，是否立即重启以完成更新？",
@@ -185,15 +191,20 @@ const i18n = {
     sessionJustNow: "刚刚",
     sessionMinAgo: "{n}分钟前",
     sessionHrAgo: "{n}小时前",
-    showPet: "显示 Clawd",
-    hidePet: "隐藏 Clawd",
+    showPet: "显示 JAVIS",
+    hidePet: "隐藏 JAVIS",
     toggleShortcut: "切换快捷键: {shortcut}",
     rabbitMode: "兔兔模式 🐰",
     rabbitInterval: "兔兔间隔",
     rabbitMinutes: "{n} 分钟",
     rabbitShowNow: "立即出现",
     character: "角色",
-    characterClawd: "Clawd（默认）",
+    characterClawd: "螃蟹（经典）",
+    characterHiyori: "Hiyori（默认）",
+    javisOpenChat: "💬 与 JAVIS 聊天…",
+    javisPair: "🔗 配对 JAVIS…",
+    javisAbout: "关于 JAVIS",
+    javisEnglishCoach: "📚 English Coach（旧版）…",
     characterBunny: "小兔 🐰",
     characterLive2D: "Live2D 角色",
     characterVRM: "VRM 3D 角色",
@@ -235,7 +246,7 @@ module.exports = function initMenu(ctx) {
 
   // ── Character skin menu item (shared by tray + context menu) ──
   function buildCharacterMenuItem() {
-    const current = ctx.getCharacterSkin ? ctx.getCharacterSkin() : "clawd";
+    const current = ctx.getCharacterSkin ? ctx.getCharacterSkin() : brand.DEFAULT_CHARACTER_SKIN;
     const builtinSkins = [
       { id: "clawd", labelKey: "characterClawd" },
       { id: "bunny", labelKey: "characterBunny" },
@@ -250,9 +261,26 @@ module.exports = function initMenu(ctx) {
       click: () => { ctx.setCharacterSkin(s.id); rebuildAllMenus(); },
     }));
 
+    const hiyori = lists.live2d.find((s) => s.id === brand.DEFAULT_CHARACTER_SKIN);
+    const hiyoriItems = hiyori
+      ? [{
+          label: t("characterHiyori"),
+          type: "radio",
+          checked: current === hiyori.id,
+          click: () => { ctx.setCharacterSkin(hiyori.id); rebuildAllMenus(); },
+        }]
+      : [];
+    // Live2D Free Material License: credit must be shown wherever the samples are offered.
+    const live2dCreditItems = lists.live2d.some((s) => brand.isLive2DSampleSkin(s))
+      ? [
+          { label: brand.LIVE2D_CREDIT_SHORT, enabled: false },
+          { label: brand.LIVE2D_CREDIT_VI, enabled: false },
+        ]
+      : [];
+
     const live2dItems = lists.live2d.length
       ? lists.live2d.map((s) => ({
-          label: s.name,
+          label: brand.isLive2DSampleSkin(s) ? `${brand.sampleDisplayName(s.name)} · Live2D sample` : s.name,
           type: "radio",
           checked: current === s.id,
           click: () => { ctx.setCharacterSkin(s.id); rebuildAllMenus(); },
@@ -271,9 +299,10 @@ module.exports = function initMenu(ctx) {
     return {
       label: t("character"),
       submenu: [
+        ...hiyoriItems,
         ...builtinItems,
         { type: "separator" },
-        { label: t("characterLive2D"), submenu: live2dItems },
+        { label: t("characterLive2D"), submenu: [...live2dItems, ...(live2dCreditItems.length ? [{ type: "separator" }, ...live2dCreditItems] : [])] },
         { label: t("characterVRM"), submenu: vrmItems },
         { type: "separator" },
         {
@@ -284,8 +313,30 @@ module.exports = function initMenu(ctx) {
           label: t("characterAddVRM"),
           click: () => { try { ctx.openSkinAssetsFolder && ctx.openSkinAssetsFolder("vrm"); } catch {} },
         },
+        ...(live2dCreditItems.length ? [{ type: "separator" }, ...live2dCreditItems] : []),
       ],
     };
+  }
+
+  // ── JAVIS assistant items (shared by tray + context menu) ──
+  function buildJavisItems() {
+    return [
+      {
+        label: t("javisOpenChat"),
+        enabled: typeof ctx.openJavisChat === "function",
+        click: () => { if (ctx.openJavisChat) ctx.openJavisChat(); },
+      },
+      {
+        label: t("javisPair"),
+        enabled: typeof ctx.openJavisPairing === "function",
+        click: () => { if (ctx.openJavisPairing) ctx.openJavisPairing(); },
+      },
+      {
+        label: t("javisAbout"),
+        enabled: typeof ctx.showAbout === "function",
+        click: () => { if (ctx.showAbout) ctx.showAbout(); },
+      },
+    ];
   }
 
   // ── Rabbit Mode menu item (shared by tray + context menu) ──
@@ -338,7 +389,7 @@ module.exports = function initMenu(ctx) {
       icon = nativeImage.createFromPath(path.join(__dirname, "../assets/tray-icon.png")).resize({ width: 32, height: 32 });
     }
     ctx.tray = new Tray(icon);
-    ctx.tray.setToolTip("Clawd Desktop Pet");
+    ctx.tray.setToolTip("JAVIS");
     buildTrayMenu();
   }
 
@@ -402,9 +453,16 @@ module.exports = function initMenu(ctx) {
     const submenu = [
       {
         label: t("bumbeeOpenChat"),
-        enabled: typeof ctx.openBumbeeChat === "function",
+        enabled: typeof ctx.openJavisChat === "function",
         click: () => {
-          if (ctx.openBumbeeChat) ctx.openBumbeeChat();
+          if (ctx.openJavisChat) ctx.openJavisChat();
+        },
+      },
+      {
+        label: t("javisEnglishCoach"),
+        enabled: typeof ctx.openEnglishCoach === "function",
+        click: () => {
+          if (ctx.openEnglishCoach) ctx.openEnglishCoach();
         },
       },
       {
@@ -467,17 +525,7 @@ module.exports = function initMenu(ctx) {
           if (ctx.openBumbeePhaseHub) ctx.openBumbeePhaseHub();
         },
       },
-      { type: "separator" },
-      {
-        label: ctx.visionCaptureRunning?.() ? "👁 Vision Tracking: ON" : "👁 Vision Tracking: OFF",
-        type: "checkbox",
-        checked: !!ctx.visionCaptureRunning?.(),
-        click: () => {
-          if (ctx.toggleVisionCapture) ctx.toggleVisionCapture();
-          buildContextMenu();
-          buildTrayMenu();
-        },
-      },
+      // Vision auto-capture (screenshots) is off and hidden by owner decision — no menu item.
       { type: "separator" },
       {
         label: t("bumbeeStatus"),
@@ -570,6 +618,8 @@ module.exports = function initMenu(ctx) {
   function buildTrayMenu() {
     if (!ctx.tray) return;
     const items = [
+      ...buildJavisItems(),
+      { type: "separator" },
       buildCharacterMenuItem(),
       { type: "separator" },
       {
@@ -795,6 +845,8 @@ module.exports = function initMenu(ctx) {
 
   function buildContextMenu() {
     const template = [
+      ...buildJavisItems(),
+      { type: "separator" },
       buildCharacterMenuItem(),
       { type: "separator" },
       {

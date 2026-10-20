@@ -411,7 +411,7 @@ function cleanup() {
   // Clean up all pending permission requests — send explicit deny so Claude Code doesn't hang
   for (const perm of [...pendingPermissions]) {
     if (perm._delayTimer) clearTimeout(perm._delayTimer);
-    resolvePermissionEntry(perm, "deny", "Clawd is quitting");
+    resolvePermissionEntry(perm, "deny", "JAVIS is quitting");
   }
 }
 

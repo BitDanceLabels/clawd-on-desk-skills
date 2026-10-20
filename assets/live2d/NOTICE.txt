@@ -1,0 +1,6 @@
+This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc.
+Nhân vật mẫu © Live2D Inc.
+
+hiyori/ = Live2D sample model "Hiyori Momose" (unmodified), used under the Live2D Free Material License (Small-Scale Enterprise).
+live2dcubismcore.min.js = Live2D Cubism Core, "Redistributable Code" under the Live2D Proprietary Software License.
+Do not redistribute these files. See LICENSES.md.
