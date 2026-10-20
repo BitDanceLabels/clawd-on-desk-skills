@@ -3,9 +3,16 @@
 //   node fake-gateway.js <port>
 //   POST /__add-task {title}   → adds a waiting task + pushes task.updated on /fleet/stream
 //   GET  /__log                → request log (method path auth)
+//   GET  /__mail               → fake outbox (email codes; no real mail is sent)
+//   POST /__expire-access      → every access token expires (next call: 401 → refresh)
+//   POST /__revoke-all         → every device revoked (refresh answers relogin:true)
+//   POST /__revoke-legacy      → old jvk_ keys rejected
 "use strict";
 const http = require("http");
+const { createFakeAuth } = require("./fake-auth");
 const port = Number(process.argv[2] || 18999);
+// "Đăng nhập JAVIS" per CONTRACT.md. The tester's old jvk_ key is valid until /__revoke-legacy.
+const auth = createFakeAuth({ legacyKeys: ["jvk_FAKEFAKEFAKEFAKEFAKEFAKE"], accessTtl: Number(process.env.FAKE_ACCESS_TTL || 3600) });
 const log = [];
 const streams = new Set();
 let seq = 0;
@@ -52,6 +59,28 @@ function fakeSpeechWav(text) {
   return buf;
 }
 
+// The web approval page (CONTRACT luồng A bước 3). The real one sits behind the web login.
+function approvePage(q) {
+  const esc = (v) => String(v || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const body = JSON.stringify({ client_id: q.get("client_id"), redirect_uri: q.get("redirect_uri"), state: q.get("state"), code_challenge: q.get("code_challenge"), device_name: q.get("device_name") });
+  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>JAVIS · Cho phép máy</title></head>
+<body style="margin:0;height:100vh;display:grid;place-items:center;background:#0b0e22;color:#F3F1EA;font:16px system-ui,sans-serif">
+<div style="text-align:center;max-width:420px;padding:28px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:#141833">
+<p style="color:#A9AECB;margin:0 0 6px">javis.bumbee.asia · owner@demo.test</p>
+<h1 style="font-size:20px;margin:0 0 18px">Cho phép máy <b>${esc(q.get("device_name"))}</b> dùng JAVIS của anh?</h1>
+<button id="allow" style="height:46px;padding:0 22px;border:0;border-radius:12px;background:#F5B83D;font:600 16px system-ui;cursor:pointer">Cho phép máy này</button>
+<button id="deny" style="height:46px;padding:0 18px;margin-left:8px;border-radius:12px;border:1px solid #555;background:none;color:#ddd;font:16px system-ui">Huỷ</button>
+</div><script>
+const req = ${body};
+document.getElementById("allow").onclick = async () => {
+  const r = await fetch("/fleet/auth/desktop/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
+  const j = await r.json();
+  location.href = j.redirect;
+};
+document.getElementById("deny").onclick = () => { location.href = req.redirect_uri + "?error=access_denied&state=" + encodeURIComponent(req.state); };
+</script></body></html>`;
+}
+
 function push(type, data) {
   const ev = { id: ++seq, type, data, at: now() };
   for (const res of streams) res.write(`id: ${ev.id}\nevent: ${type}\ndata: ${JSON.stringify(ev)}\n\n`);
@@ -74,16 +103,22 @@ http.createServer((req, res) => {
       push("task.updated", { idea_id: id });
       return json({ ok: true, id });
     }
-    if (p === "/auth/device.html") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); res.end("<h1>Duyệt thiết bị (giả)</h1>"); return; }
-    if (p === "/fleet/auth/device/start") return json({ device_code: "dc-demo", user_code: "JAVS-2026", expires_in: 600, interval: 3, verify_url: "/auth/device.html?code=JAVS-2026" });
-    if (p === "/fleet/auth/device/poll") return json({ status: "pending" });
-    if (!req.headers.authorization) return json({ error: "unauthorized" }, 401);
+    if (p === "/__mail") return json(auth.outbox);
+    if (p === "/__streams") return json({ open: streams.size });
+    if (p === "/__auth-log") return json(auth.log);
+    if (p === "/__expire-access") { auth.expireAccess(); return json({ ok: true }); }
+    if (p === "/__revoke-all") { auth.revokeAll(); return json({ ok: true }); }
+    if (p === "/__revoke-legacy") { auth.legacy.clear(); return json({ ok: true }); }
+    if (p === "/auth/desktop") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); res.end(approvePage(url.searchParams)); return; }
+    const a = auth.handle(req.method, p, b, req.headers);
+    if (a) return json(a.body, a.status);
+    if (!auth.authorize(req.headers.authorization)) return json({ detail: "unauthorized" }, 401);
 
     if (p === "/fleet/stream") {
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
       res.write(": ok\n\n");
       streams.add(res);
-      req.on("close", () => streams.delete(res));
+      res.on("close", () => streams.delete(res));
       return;
     }
     if (p === "/fleet/home/tasks") return json({ data: tasks, resuggest: [], approvals: tickets, autodispatch: false, now: now() });

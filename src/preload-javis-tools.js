@@ -1,5 +1,5 @@
 // Preload for the 0.12.0 tool windows (Việc chờ anh, Thư ký, AI Clipboard) on javis-desk://app.
-// Only these calls cross into the page; keys (device key, clipboard key) stay in main.
+// Only these calls cross into the page; tokens (sign-in, clipboard key) stay in main.
 const { contextBridge, ipcRenderer } = require("electron");
 
 const call = (ch) => (...args) => ipcRenderer.invoke(`javis-tools:${ch}`, ...args);
@@ -11,8 +11,7 @@ contextBridge.exposeInMainWorld("javisTools", {
   inboxApprove: call("inbox-approve"),
   onInbox: on("inbox"),
   openWeb: call("open-web"),
-  openPairing: call("open-pairing"),
-  pairingWeb: call("pairing-web"),
+  login: call("login"),
   reportGet: call("report-get"),
   reportRead: call("report-read"),
   reportStop: call("report-stop"),

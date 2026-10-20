@@ -190,6 +190,19 @@ module.exports = function initMenu(ctx) {
     };
   }
 
+  // Signed out: "Đăng nhập JAVIS…". Signed in: "Đã đăng nhập: <email>" (opens Settings).
+  function javisLoginItem() {
+    const a = ctx.getJavisAuth ? ctx.getJavisAuth() : null;
+    const label = a && a.signedIn
+      ? t("javisSignedIn").replace("{email}", a.email || t("javisDeviceKey"))
+      : t("javisLogin");
+    return {
+      label,
+      enabled: typeof ctx.openJavisLogin === "function",
+      click: () => { if (ctx.openJavisLogin) ctx.openJavisLogin(); },
+    };
+  }
+
   // ── JAVIS assistant items (shared by tray + context menu) ──
   function buildJavisItems() {
     return [
@@ -200,11 +213,7 @@ module.exports = function initMenu(ctx) {
         enabled: typeof ctx.openJavisChat === "function",
         click: () => { if (ctx.openJavisChat) ctx.openJavisChat(); },
       },
-      {
-        label: t("javisPair"),
-        enabled: typeof ctx.openJavisPairing === "function",
-        click: () => { if (ctx.openJavisPairing) ctx.openJavisPairing(); },
-      },
+      javisLoginItem(),
       {
         label: t("javisAbout"),
         enabled: typeof ctx.showAbout === "function",

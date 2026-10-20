@@ -13,7 +13,7 @@
       <b>JAVIS</b>
       <small id="status-line">Đang kiểm tra…</small>
     </div>
-    <button id="btn-settings" class="ib" title="Cài đặt · Ghép đôi JAVIS">⚙︎</button>
+    <button id="btn-settings" class="ib" title="Cài đặt">⚙︎</button>
   </header>
 
   <section id="view-chat" class="view">
@@ -25,54 +25,70 @@
     <div id="companion-host"></div>
   </section>
 
-  <section id="view-pair" class="view" hidden>
-    <h2>Ghép đôi máy này với JAVIS</h2>
-    <p class="muted">Ghép xong là chat chung với JAVIS web, xem Việc chờ anh, nghe báo cáo và dùng AI Clipboard. Khoá thiết bị được mã hoá trên máy, không hiện ra đây.</p>
-    <div id="pair-state" class="card"></div>
+  <!-- Màn đầu: 1 dòng giải thích + 1 nút lớn + 1 liên kết nhỏ. Mọi chữ ở đây do 1 trạng thái quyết định. -->
+  <section id="view-login" class="view login" hidden>
+    <img class="hero" src="icon.png" alt="">
+    <h2>Đăng nhập JAVIS</h2>
+    <p id="login-line" class="lead">Đăng nhập một lần là dùng lâu dài: chat, việc chờ anh, báo cáo, AI Clipboard.</p>
 
-    <ol class="steps card" id="pair-steps">
-      <li id="step-1">
-        <b>Bước 1 · Lấy mã ghép đôi</b>
-        <p class="muted">Bấm nút dưới đây, máy sẽ hiện một mã và mã QR.</p>
-        <button id="btn-pair-start" class="primary">Lấy mã ghép đôi</button>
-        <div id="pair-code" hidden>
-          <div class="code" id="user-code"></div>
-          <img id="pair-qr" alt="QR ghép đôi" hidden>
-        </div>
-      </li>
-      <li id="step-2">
-        <b>Bước 2 · Mở trang duyệt trên web</b>
-        <p class="muted">Quét QR bằng điện thoại đã đăng nhập JAVIS, hoặc bấm nút để mở trang duyệt trên máy này.</p>
-        <button id="btn-pair-open">Mở trang duyệt trên web</button>
-      </li>
-      <li id="step-3">
-        <b>Bước 3 · Bấm "Duyệt" trên web</b>
-        <p class="muted">Kiểm tra mã trên web giống mã ở bước 1 rồi bấm Duyệt. App tự nhận, anh không cần làm gì thêm.</p>
-        <p class="muted" id="pair-progress">Chưa bắt đầu.</p>
-        <button id="btn-pair-cancel" hidden>Huỷ</button>
-      </li>
-    </ol>
+    <div id="pane-start" class="pane">
+      <button id="btn-login" class="primary big">Đăng nhập JAVIS</button>
+      <button id="btn-email-link" class="link small" type="button">Hoặc nhận mã qua email</button>
+    </div>
+
+    <div id="pane-browser" class="pane" hidden>
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="muted">Trình duyệt vừa mở. Anh bấm <b>Cho phép máy này</b> rồi quay lại đây (em chờ tối đa 5 phút).</p>
+      <button id="btn-cancel" type="button">Huỷ</button>
+      <button id="btn-reopen" class="link small" type="button">Không thấy trình duyệt? Mở lại</button>
+    </div>
+
+    <form id="pane-email" class="pane" hidden>
+      <input id="email" type="email" autocomplete="email" spellcheck="false" placeholder="Email tài khoản JAVIS" required>
+      <button class="primary big" type="submit">Gửi mã</button>
+      <button id="btn-email-back" class="link small" type="button">← Quay lại</button>
+    </form>
+
+    <form id="pane-code" class="pane" hidden>
+      <input id="code" class="code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required>
+      <button class="primary big" type="submit">Xác nhận</button>
+      <div class="row center">
+        <button id="btn-resend" class="link small" type="button">Gửi lại mã</button>
+        <span class="muted">·</span>
+        <button id="btn-code-back" class="link small" type="button">Đổi email</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="view-settings" class="view" hidden>
+    <h2>Cài đặt</h2>
+    <div class="card">
+      <p id="acct-line"></p>
+      <button id="btn-settings-login" class="primary" hidden>Đăng nhập JAVIS</button>
+      <button id="btn-logout" class="danger" hidden>Đăng xuất khỏi máy này</button>
+    </div>
 
     <details class="card">
-      <summary>Cách khác · Dán khoá thiết bị</summary>
-      <p class="muted">Nếu đã có khoá thiết bị JAVIS (jvk_…), dán vào đây.</p>
+      <summary>Dán khoá thiết bị (cách cũ)</summary>
+      <p class="muted">Chỉ dùng nếu anh đã có khoá thiết bị JAVIS (jvk_…). Khoá được mã hoá trên máy.</p>
       <div class="row">
-        <input id="paste-key" type="password" autocomplete="off" spellcheck="false" placeholder="Dán khoá thiết bị">
+        <input id="paste-key" type="password" autocomplete="off" spellcheck="false" placeholder="jvk_…">
         <button id="btn-paste">Lưu</button>
       </div>
+      <p id="paste-msg" class="muted"></p>
     </details>
 
     <details class="card">
-      <summary>Nâng cao</summary>
-      <label class="muted" for="gateway">Gateway JAVIS</label>
+      <summary>Nâng cao · Gateway</summary>
+      <label class="muted" for="gateway">Địa chỉ gateway JAVIS</label>
       <div class="row">
         <input id="gateway" type="url" spellcheck="false">
         <button id="btn-gateway">Lưu</button>
       </div>
-      <button id="btn-unpair" class="danger">Huỷ ghép đôi máy này</button>
+      <p id="gateway-note" class="muted"></p>
     </details>
 
-    <button id="btn-back" class="link">← Quay lại chat</button>
+    <button id="btn-back" class="link">← Quay lại</button>
   </section>
 
   <script src="javis-chat.js"></script>

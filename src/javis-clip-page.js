@@ -79,7 +79,7 @@ async function send() {
   $("send-msg").textContent = (r && r.error) || "Chưa gửi được.";
 }
 
-$("btn-pair").onclick = () => api.openPairing();
+$("btn-login").onclick = () => api.login();
 $("btn-retry").onclick = refresh;
 $("btn-create").onclick = async () => { const r = await api.clipCreate(); if (!r || !r.ok) $("msg").textContent = `Chưa tạo được (${(r && r.error) || "lỗi"}).`; await refresh(); };
 $("btn-link").onclick = async () => {

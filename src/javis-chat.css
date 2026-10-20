@@ -29,3 +29,20 @@ button.link{background:none;border:0;color:var(--fg2);padding:0}
 .steps li.done::before{content:"✓";color:#0b2a14;font:700 11px/16px system-ui;text-align:center;background:#8fe3a8;border-color:#8fe3a8}
 .steps li b{display:block;margin-bottom:2px}
 .steps li .muted{margin-bottom:6px}
+/* Đăng nhập JAVIS */
+[hidden]{display:none!important}
+.login{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 26px}
+.login .hero{width:72px;height:72px;border-radius:18px;margin:18px 0 14px}
+.login h2{font-size:21px;margin-bottom:8px}
+.lead{margin:0 0 22px;color:var(--fg2);max-width:320px}
+.lead.warn{color:#ffcf7a}
+.pane{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:320px}
+.pane input{width:100%;flex:none;height:44px;text-align:center;font-size:15px}
+.pane .muted{margin:0}
+button.big{width:100%;height:48px;font-size:16px;border-radius:12px}
+button.small{font-size:13px;height:auto;padding:4px 0;color:var(--fg2);text-decoration:underline;text-underline-offset:3px}
+.code-input{letter-spacing:.5em;font:600 24px ui-monospace,Menlo,Consolas,monospace!important}
+.row.center{justify-content:center}
+.spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--gold);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#acct-line{margin:0 0 10px}

@@ -160,15 +160,15 @@ describe("2 · Việc chờ anh", () => {
     assert.strictEqual(n, 4);
   });
 
-  it("not paired → no network call, empty list (window shows the 3-step guide)", async () => {
+  it("not signed in → no network call, empty list (window shows one 'Đăng nhập JAVIS' button)", async () => {
     const client = fakeClient({});
     const box = inboxMod.createInbox({ client, isPaired: () => false, ...fakeTimers() });
     const s = await box.refresh();
     assert.strictEqual(s.paired, false);
     assert.strictEqual(client.calls.length, 0);
     const html = fs.readFileSync(path.join(__dirname, "..", "src", "javis-inbox.html"), "utf8");
-    assert.strictEqual((html.match(/<li><b>/g) || []).length, 3);
-    assert.ok(html.includes("Mở trang duyệt trên web"));
+    assert.ok(html.includes('id="btn-login" class="primary">Đăng nhập JAVIS<'));
+    assert.ok(!html.includes("Mở trang duyệt trên web"));
   });
 
   it("SSE parser picks task/ticket events from /fleet/stream; stream stops after 3 failures", async () => {
@@ -385,10 +385,14 @@ describe("5 · Cửa sổ không đè nhau + ghép đôi dễ hơn", () => {
     assert.strictEqual(layout.placeAvoiding({ x: 0, y: 0, width: 500, height: 500 }, [{ x: 0, y: 0, width: 800, height: 600 }], small), null);
   });
 
-  it("pairing screen shows 3 numbered steps and an 'open approval page on the web' button", () => {
+  it("first screen: 1 line + 1 big 'Đăng nhập JAVIS' button + 1 small email link; no 'Dán khoá' / 'Nâng cao' there", () => {
     const html = fs.readFileSync(path.join(__dirname, "..", "src", "javis-chat.html"), "utf8");
-    for (const s of ["Bước 1 · Lấy mã ghép đôi", "Bước 2 · Mở trang duyệt trên web", 'Bước 3 · Bấm "Duyệt" trên web']) assert.ok(html.includes(s), s);
-    assert.ok(html.includes('id="btn-pair-open">Mở trang duyệt trên web<'));
+    const login = html.slice(html.indexOf('<section id="view-login"'), html.indexOf("</section>", html.indexOf('<section id="view-login"')));
+    assert.ok(login.includes('id="btn-login" class="primary big">Đăng nhập JAVIS<'));
+    assert.ok(login.includes(">Hoặc nhận mã qua email<"));
+    for (const gone of ["Dán khoá", "Nâng cao", "Bước 1", "Ghép đôi", "Gateway"]) assert.ok(!login.includes(gone), gone);
+    const settings = html.slice(html.indexOf('<section id="view-settings"'));
+    for (const moved of ["Dán khoá thiết bị", "Nâng cao · Gateway", "Đăng xuất"]) assert.ok(settings.includes(moved), moved);
   });
 
   it("serves the new tool pages from javis-desk://app and nothing else", () => {
@@ -403,24 +407,27 @@ describe("5 · Cửa sổ không đè nhau + ghép đôi dễ hơn", () => {
     assert.strictEqual(r("/../main.js", roots), null);
   });
 
-  it("gateway client: 401 stops every later call; 403 does not unpair", async () => {
+  it("gateway client: old key rejected (401) stops every later call; 403 does not sign out", async () => {
     let calls = 0;
     let status = 403;
-    const state = { authError: false };
-    const auth = [];
+    const { createAuth } = require("../src/javis-auth");
+    let key = { key: "jvk_FAKEFAKEFAKEFAKE" };
+    const auth = createAuth({
+      fetchImpl: async () => { throw new Error("no"); }, getGateway: () => "http://gw.test",
+      sessionStore: { read: () => null, save() {}, clear() {} },
+      legacyStore: { read: () => key, save() {}, clear() { key = null; } },
+    });
+    auth.init();
     const c = host.__test.createGatewayClient({
-      keyStore: { read: () => ({ key: "jvk_FAKEFAKEFAKEFAKE" }) },
+      auth,
       configStore: { getGateway: () => "http://gw.test" },
       fetchImpl: async (url, init) => { calls++; assert.strictEqual(init.headers.Authorization, "Bearer jvk_FAKEFAKEFAKEFAKE"); return { status, ok: false, headers: new Map(), json: async () => ({}) }; },
-      proxyState: state,
-      onAuthError: (s) => auth.push(s),
     });
     assert.strictEqual((await c.request("POST", "/fleet/ideas/x/task/approve", {})).status, 403);
-    assert.strictEqual(state.authError, false);
+    assert.strictEqual(auth.getState().state, "signed_in");
     status = 401;
     await c.request("GET", "/fleet/home/tasks");
-    assert.strictEqual(state.authError, true);
-    assert.deepStrictEqual(auth, [401]);
+    assert.strictEqual(auth.getState().state, "expired");
     await c.request("GET", "/fleet/home/tasks");
     assert.strictEqual(calls, 2, "no call after 401");
     assert.strictEqual(c.isPaired(), false);

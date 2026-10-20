@@ -6,14 +6,15 @@
 //
 // The page is served from the privileged scheme javis-desk://app/. Requests to
 // javis-desk://app/fleet/* are proxied here in the main process to the JAVIS
-// gateway with "Authorization: Bearer <device key>". The key is obtained by pairing
-// (device-code flow: /fleet/auth/device/start → approve on web → /poll), stored
-// encrypted with safeStorage, and never handed to the renderer.
+// gateway with "Authorization: Bearer <access token>". Sign-in ("Đăng nhập JAVIS",
+// browser + PKCE or a 6-digit email code) lives in javis-auth.js; tokens stay in the
+// main process and are never handed to the renderer. Old jvk_ device keys still work.
 "use strict";
 
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { createAuth, createSessionStore, isPlausibleDeviceKey } = require("./javis-auth");
 
 const SCHEME = "javis-desk";
 const ORIGIN = `${SCHEME}://app`;
@@ -24,7 +25,6 @@ const CLIENT_ID_HEADER = "X-Javis-Client";
 
 // Retry policy (owner rule): at most 3 attempts with growing back-off, then stop.
 const MAX_FAILURES = 3;
-const PAIR_POLL_MIN_S = 3;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -56,10 +56,6 @@ function normalizeGateway(url) {
   } catch {
     return null;
   }
-}
-
-function isPlausibleDeviceKey(key) {
-  return typeof key === "string" && /^[A-Za-z0-9_.-]{16,512}$/.test(key.trim());
 }
 
 // Map a javis-desk://app/<path> request to a bundled file. Returns null when the
@@ -154,64 +150,81 @@ function jsonResponse(status, body, extraHeaders = {}) {
 
 /**
  * Proxy for javis-desk://app/fleet/*. `fetchImpl` is Electron's net.fetch in the app
- * and a fake in tests (no real gateway / LLM calls from tests).
+ * and a fake in tests (no real gateway / LLM calls from tests). The bearer comes from
+ * `auth` (access token, or an old jvk_ key); a 401 refreshes once and retries once.
  */
-function createFleetProxy({ keyStore, configStore, fetchImpl, onAuthError = () => {}, log = () => {} }) {
-  const state = { authError: false, streamFailures: 0, streamBlockedUntil: 0 };
+function createFleetProxy({ auth, configStore, fetchImpl, log = () => {} }) {
+  const state = { streamFailures: 0, streamBlockedUntil: 0 };
+  // Open /fleet/stream connections. Closed when the session ends, otherwise they keep
+  // HTTP/1.1 sockets to the gateway busy and later calls (even "Đăng xuất") queue forever.
+  const liveStreams = new Set();
 
   function reset() {
-    state.authError = false;
     state.streamFailures = 0;
     state.streamBlockedUntil = 0;
+  }
+
+  function abortStreams() {
+    for (const ac of liveStreams) { try { ac.abort(); } catch {} }
+    liveStreams.clear();
   }
 
   async function handle(request) {
     const url = new URL(request.url);
     const isStream = url.pathname === "/fleet/stream";
-    const creds = keyStore.read();
-    if (!creds) return jsonResponse(401, { error: "not_paired" });
-    // Gateway already rejected this key: stop calling it until the user re-pairs.
-    if (state.authError) return jsonResponse(401, { error: "pairing_rejected" });
+    if (!auth.isSignedIn()) return jsonResponse(401, { error: "not_signed_in" });
     if (isStream && state.streamFailures >= MAX_FAILURES) {
       // 204 tells EventSource to stop reconnecting (no endless retries).
       return new Response(null, { status: 204 });
     }
     if (isStream && Date.now() < state.streamBlockedUntil) return new Response(null, { status: 204 });
+    let token = await auth.token();
+    if (!token) return auth.isSignedIn() ? jsonResponse(502, { error: "gateway_unreachable" }) : jsonResponse(401, { error: "not_signed_in" });
 
-    // Never forward a token from the page; the key is added here.
+    // Never forward a token from the page; the bearer is added here.
     url.searchParams.delete("token");
     const target = configStore.getGateway() + url.pathname + (url.search || "");
-    const headers = new Headers();
+    const baseHeaders = new Headers();
     for (const name of ["content-type", "accept", "last-event-id"]) {
       const v = request.headers.get(name);
-      if (v) headers.set(name, v);
+      if (v) baseHeaders.set(name, v);
     }
-    headers.set("Authorization", `Bearer ${creds.key}`);
-    headers.set(CLIENT_ID_HEADER, "javis-desktop");
-
-    const init = { method: request.method, headers, redirect: "manual" };
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      init.body = await request.arrayBuffer();
-    }
+    baseHeaders.set(CLIENT_ID_HEADER, "javis-desktop");
+    const body = request.method !== "GET" && request.method !== "HEAD" ? await request.arrayBuffer() : undefined;
 
     let res;
-    try {
-      res = await fetchImpl(target, init);
-    } catch (err) {
-      log(`JAVIS: gateway unreachable (${url.pathname}): ${err && err.message}`);
-      if (isStream) {
-        state.streamFailures++;
-        state.streamBlockedUntil = Date.now() + 5000 * 2 ** state.streamFailures;
+    let ac = null;
+    if (isStream) {
+      ac = new AbortController();
+      liveStreams.add(ac);
+      // The page closed its EventSource → close the upstream connection too.
+      if (request.signal) request.signal.addEventListener("abort", () => { ac.abort(); liveStreams.delete(ac); });
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const headers = new Headers(baseHeaders);
+      headers.set("Authorization", `Bearer ${token}`);
+      const init = { method: request.method, headers, redirect: "manual" };
+      if (body !== undefined) init.body = body;
+      if (ac) init.signal = ac.signal;
+      try {
+        res = await fetchImpl(target, init);
+      } catch (err) {
+        if (ac) liveStreams.delete(ac);
+        log(`JAVIS: gateway unreachable (${url.pathname}): ${err && err.message}`);
+        if (isStream) {
+          state.streamFailures++;
+          state.streamBlockedUntil = Date.now() + 5000 * 2 ** state.streamFailures;
+        }
+        return jsonResponse(502, { error: "gateway_unreachable" });
       }
-      return jsonResponse(502, { error: "gateway_unreachable" });
+      if (res.status !== 401) break;
+      const next = await auth.onUnauthorized(token, { retried: attempt > 0 });
+      if (!next) { if (ac) liveStreams.delete(ac); return jsonResponse(401, { error: "signed_out" }); }
+      token = next;
     }
 
-    if (res.status === 401 || res.status === 403) {
-      state.authError = true;
-      onAuthError(res.status);
-      return jsonResponse(res.status, { error: "pairing_rejected" });
-    }
     if (isStream) {
+      if (!res.ok) liveStreams.delete(ac);
       if (res.ok) state.streamFailures = 0;
       else {
         state.streamFailures++;
@@ -227,31 +240,43 @@ function createFleetProxy({ keyStore, configStore, fetchImpl, onAuthError = () =
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers: outHeaders });
   }
 
-  return { handle, reset, state };
+  return { handle, reset, abortStreams, state, liveStreams };
 }
 
 /**
  * Main-process calls to the gateway (Việc chờ anh, báo cáo, giọng đọc, Clipboard) with the
- * same device key and the same "rejected key" flag as the proxy: once the gateway answers
- * 401 nothing else is sent until the user pairs again. A 403 is returned to the caller
- * (e.g. an owner ticket that only the owner's web session may decide) and does not unpair.
+ * same sign-in as the proxy. A 401 refreshes the access token and retries once; if that is
+ * rejected too the session ends (login screen). A 403 is returned to the caller (e.g. an
+ * owner ticket that only the owner's web session may decide) and does not sign out.
  */
-function createGatewayClient({ keyStore, configStore, fetchImpl, proxyState, onAuthError = () => {} }) {
-  function headersFor(creds, extra = {}) {
-    return { Authorization: `Bearer ${creds.key}`, [CLIENT_ID_HEADER]: "javis-desktop", ...extra };
+function createGatewayClient({ auth, configStore, fetchImpl }) {
+  function headersFor(token, extra = {}) {
+    return { Authorization: `Bearer ${token}`, [CLIENT_ID_HEADER]: "javis-desktop", ...extra };
+  }
+
+  async function send(method, pathname, init0) {
+    if (!auth.isSignedIn()) return { notSignedIn: true };
+    let token = await auth.token();
+    if (!token) return { offline: auth.isSignedIn(), notSignedIn: !auth.isSignedIn() };
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetchImpl(configStore.getGateway() + pathname, { ...init0, method, headers: headersFor(token, init0.headers) });
+      if (res.status !== 401 || attempt > 0) {
+        if (res.status === 401) await auth.onUnauthorized(token, { retried: true });
+        return { res };
+      }
+      const next = await auth.onUnauthorized(token);
+      if (!next) return { res };
+      token = next;
+    }
   }
 
   async function request(method, pathname, body, { raw = false } = {}) {
-    const creds = keyStore.read();
-    if (!creds) return { status: 0, data: { error: "not_paired" }, notPaired: true };
-    if (proxyState && proxyState.authError) return { status: 401, data: { error: "pairing_rejected" } };
-    const init = { method, headers: headersFor(creds, body !== undefined ? { "Content-Type": "application/json" } : {}) };
+    const init = { headers: body !== undefined ? { "Content-Type": "application/json" } : {} };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const res = await fetchImpl(configStore.getGateway() + pathname, init);
-    if (res.status === 401) {
-      if (proxyState) proxyState.authError = true;
-      onAuthError(401);
-    }
+    const r = await send(method, pathname, init);
+    if (r.notSignedIn) return { status: 0, data: { error: "not_paired" }, notPaired: true };
+    if (r.offline) throw new Error("gateway_unreachable");
+    const res = r.res;
     if (raw) {
       const buffer = res.ok ? await res.arrayBuffer() : null;
       return { status: res.status, buffer, contentType: res.headers.get("content-type") || "" };
@@ -261,149 +286,75 @@ function createGatewayClient({ keyStore, configStore, fetchImpl, proxyState, onA
     return { status: res.status, data: data || {} };
   }
 
-  function openStream() {
-    const creds = keyStore.read();
-    if (!creds || (proxyState && proxyState.authError)) return Promise.resolve({ status: 401, ok: false });
-    return fetchImpl(configStore.getGateway() + "/fleet/stream", { method: "GET", headers: headersFor(creds, { Accept: "text/event-stream" }) });
+  const liveStreams = new Set();
+  function abortStreams() {
+    for (const ac of liveStreams) { try { ac.abort(); } catch {} }
+    liveStreams.clear();
   }
 
-  return { request, openStream, isPaired: () => !!keyStore.read() && !(proxyState && proxyState.authError) };
+  async function openStream() {
+    const ac = new AbortController();
+    liveStreams.add(ac);
+    const r = await send("GET", "/fleet/stream", { headers: { Accept: "text/event-stream" }, signal: ac.signal })
+      .catch((err) => { liveStreams.delete(ac); throw err; });
+    if (!r.res || !r.res.ok) liveStreams.delete(ac);
+    if (r.notSignedIn) return { status: 401, ok: false };
+    if (r.offline) throw new Error("gateway_unreachable");
+    return r.res;
+  }
+
+  return { request, openStream, abortStreams, isPaired: () => auth.isSignedIn() };
 }
 
 /**
- * Device-code pairing: start → show code/QR → poll until approved/denied/expired.
- * Network errors: up to MAX_FAILURES with back-off, then stop and report.
- */
-function createPairing({ keyStore, configStore, fetchImpl, onUpdate, onPaired, setTimer = setTimeout, clearTimer = clearTimeout, clientName }) {
-  let current = null; // { deviceCode, timer, expiresAt, failures }
-
-  function stop() {
-    if (current && current.timer) clearTimer(current.timer);
-    current = null;
-  }
-
-  async function post(pathname, body) {
-    const res = await fetchImpl(configStore.getGateway() + pathname, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", [CLIENT_ID_HEADER]: "javis-desktop" },
-      body: JSON.stringify(body),
-    });
-    let data = null;
-    try { data = await res.json(); } catch {}
-    return { status: res.status, ok: res.ok, data: data || {} };
-  }
-
-  async function start() {
-    stop();
-    const gateway = configStore.getGateway();
-    const r = await post("/fleet/auth/device/start", { client_name: clientName });
-    if (!r.ok || !r.data.device_code) {
-      throw new Error(r.data.error || `start_failed_${r.status}`);
-    }
-    const interval = Math.max(PAIR_POLL_MIN_S, Number(r.data.interval) || PAIR_POLL_MIN_S);
-    const expiresIn = Math.max(30, Number(r.data.expires_in) || 600);
-    const verifyUrl = new URL(r.data.verify_url || `/auth/device.html?code=${encodeURIComponent(r.data.user_code || "")}`, gateway + "/").href;
-    current = { deviceCode: r.data.device_code, interval, expiresAt: Date.now() + expiresIn * 1000, failures: 0, timer: null };
-    schedule(interval * 1000);
-    return { userCode: r.data.user_code || "", verifyUrl, expiresIn, interval };
-  }
-
-  function schedule(ms) {
-    if (!current) return;
-    const me = current;
-    me.timer = setTimer(() => (current === me ? poll().catch((err) => { stop(); onUpdate({ status: "error", error: err.message }); }) : undefined), ms);
-  }
-
-  async function poll() {
-    const me = current;
-    if (!me) return;
-    if (Date.now() > me.expiresAt) {
-      stop();
-      onUpdate({ status: "expired" });
-      return;
-    }
-    let r;
-    try {
-      r = await post("/fleet/auth/device/poll", { device_code: me.deviceCode });
-    } catch (err) {
-      if (current !== me) return;
-      me.failures++;
-      if (me.failures >= MAX_FAILURES) {
-        stop();
-        onUpdate({ status: "error", error: "gateway_unreachable" });
-        return;
-      }
-      schedule(me.interval * 1000 * 2 ** me.failures);
-      return;
-    }
-    if (current !== me) return;
-    const status = r.data.status;
-    if (status === "approved" && isPlausibleDeviceKey(r.data.key)) {
-      keyStore.save(r.data.key.trim(), { email: r.data.email, name: r.data.name });
-      stop();
-      onPaired();
-      onUpdate({ status: "approved", email: r.data.email || "", name: r.data.name || "" });
-      return;
-    }
-    if (status === "denied" || status === "expired") {
-      stop();
-      onUpdate({ status });
-      return;
-    }
-    if (!r.ok && status !== "pending") {
-      me.failures++;
-      if (me.failures >= MAX_FAILURES) {
-        stop();
-        onUpdate({ status: "error", error: r.data.error || `poll_failed_${r.status}` });
-        return;
-      }
-      schedule(me.interval * 1000 * 2 ** me.failures);
-      return;
-    }
-    me.failures = 0;
-    onUpdate({ status: "pending" });
-    schedule(me.interval * 1000);
-  }
-
-  return { start, stop, poll, isActive: () => !!current };
-}
-
-/**
- * Wire everything into the Electron app. Returns { openChat, openPairing }.
+ * Wire everything into the Electron app. Returns { openChat, openLogin, … }.
  */
 function initJavisCompanionHost(deps) {
-  const { app, BrowserWindow, ipcMain, session, net, safeStorage, shell, getBounds, onOpen, onPairChange = () => {} } = deps;
+  const {
+    app, BrowserWindow, ipcMain, session, net, safeStorage, shell, getBounds, onOpen,
+    onPairChange = () => {}, onAuthState = () => {}, onSessionExpired = () => {},
+  } = deps;
   const roots = { src: __dirname, assets: path.resolve(__dirname, "..", "assets") };
   const userDataDir = app.getPath("userData");
   const keyStore = createKeyStore({ userDataDir, safeStorage });
+  const sessionStore = createSessionStore({ userDataDir, safeStorage });
   const configStore = createConfigStore({ userDataDir });
+  const fetchImpl = (url, init) => net.fetch(url, init);
   let win = null;
 
   const send = (channel, payload) => {
     if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
   };
-  const proxy = createFleetProxy({
-    keyStore,
-    configStore,
-    fetchImpl: (url, init) => net.fetch(url, init),
-    onAuthError: (status) => { send("javis:auth-error", { status }); onPairChange("rejected"); },
+  let proxy = null;
+  let gatewayClient = null;
+  const auth = createAuth({
+    fetchImpl,
+    getGateway: () => configStore.getGateway(),
+    sessionStore,
+    legacyStore: keyStore,
+    openExternal: (url) => shell.openExternal(url),
+    deviceName: os.hostname().replace(/\.local$/, "") || "JAVIS Desktop",
+    onChange: (s, { wasIn }) => {
+      send("javis:auth", { ...status(), ...s });
+      onAuthState(s);
+      if (s.signedIn && !wasIn) { if (proxy) proxy.reset(); onPairChange("paired"); }
+      else if (!s.signedIn && wasIn) {
+        if (proxy) proxy.abortStreams();
+        if (gatewayClient) gatewayClient.abortStreams();
+        onPairChange(s.state === "expired" ? "rejected" : "unpaired");
+      }
+    },
+    onExpired: (s) => {
+      // The session is over: show the login screen again (and the character says so once).
+      open("login", { inactive: true });
+      onSessionExpired(s);
+    },
     log: (msg) => console.warn(msg),
   });
-  const pairing = createPairing({
-    keyStore,
-    configStore,
-    fetchImpl: (url, init) => net.fetch(url, init),
-    clientName: `JAVIS Desktop · ${os.hostname()}`,
-    onUpdate: (u) => send("javis:pair-update", u),
-    onPaired: () => { proxy.reset(); onPairChange("paired"); },
-  });
-  const gatewayClient = createGatewayClient({
-    keyStore,
-    configStore,
-    fetchImpl: (url, init) => net.fetch(url, init),
-    proxyState: proxy.state,
-    onAuthError: (st) => { send("javis:auth-error", { status: st }); onPairChange("rejected"); },
-  });
+  auth.init();
+  proxy = createFleetProxy({ auth, configStore, fetchImpl, log: (msg) => console.warn(msg) });
+  gatewayClient = createGatewayClient({ auth, configStore, fetchImpl });
+  let emailEnabled = true;
 
   session.defaultSession.protocol.handle(SCHEME, async (request) => {
     const url = new URL(request.url);
@@ -429,76 +380,58 @@ function initJavisCompanionHost(deps) {
   });
 
   function status() {
-    const creds = keyStore.read();
+    const s = auth.getState();
     return {
-      paired: !!creds,
-      email: creds ? creds.email : "",
-      name: creds ? creds.name : "",
+      ...s,
+      paired: s.signedIn,
       gateway: configStore.getGateway(),
       defaultGateway: DEFAULT_GATEWAY,
-      authError: proxy.state.authError,
+      emailEnabled,
       encrypted: !!(safeStorage && safeStorage.isEncryptionAvailable()),
     };
   }
 
   const fromChat = (event) => win && !win.isDestroyed() && event.sender === win.webContents;
-  ipcMain.handle("javis:status", (e) => (fromChat(e) ? status() : null));
-  ipcMain.handle("javis:set-gateway", (e, url) => {
+  const guarded = (channel, fn) => ipcMain.handle(channel, async (e, ...args) => {
     if (!fromChat(e)) return null;
+    const r = await fn(...args);
+    return { ...(r || {}), status: status() };
+  });
+  ipcMain.handle("javis:status", async (e) => {
+    if (!fromChat(e)) return null;
+    // Hide "Hoặc nhận mã qua email" only when the gateway says mail is off.
+    if (!auth.isSignedIn()) {
+      try { emailEnabled = (await auth.config()).emailEnabled; } catch {}
+    }
+    return status();
+  });
+  guarded("javis:login", () => auth.login());
+  guarded("javis:login-reopen", () => auth.reopenBrowser());
+  guarded("javis:login-cancel", () => { auth.cancel(); return { ok: true }; });
+  guarded("javis:email-start", (email) => auth.emailStart(email));
+  guarded("javis:email-verify", (code) => auth.emailVerify(code));
+  guarded("javis:email-resend", () => auth.emailResend());
+  guarded("javis:logout", () => auth.logout());
+  guarded("javis:use-key", (key) => auth.useLegacyKey(key));
+  guarded("javis:set-gateway", (url) => {
     try {
       configStore.setGateway(url);
-      pairing.stop();
+      auth.resetConfig();
       proxy.reset();
-      return { ok: true, status: status() };
+      return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
     }
   });
-  ipcMain.handle("javis:pair-start", async (e) => {
-    if (!fromChat(e)) return null;
-    try {
-      const info = await pairing.start();
-      let qr = "";
-      try { qr = await require("qrcode").toDataURL(info.verifyUrl, { margin: 1, width: 220 }); } catch {}
-      return { ok: true, ...info, qr };
-    } catch (err) {
-      return { ok: false, error: err.message || "start_failed" };
-    }
-  });
-  ipcMain.handle("javis:pair-cancel", (e) => { if (fromChat(e)) pairing.stop(); return { ok: true }; });
-  ipcMain.handle("javis:pair-open-browser", (e, url) => {
-    if (!fromChat(e) || typeof url !== "string") return { ok: false };
-    const gw = new URL(configStore.getGateway());
-    let u;
-    try { u = new URL(url); } catch { return { ok: false }; }
-    if (u.origin !== gw.origin) return { ok: false };
-    shell.openExternal(u.href);
-    return { ok: true };
-  });
-  ipcMain.handle("javis:pair-paste-key", (e, key) => {
-    if (!fromChat(e)) return null;
-    if (!isPlausibleDeviceKey(key)) return { ok: false, error: "invalid_key" };
-    keyStore.save(key.trim());
-    pairing.stop();
-    proxy.reset();
-    onPairChange("paired");
-    return { ok: true, status: status() };
-  });
-  ipcMain.handle("javis:unpair", (e) => {
-    if (!fromChat(e)) return null;
-    pairing.stop();
-    keyStore.clear();
-    proxy.reset();
-    onPairChange("unpaired");
-    return { ok: true, status: status() };
-  });
 
-  function open(view) {
+  // view: null = chat (or login when signed out), "login", "settings".
+  // inactive: show without stealing focus (the session expired in the background).
+  function open(view, { inactive = false } = {}) {
     if (onOpen) onOpen();
     if (win && !win.isDestroyed()) {
       if (view) send("javis:show-view", view);
-      win.show();
-      win.focus();
+      if (inactive) win.showInactive();
+      else { win.show(); win.focus(); }
       return win;
     }
     const width = 440;
@@ -536,17 +469,29 @@ function initJavisCompanionHost(deps) {
       }
     });
     win.loadURL(`${ORIGIN}/index.html${view ? `#${view}` : ""}`);
-    win.once("ready-to-show", () => { if (win && !win.isDestroyed()) win.show(); });
-    win.on("closed", () => { pairing.stop(); win = null; });
+    win.once("ready-to-show", () => {
+      if (!win || win.isDestroyed()) return;
+      if (inactive) win.showInactive();
+      else win.show();
+    });
+    // A browser sign-in still in progress keeps waiting (≤ 5 min) after the window closes.
+    win.on("closed", () => { win = null; });
     return win;
   }
 
   return {
     openChat: () => open(null),
-    // { web: true } = also get a code and open the approval page in the browser.
-    openPairing: (opts = {}) => open(opts && opts.web ? "pair-web" : "pair"),
+    // { start: true } = also open the browser sign-in right away (one click from other windows).
+    openLogin: (opts = {}) => {
+      if (auth.isSignedIn()) return open("settings");
+      open("login");
+      if (opts && opts.start && auth.getState().state !== "waiting_browser") void auth.login();
+      return win;
+    },
+    openSettings: () => open("settings"),
     getWindow: () => win,
     status,
+    auth,
     keyStore,
     configStore,
     gatewayClient,
@@ -560,5 +505,5 @@ module.exports = {
   MAX_FAILURES,
   registerJavisScheme,
   initJavisCompanionHost,
-  __test: { normalizeGateway, isPlausibleDeviceKey, resolveStaticPath, createKeyStore, createConfigStore, createFleetProxy, createPairing, createGatewayClient },
+  __test: { normalizeGateway, isPlausibleDeviceKey, resolveStaticPath, createKeyStore, createConfigStore, createFleetProxy, createGatewayClient },
 };

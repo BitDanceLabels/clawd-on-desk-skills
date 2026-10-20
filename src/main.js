@@ -2178,6 +2178,16 @@ function getJavisHost() {
       if (_deskTools) _deskTools.onPairChange(kind);
       rebuildAllMenus();
     },
+    // Menu shows "Đăng nhập JAVIS…" / "Đã đăng nhập: <email>".
+    onAuthState: (s) => {
+      scheduleMenuRebuild();
+      if (s.signedIn) sendToRenderer("javis-note", { clear: true, kind: "session" });
+    },
+    // Session over: the login screen is shown again; the character says so once (not while asleep).
+    onSessionExpired: () => {
+      if (doNotDisturb || petHidden) return;
+      sendToRenderer("javis-note", { text: translate(lang, "petSessionExpired"), ms: 9000, kind: "session" });
+    },
   });
   return _javisHost;
 }
@@ -2189,11 +2199,17 @@ function openJavisChat() {
   watchForVocabLayout(host.getWindow());
 }
 
-function openJavisPairing(opts) {
+// "Đăng nhập JAVIS…" (signed out) or the settings screen (signed in).
+// { start: true } also opens the browser sign-in right away.
+function openJavisLogin(opts) {
   const host = getJavisHost();
   if (!host) return;
-  host.openPairing(opts);
+  host.openLogin(opts);
   watchForVocabLayout(host.getWindow());
+}
+
+function javisAuthForMenu() {
+  return _javisHost ? _javisHost.status() : { signedIn: false, state: "signed_out", email: "" };
 }
 
 // ── 0.12.0: Việc chờ anh · Thư ký đọc báo cáo · AI Clipboard ──
@@ -2212,7 +2228,7 @@ function getDeskTools() {
     isDoNotDisturb: () => doNotDisturb,
     isPetHidden: () => petHidden,
     onMenuChange: () => scheduleMenuRebuild(),
-    openPairing: (opts) => openJavisPairing(opts),
+    openLogin: (opts) => openJavisLogin(opts),
     t: (k) => translate(lang, k),
     getClipShortcut: () => clipShortcut,
     onWindowCreated: (w) => watchForVocabLayout(w),
@@ -3949,7 +3965,8 @@ const _menuCtx = {
   getWiki: () => _wiki,
   openBumbeeChat: () => openJavisChat(),
   openJavisChat: () => openJavisChat(),
-  openJavisPairing: () => openJavisPairing(),
+  openJavisLogin: () => openJavisLogin(),
+  getJavisAuth: () => javisAuthForMenu(),
   openEnglishCoach: () => openBumbeeChat(),
   getInbox: () => inboxForMenu(),
   openInbox: () => { const tools = getDeskTools(); if (tools) tools.openInbox(); },
@@ -4877,7 +4894,7 @@ if (!gotTheLock) {
       setTimeout(() => {
         if (want.has("credit")) showCharacterCredit();
         if (want.has("chat")) openJavisChat();
-        if (want.has("pair")) openJavisPairing();
+        if (want.has("pair") || want.has("login")) openJavisLogin();
         if (want.has("about")) showAboutJavis();
         if (want.has("inbox") && tools) tools.openInbox();
         if (want.has("report") && tools) void tools.readReport();
@@ -4917,6 +4934,9 @@ if (!gotTheLock) {
         }),
         openVocabChallenge: () => openVocabChallenge(),
         openChat: () => openJavisChat(),
+        openLogin: (start) => openJavisLogin({ start: !!start }),
+        authState: () => javisAuthForMenu(),
+        refreshInbox: () => (_deskTools ? _deskTools.refreshInbox("test") : null),
         isReading: () => !!(_deskTools && _deskTools.isReading()),
       };
     }
@@ -4952,7 +4972,7 @@ if (!gotTheLock) {
     configureDisplayCapturePermissions(session.defaultSession);
     createWindow();
     if (LEARN_ON_START) {
-      // Start-up chat is now the JAVIS assistant (shows "Ghép đôi JAVIS" until paired).
+      // Start-up chat is now the JAVIS assistant (shows "Đăng nhập JAVIS" until signed in).
       setTimeout(() => {
         if (!app.isQuitting) openJavisChat();
       }, 900);

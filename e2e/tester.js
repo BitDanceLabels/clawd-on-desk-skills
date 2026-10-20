@@ -115,7 +115,7 @@ async function main() {
     await sleep(2500); // wait first inbox load
     const labels = await hook(app, "contextLabels");
     check(1, "Mục đầu menu là 'Việc chờ anh' kèm số việc", /^📋 Việc chờ anh \(\d+\)$/.test(labels[0]), labels[0]);
-    for (const want of ["🔊 Đọc báo cáo hôm nay", "📎 AI Clipboard", "💬 Trò chuyện với JAVIS…", "🔗 Ghép đôi máy này…", "Nhân vật", "Cỡ nhân vật", "Đi ngủ (không làm phiền)", "Ngôn ngữ", "Phím tắt AI Clipboard", "Thoát"]) {
+    for (const want of ["🔊 Đọc báo cáo hôm nay", "📎 AI Clipboard", "💬 Trò chuyện với JAVIS…", "👤 Đã đăng nhập: owner@demo.test", "Nhân vật", "Cỡ nhân vật", "Đi ngủ (không làm phiền)", "Ngôn ngữ", "Phím tắt AI Clipboard", "Thoát"]) {
       check(1, `Có mục "${want}"`, labels.some((l) => l.startsWith(want)));
     }
     const english = labels.filter((l) => /\b(Mode|Open|Show|Hide|Check|Update|Sleep|Quit|Size|Language|Character|Pair|Sessions|Rabbit)\b/.test(l));
@@ -218,7 +218,7 @@ async function main() {
     await clip.close();
 
     // ── 5 · Không đè cửa sổ + ghép đôi dễ hơn ──
-    caption("5/5 · Chat và bảng học từ vựng không đè nhau · ghép đôi 3 bước");
+    caption("5/5 · Chat và bảng học từ vựng không đè nhau · Đăng nhập JAVIS 1 nút");
     await hook(app, "openChat");
     await sleep(2500);
     await hook(app, "openVocabChallenge");
@@ -231,24 +231,24 @@ async function main() {
     const chat = await findWindow(app, "javis-desk://app/index.html");
     await chat.click("#btn-settings");
     await sleep(800);
-    const steps = await chat.$$eval("#pair-steps > li > b", (els) => els.map((e) => e.textContent));
-    check(5, "Màn ghép đôi ghi rõ 3 bước", steps.length === 3 && steps[1].includes("Mở trang duyệt trên web"), steps.join(" | "));
-    // Unpair to show the guide for a computer that is not paired yet.
-    await chat.evaluate(() => { document.querySelector("#view-pair details:last-of-type").open = true; });
-    await chat.click("#btn-unpair");
-    await sleep(600);
-    await chat.click("#btn-pair-open");
+    check(5, "Cài đặt (⚙) chứa Dán khoá / Nâng cao / Đăng xuất", await chat.evaluate(() => ["Dán khoá thiết bị", "Nâng cao · Gateway", "Đăng xuất"].every((k) => document.body.innerText.includes(k))));
+    // Sign out to show the first screen of a computer that is not signed in yet.
+    await chat.click("#btn-logout");
+    await chat.waitForSelector("#view-login:not([hidden])", { timeout: 5000 });
+    const loginText = await chat.evaluate(() => document.getElementById("view-login").innerText);
+    check(5, "Màn đầu chỉ có 1 nút 'Đăng nhập JAVIS' + 'Hoặc nhận mã qua email'", loginText.includes("Đăng nhập JAVIS") && loginText.includes("Hoặc nhận mã qua email") && !/Dán khoá|Nâng cao|Bước 1/.test(loginText), loginText.replace(/\s+/g, " "));
+    await chat.click("#btn-login");
     await sleep(1200);
     const opened2 = await T(app, () => globalThis.__opened.slice());
-    check(5, "Nút 'Mở trang duyệt trên web' lấy mã rồi mở trang duyệt có sẵn mã", opened2.some((u) => u.includes("/auth/device.html?code=JAVS-2026")), opened2.join(" "));
-    check(5, "Bước 3 được đánh dấu đang làm", await chat.$eval("#step-3", (li) => li.classList.contains("current")));
-    shot("6-ghep-doi-3-buoc.png");
+    check(5, "Nút 'Đăng nhập JAVIS' mở trình duyệt tới trang cho phép máy", opened2.some((u) => u.includes("/auth/desktop?client_id=javis-desk")), opened2.join(" "));
+    shot("6-dang-nhap.png");
+    await chat.click("#btn-cancel");
     await sleep(2500);
     await hook(app, "clickMenu", "📋 Việc chờ anh");
     const inbox2 = await findWindow(app, "inbox.html");
     await inbox2.waitForSelector("#not-paired:not(.hidden)", { timeout: 8000 });
-    check(2, "Chưa ghép đôi → hướng dẫn ghép đôi 3 bước", (await inbox2.$$eval("#not-paired .steps li", (l) => l.length)) === 3);
-    check(1, "Menu báo 'cần ghép đôi'", (await hook(app, "contextLabels"))[0] === "📋 Việc chờ anh (cần ghép đôi)");
+    check(2, "Chưa đăng nhập → 1 nút 'Đăng nhập JAVIS'", (await inbox2.textContent("#btn-login")) === "Đăng nhập JAVIS");
+    check(1, "Menu báo 'cần đăng nhập'", (await hook(app, "contextLabels"))[0] === "📋 Việc chờ anh (cần đăng nhập)");
     await sleep(3500);
     caption("Xong · JAVIS 0.12.0");
     await sleep(2500);
@@ -256,8 +256,8 @@ async function main() {
     if (ff) { ff.stdin.write("q"); await new Promise((r) => ff.on("close", r)); ff = null; }
 
     // ── Off-video: Sleep (DND) means no note ──
-    fs.writeFileSync(path.join(ud, "javis-device-key.json"), JSON.stringify({ v: 1, email: "owner@demo.test", plain: "jvk_FAKEFAKEFAKEFAKEFAKEFAKE" }));
-    await chat.evaluate(() => { for (const d of document.querySelectorAll("#view-pair details")) d.open = true; });
+    await chat.click("#btn-settings");
+    await chat.evaluate(() => { for (const d of document.querySelectorAll("#view-settings details")) d.open = true; });
     await chat.fill("#paste-key", "jvk_FAKEFAKEFAKEFAKEFAKEFAKE");
     await chat.click("#btn-paste");
     await sleep(2500);

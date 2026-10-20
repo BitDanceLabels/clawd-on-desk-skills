@@ -5,7 +5,7 @@ const api = window.javisTools;
 const busy = new Set();
 
 const ERRORS = {
-  pairing_rejected: "Khoá thiết bị bị từ chối. Anh ghép đôi lại giúp em nhé.",
+  pairing_rejected: "Phiên đăng nhập đã hết hạn. Anh bấm Đăng nhập JAVIS để vào lại nhé.",
   gateway_unreachable: "Chưa kết nối được máy chủ JAVIS (đã thử 3 lần rồi dừng). Kiểm tra mạng/Tailscale rồi bấm Thử lại.",
 };
 
@@ -77,7 +77,7 @@ function render(s) {
   show("error", !!err);
   if (err) $("error-text").textContent = ERRORS[s.error] || `Lỗi: ${s.error}`;
   show("empty", s.paired && s.loaded && !err && !count);
-  $("sub").textContent = !s.paired ? "Chưa ghép đôi"
+  $("sub").textContent = !s.paired ? "Chưa đăng nhập"
     : s.loading && !s.loaded ? "Đang tải…"
     : count ? `${count} việc · ${s.approvable || 0} việc duyệt được ngay` : "Không có việc chờ";
   $("updated").textContent = s.updatedAt ? `Cập nhật lúc ${hhmm(s.updatedAt)}` : "";
@@ -89,7 +89,6 @@ function render(s) {
 $("btn-refresh").onclick = async () => render(await api.inboxRefresh());
 $("btn-retry").onclick = async () => render(await api.inboxRefresh());
 $("btn-web").onclick = () => api.openWeb("https://javis.bumbee.asia/");
-$("btn-pair").onclick = () => api.openPairing();
-$("btn-pair-web").onclick = () => api.pairingWeb();
+$("btn-login").onclick = () => api.login();
 api.onInbox(render);
 api.inboxGet().then(render);

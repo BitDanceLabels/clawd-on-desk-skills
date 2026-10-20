@@ -1,75 +1,82 @@
 // JAVIS chat window renderer (javis-desk://app/index.html).
 // Hosts <javis-companion> — same component, same /fleet/chat session as JAVIS web.
 // All /fleet/* calls go same-origin to javis-desk://app/fleet/*, where the main
-// process adds the device key. The page never sees or stores the key.
+// process adds the bearer token. The page never sees or stores any token.
 "use strict";
 
 const $ = (id) => document.getElementById(id);
 const api = window.javisDesk;
 let companion = null;
-let paired = false;
+// Last state from main. Chat vs. login follows it; only "settings" is a user choice.
+let auth = null;
+let settingsOpen = false;
+let emailForm = false;
 
-const PAIR_MESSAGES = {
-  pending: "Đang chờ duyệt trên JAVIS web…",
-  approved: "Đã ghép đôi xong.",
-  denied: "Yêu cầu ghép đôi bị từ chối.",
-  expired: "Mã đã hết hạn — bấm bắt đầu lại.",
-  error: "Không kết nối được gateway JAVIS (đã thử 3 lần, dừng). Kiểm tra Tailscale rồi thử lại.",
+const LEAD = {
+  signed_out: "Đăng nhập một lần là dùng lâu dài: chat, việc chờ anh, báo cáo, AI Clipboard.",
+  email: "Nhập email tài khoản JAVIS, em gửi mã 6 số cho anh.",
+  waiting_browser: "Đang chờ anh cho phép trên trình duyệt…",
+  expired: "Phiên đăng nhập đã hết hạn. Anh bấm Đăng nhập JAVIS để vào lại nhé.",
 };
 
-let verifyUrl = "";
-
-function markStep(n) {
-  // n = the step the user is on (1..3); 4 = done.
-  for (let i = 1; i <= 3; i++) {
-    const li = $(`step-${i}`);
-    if (!li) continue;
-    li.classList.toggle("done", i < n);
-    li.classList.toggle("current", i === n);
+function statusLine(s) {
+  if (s.state === "signed_in") {
+    return [s.kind === "legacy" ? "Đã đăng nhập · khoá thiết bị" : `Đã đăng nhập${s.email ? ` · ${s.email}` : ""}`, "ok"];
   }
+  return [{
+    signed_out: "Chưa đăng nhập",
+    waiting_browser: "Đang chờ trình duyệt…",
+    waiting_code: "Đang chờ mã email…",
+    expired: "Phiên đăng nhập hết hạn",
+  }[s.state] || "", "warn"];
 }
 
-function setStatusLine(s) {
-  const el = $("status-line");
-  if (!s.paired) { el.textContent = "Chưa ghép đôi"; el.className = "warn"; return; }
-  if (s.authError) { el.textContent = "Khoá thiết bị bị từ chối — cần ghép đôi lại"; el.className = "warn"; return; }
-  el.textContent = s.email ? `Đã ghép đôi · ${s.email}` : "Đã ghép đôi";
-  el.className = "ok";
-}
+// The whole window is drawn from one state: never two messages that disagree.
+function render(s) {
+  if (!s) return;
+  const wasIn = auth && auth.signedIn;
+  auth = s;
+  if (wasIn && !s.signedIn) unmountCompanion();
+  const out = s.state === "signed_out" || s.state === "expired";
+  if (!out) emailForm = false;
 
-function renderPairState(s) {
-  const box = $("pair-state");
-  box.textContent = "";
-  const line = document.createElement("div");
-  if (s.paired) {
-    line.className = s.authError ? "warn" : "ok";
-    line.textContent = s.authError
-      ? "Gateway đã từ chối khoá hiện tại. Ghép đôi lại bên dưới."
-      : `Máy này đã ghép đôi${s.email ? ` với ${s.email}` : ""}.`;
-  } else {
-    line.className = "warn";
-    line.textContent = "Máy này chưa ghép đôi với JAVIS.";
-  }
-  box.appendChild(line);
-  const gw = document.createElement("small");
-  gw.className = "muted";
-  gw.textContent = `Gateway: ${s.gateway}${s.encrypted ? "" : " · (máy không có keychain: khoá lưu chỉ chủ máy đọc được)"}`;
-  box.appendChild(gw);
-  $("gateway").value = s.gateway;
-}
+  const [line, cls] = statusLine(s);
+  $("status-line").textContent = line;
+  $("status-line").className = cls;
 
-async function refresh() {
-  const s = await api.status();
-  paired = !!(s && s.paired && !s.authError);
-  setStatusLine(s);
-  renderPairState(s);
-  return s;
-}
-
-function show(view) {
+  const view = settingsOpen ? "settings" : s.signedIn ? "chat" : "login";
   $("view-chat").hidden = view !== "chat";
-  $("view-pair").hidden = view !== "pair";
+  $("view-login").hidden = view !== "login";
+  $("view-settings").hidden = view !== "settings";
   if (view === "chat") mountCompanion();
+
+  // Login screen
+  $("pane-start").hidden = !(out && !emailForm);
+  $("pane-email").hidden = !(out && emailForm);
+  $("pane-browser").hidden = s.state !== "waiting_browser";
+  $("pane-code").hidden = s.state !== "waiting_code";
+  $("btn-email-link").hidden = s.emailEnabled === false;
+  const lead = s.notice
+    || (s.state === "waiting_code" ? `Em đã gửi mã 6 số tới ${s.pendingEmail}. Anh mở email rồi nhập vào đây.` : "")
+    || (out && emailForm ? LEAD.email : LEAD[s.state] || LEAD.signed_out);
+  $("login-line").textContent = lead;
+  $("login-line").className = s.notice || s.state === "expired" ? "lead warn" : "lead";
+
+  // Settings
+  $("acct-line").textContent = s.signedIn
+    ? (s.kind === "legacy" ? "Máy này đang dùng khoá thiết bị cũ." : `Đã đăng nhập: ${s.email || "tài khoản JAVIS"}`)
+    : "Máy này chưa đăng nhập JAVIS.";
+  $("acct-line").className = s.signedIn ? "ok" : "warn";
+  $("btn-logout").hidden = !s.signedIn;
+  $("btn-settings-login").hidden = s.signedIn;
+  if (document.activeElement !== $("gateway")) $("gateway").value = s.gateway || "";
+  $("gateway-note").textContent = s.encrypted ? "" : "Máy này không có keychain: phiên đăng nhập lưu ở tệp chỉ chủ máy đọc được.";
+}
+
+async function act(promise) {
+  const r = await promise;
+  if (r && r.status) render(r.status);
+  return r;
 }
 
 function currentCharacter() {
@@ -103,7 +110,7 @@ async function openPanel(el) {
 }
 
 function mountCompanion() {
-  if (!paired || companion) return;
+  if (!auth || !auth.signedIn || companion) return;
   // Same-origin proxy: no gateway URL / token in the page.
   localStorage.removeItem("javis:token");
   localStorage.removeItem("javis:fleet");
@@ -126,99 +133,54 @@ function unmountCompanion() {
   if (companion) { companion.remove(); companion = null; }
 }
 
-async function startPairing() {
-  $("btn-pair-start").disabled = true;
-  $("pair-progress").textContent = "Đang xin mã…";
-  const r = await api.pairStart();
-  $("btn-pair-start").disabled = false;
-  if (!r || !r.ok) {
-    $("pair-code").hidden = true;
-    $("pair-progress").textContent = `Không xin được mã ghép đôi (${(r && r.error) || "lỗi"}). Kiểm tra mạng rồi bấm lại.`;
-    markStep(1);
-    return;
-  }
-  $("pair-code").hidden = false;
-  $("user-code").textContent = r.userCode;
-  $("pair-qr").hidden = !r.qr;
-  if (r.qr) $("pair-qr").src = r.qr;
-  verifyUrl = r.verifyUrl;
-  $("btn-pair-start").textContent = "Lấy mã mới";
-  $("btn-pair-cancel").hidden = false;
-  $("pair-progress").textContent = PAIR_MESSAGES.pending;
-  markStep(2);
-}
-
-async function openVerifyPage() {
-  // No code yet: get one first so the web page opens with it filled in.
-  if (!verifyUrl) await startPairing();
-  if (!verifyUrl) return;
-  await api.pairOpenBrowser(verifyUrl);
-  markStep(3);
-}
-
 function wire() {
-  $("btn-settings").onclick = () => show($("view-pair").hidden ? "pair" : "chat");
-  $("btn-back").onclick = () => show("chat");
-  $("btn-pair-start").onclick = () => void startPairing();
-  $("btn-pair-open").onclick = () => void openVerifyPage();
-  $("btn-pair-cancel").onclick = async () => {
-    await api.pairCancel();
-    verifyUrl = "";
-    $("pair-code").hidden = true;
-    $("btn-pair-cancel").hidden = true;
-    $("btn-pair-start").textContent = "Lấy mã ghép đôi";
-    $("pair-progress").textContent = "Đã huỷ.";
-    markStep(1);
+  $("btn-settings").onclick = () => { settingsOpen = !settingsOpen; render(auth); };
+  $("btn-back").onclick = () => { settingsOpen = false; render(auth); };
+  $("btn-login").onclick = () => void act(api.login());
+  $("btn-settings-login").onclick = () => { settingsOpen = false; void act(api.login()); };
+  $("btn-cancel").onclick = () => void act(api.loginCancel());
+  $("btn-reopen").onclick = () => void api.loginReopen();
+  $("btn-email-link").onclick = () => { emailForm = true; render(auth); $("email").focus(); };
+  $("btn-email-back").onclick = () => { emailForm = false; void act(api.loginCancel()); };
+  $("pane-email").onsubmit = async (e) => {
+    e.preventDefault();
+    const r = await act(api.emailStart($("email").value));
+    if (r && r.ok) { $("code").value = ""; $("code").focus(); }
   };
+  $("pane-code").onsubmit = async (e) => {
+    e.preventDefault();
+    const r = await act(api.emailVerify($("code").value));
+    if (r && !r.ok) $("code").select();
+  };
+  $("code").oninput = () => {
+    const v = $("code").value.replace(/\D/g, "").slice(0, 6);
+    $("code").value = v;
+    if (v.length === 6) $("pane-code").requestSubmit();
+  };
+  $("btn-resend").onclick = () => void act(api.emailResend());
+  $("btn-code-back").onclick = async () => { await act(api.loginCancel()); emailForm = true; render(auth); $("email").focus(); };
+  $("btn-logout").onclick = async () => { settingsOpen = false; await act(api.logout()); };
   $("btn-paste").onclick = async () => {
     const input = $("paste-key");
-    const r = await api.pairPasteKey(input.value);
+    const r = await act(api.useKey(input.value));
     input.value = "";
-    if (!r || !r.ok) { $("pair-progress").textContent = "Khoá không hợp lệ."; return; }
-    unmountCompanion();
-    await refresh();
-    show("chat");
+    $("paste-msg").textContent = r && r.ok ? "" : "Khoá không hợp lệ.";
+    if (r && r.ok) { settingsOpen = false; unmountCompanion(); render(auth); }
   };
   $("btn-gateway").onclick = async () => {
-    const r = await api.setGateway($("gateway").value);
+    const r = await act(api.setGateway($("gateway").value));
     if (!r || !r.ok) { $("gateway").setCustomValidity("URL không hợp lệ"); $("gateway").reportValidity(); return; }
     $("gateway").setCustomValidity("");
     unmountCompanion();
-    await refresh();
+    render(auth);
   };
-  $("btn-unpair").onclick = async () => {
-    await api.unpair();
-    unmountCompanion();
-    await refresh();
-    show("pair");
-  };
-  api.onPairUpdate(async (u) => {
-    $("pair-progress").textContent = PAIR_MESSAGES[u.status] || u.status;
-    if (u.status === "approved") {
-      markStep(4);
-      verifyUrl = "";
-      $("pair-code").hidden = true;
-      unmountCompanion();
-      await refresh();
-      show("chat");
-    }
-  });
-  api.onAuthError(async () => {
-    unmountCompanion();
-    await refresh();
-    show("pair");
-  });
-  api.onShowView((v) => {
-    show(v === "pair" || v === "pair-web" ? "pair" : "chat");
-    if (v === "pair-web") void openVerifyPage();
-  });
-  markStep(1);
+  api.onAuth(render);
+  api.onShowView((v) => { settingsOpen = v === "settings"; render(auth); });
   setInterval(updateCredit, 2000);
 }
 
 (async () => {
   wire();
-  const s = await refresh();
-  show(location.hash === "#pair" || location.hash === "#pair-web" || !s.paired || s.authError ? "pair" : "chat");
-  if (location.hash === "#pair-web") void openVerifyPage();
+  settingsOpen = location.hash === "#settings";
+  render(await api.status());
 })();

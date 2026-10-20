@@ -43,7 +43,7 @@ function initDeskTools(deps) {
   const {
     app, BrowserWindow, ipcMain, shell, clipboard, safeStorage, spawn,
     host, getBounds, sendToCharacter, isDoNotDisturb, isPetHidden, onMenuChange = () => {},
-    onNewItems = () => {}, openPairing, t = (k) => k, log = (m) => console.warn(m),
+    onNewItems = () => {}, openLogin, t = (k) => k, log = (m) => console.warn(m),
     getClipShortcut = () => DEFAULT_CLIP_SHORTCUT, onWindowCreated = () => {},
   } = deps;
   const client = host.gatewayClient;
@@ -103,7 +103,7 @@ function initDeskTools(deps) {
 
   async function buildReport() {
     if (!client.isPaired()) {
-      return { text: "Máy này chưa ghép đôi với JAVIS nên em chưa lấy được báo cáo. Anh bấm Ghép đôi máy này trong menu, làm theo 3 bước là xong.", seconds: 8, empty: true, notPaired: true };
+      return { text: "Máy này chưa đăng nhập JAVIS nên em chưa lấy được báo cáo. Anh bấm Đăng nhập JAVIS trong menu, một lần là xong.", seconds: 8, empty: true, notPaired: true };
     }
     let morning = null;
     let r = null;
@@ -176,7 +176,7 @@ function initDeskTools(deps) {
   handle("javis-tools:inbox-refresh", async () => inbox.refresh({ reason: "manual" }));
   handle("javis-tools:inbox-approve", async (id) => inbox.approve(String(id || "")));
   handle("javis-tools:open-web", async (url) => {
-    // Only the JAVIS web (or the gateway's own pairing page) — never arbitrary links.
+    // Only the JAVIS web (or the gateway's own pages) — never arbitrary links.
     let u;
     try { u = new URL(String(url || WEB_BASE)); } catch { return { ok: false }; }
     const allowed = [new URL(WEB_BASE).origin, new URL(host.configStore.getGateway()).origin];
@@ -184,9 +184,8 @@ function initDeskTools(deps) {
     await shell.openExternal(u.href);
     return { ok: true };
   });
-  handle("javis-tools:open-pairing", async () => { openPairing(); return { ok: true }; });
-  // Get a pairing code and open the web approval page with it in one click.
-  handle("javis-tools:pairing-web", async () => { openPairing({ web: true }); return { ok: true }; });
+  // "Đăng nhập JAVIS" from any tool window: opens the browser sign-in in one click.
+  handle("javis-tools:login", async () => { openLogin({ start: true }); return { ok: true }; });
 
   handle("javis-tools:report-get", async () => ({ report: lastReport, speech }));
   handle("javis-tools:report-read", async () => readReport());

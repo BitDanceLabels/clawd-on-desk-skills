@@ -130,7 +130,13 @@
   let noteTimer = null;
   if (note && api.onJavisNote) {
     api.onJavisNote((n) => {
+      if (n && n.clear) {
+        // e.g. "phiên hết hạn" once the user is signed in again: never leave a stale note up.
+        if (!n.kind || note.dataset.kind === n.kind) { clearTimeout(noteTimer); note.hidden = true; }
+        return;
+      }
       if (!n || !n.text) return;
+      note.dataset.kind = n.kind || "";
       note.textContent = n.text;
       note.hidden = false;
       clearTimeout(noteTimer);
