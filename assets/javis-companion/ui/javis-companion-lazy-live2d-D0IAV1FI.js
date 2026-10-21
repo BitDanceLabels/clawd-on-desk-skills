@@ -124,6 +124,11 @@ var e = {
 		cx: .5,
 		cy: .19,
 		d: .22
+	},
+	bust: {
+		top: .03,
+		height: .37,
+		cx: .5
 	}
 }, n = 3;
 function r() {
@@ -148,9 +153,9 @@ function o(e) {
 var s = 0;
 function c(e = r()) {
 	return i || (s >= 3 ? Promise.reject(/* @__PURE__ */ Error("Live2D: đã thử 3 lần, dừng")) : (s++, a = e, i = o(e).then(() => Promise.all([
-		import("./javis-companion-lazy-lib-BEBkEh7I.js").then((e) => e.t),
-		import("./javis-companion-lazy-lib--KqWq4Q4.js"),
-		import("./javis-companion-lazy-cubism4.es-BXUs6ltv.js")
+		import("./javis-companion-lazy-lib-FoDFHkt2.js").then((e) => e.t),
+		import("./javis-companion-lazy-lib-hCuWBK0s.js"),
+		import("./javis-companion-lazy-cubism4.es-CJVJGiPw.js")
 	])).then(([e, t, n]) => ({
 		core: e,
 		display: t,
@@ -180,21 +185,22 @@ var l = class i {
 	canvas;
 	host;
 	portrait;
+	bust;
 	framing;
-	constructor(e, t, n, r, i, a, o) {
-		this.host = n, this.portrait = r, this.framing = i;
-		let s = Math.max(1, n.clientWidth || (r ? 64 : 176)), c = Math.max(1, n.clientHeight || (r ? 64 : 264)), l = Math.min(2, globalThis.devicePixelRatio || 1);
+	constructor(e, t, n, r, i, a, o, s) {
+		this.host = n, this.portrait = r, this.bust = !r && i, this.framing = a;
+		let c = Math.max(1, n.clientWidth || (r ? 64 : i ? 200 : 176)), l = Math.max(1, n.clientHeight || (r ? 64 : i ? 200 : 264)), u = Math.min(2, globalThis.devicePixelRatio || 1);
 		this.renderer = new e.core.Renderer({
-			width: s,
-			height: c,
+			width: c,
+			height: l,
 			backgroundAlpha: 0,
 			antialias: !0,
-			resolution: l,
+			resolution: u,
 			autoDensity: !0,
 			powerPreference: "low-power"
-		}), this.canvas = this.renderer.view, this.canvas.className = "jc-l2d", this.canvas.setAttribute("aria-hidden", "true"), this.canvas.style.cssText = "width:100%;height:100%;display:block", this.stage = new e.display.Container(), this.model = t, this.stage.addChild(t), this.onSnapshot = o, this.snapId = !!o, this.fit(s, c);
-		let u = this.model.internalModel;
-		a && (u.motionManager.groups.idle = "__none__", u.breath = void 0), u.on("beforeModelUpdate", this.applyParams);
+		}), this.canvas = this.renderer.view, this.canvas.className = "jc-l2d", this.canvas.setAttribute("aria-hidden", "true"), this.canvas.style.cssText = "width:100%;height:100%;display:block", this.stage = new e.display.Container(), this.model = t, this.stage.addChild(t), this.onSnapshot = s, this.snapId = !!s, this.fit(c, l);
+		let d = this.model.internalModel;
+		o && (d.motionManager.groups.idle = "__none__", d.breath = void 0), d.on("beforeModelUpdate", this.applyParams);
 	}
 	static async create(e, n) {
 		let o = await c(n.base), s = /^(https?:)?\//.test(n.model) ? n.model : (n.base || a || r()) + n.model, l = await o.l2d.Live2DModel.from(s, {
@@ -202,7 +208,7 @@ var l = class i {
 			autoHitTest: !1,
 			autoFocus: !1
 		});
-		return new i(o, l, e, n.portrait, n.framing || t, n.reduced, n.onSnapshot);
+		return new i(o, l, e, n.portrait, !!n.bust, n.framing || t, n.reduced, n.onSnapshot);
 	}
 	fit(e, t) {
 		let n = this.model.internalModel, r = n.originalWidth, i = n.originalHeight;
@@ -214,7 +220,7 @@ var l = class i {
 				y: t / 2 - n.cy * i * a
 			};
 		} else {
-			let n = this.framing.stage, a = t / (n.height * i);
+			let n = this.bust ? this.framing.bust : this.framing.stage, a = t / (n.height * i);
 			this.base = {
 				s: a,
 				x: e / 2 - n.cx * r * a,

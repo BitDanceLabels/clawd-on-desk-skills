@@ -8,6 +8,8 @@ var e = {
 }, t = typeof window < "u" && window.COMPANION_LIVE2D_SAMPLES === !1, n = e?.VITE_COMPANION_LIVE2D_SAMPLES !== "0" && !t, r = "This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc.", i = "This content uses sample data owned and copyrighted by Live2D Inc.", a = "Nhân vật mẫu © Live2D Inc.", o = [
 	{
 		id: "mat",
+		kind: "mesh",
+		rig: "rig/mat/",
 		name: "Mật",
 		role: "Trợ lý chính · JAVIS",
 		teams: [],
@@ -31,6 +33,8 @@ var e = {
 	},
 	{
 		id: "linh",
+		kind: "mesh",
+		rig: "rig/linh/",
 		name: "Linh",
 		role: "Thư ký Media · Truyền thông",
 		teams: ["media", "brand"],
@@ -54,6 +58,8 @@ var e = {
 	},
 	{
 		id: "an",
+		kind: "mesh",
+		rig: "rig/an/",
 		name: "An",
 		role: "Kỹ thuật · Vận hành máy",
 		teams: [
@@ -251,7 +257,7 @@ function w() {
 }
 function T(e, t = "jc", n = {}) {
 	let r = e.palette, i = `--c-hair:${r.hair};--c-hair-dark:${r.hairDark};--c-hair-light:${r.hairLight};--c-eye:${r.eye};--c-eye-dark:${r.eyeDark};--c-skin:${r.skin};--c-skin-shade:${r.skinShade};--c-outfit:${r.outfit};--c-outfit-dark:${r.outfitDark};--c-accent:${r.accent};--c-sock:${r.sock}`, a = S(e.accessory).replace("__GO__", `${t}-go`), o = `<ellipse cx="86" cy="168" rx="7" ry="10" fill="url(#${t}-gs)" stroke="${f}" stroke-width="1.2"/>`, s = "<ellipse class=\"c-blush\" cx=\"114\" cy=\"194\" rx=\"13\" ry=\"6\" fill=\"#FF7E9C\" opacity=\".45\"/>", c = "<path class=\"c-brow\" d=\"M110 141 C118 133 134 131 146 137\" fill=\"none\" style=\"stroke:var(--c-hair-dark)\" stroke-width=\"3.4\" stroke-linecap=\"round\"/>";
-	return `<svg class="jc-svg" xmlns="http://www.w3.org/2000/svg" viewBox="${n.portrait ? "62 36 196 196" : "0 0 320 480"}" role="img" aria-label="${e.name} · ${e.label}" style="${i}">
+	return `<svg class="jc-svg" xmlns="http://www.w3.org/2000/svg" viewBox="${n.portrait ? "62 36 196 196" : n.bust ? "20 18 280 280" : "0 0 320 480"}" role="img" aria-label="${e.name} · ${e.label}" style="${i}">
 ${h(t)}
 <g class="c-root" style="transform-box:fill-box;transform-origin:50% 100%">
   <g class="c-hair-back-wrap" style="transform-box:fill-box;transform-origin:50% 20%">${b(e.hair, t)}</g>
@@ -282,8 +288,8 @@ ${h(t)}
 }
 //#endregion
 //#region src/companion/rig/snapshot.ts
-var E = "javis.companion.snap.", D = /* @__PURE__ */ new Map(), ee = /* @__PURE__ */ new Set();
-function O(e) {
+var E = "javis.companion.snap.", D = /* @__PURE__ */ new Map(), O = /* @__PURE__ */ new Set();
+function k(e) {
 	if (D.has(e)) return D.get(e);
 	try {
 		let t = localStorage.getItem(E + e);
@@ -291,37 +297,43 @@ function O(e) {
 	} catch {}
 	return null;
 }
-function k(e, t) {
+function ee(e, t) {
 	D.set(e, t);
 	try {
 		localStorage.setItem(E + e, t);
 	} catch {}
-	ee.forEach((t) => t(e));
+	O.forEach((t) => t(e));
 }
-var A = (e) => e.replace(/[&<>"']/g, (e) => ({
+function A(e) {
+	return O.add(e), () => {
+		O.delete(e);
+	};
+}
+var j = (e) => e.replace(/[&<>"']/g, (e) => ({
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;",
 	"\"": "&quot;",
 	"'": "&#39;"
 })[e]);
-function j(e, t) {
+function M(e, t, n = "/ui/") {
+	if (e.kind === "mesh" && e.rig) return `<img src="${j(n + e.rig)}portrait.webp" alt="" draggable="false" decoding="async" style="width:100%;height:100%;display:block;object-fit:cover">`;
 	if (!d(e)) return T(e, t, { portrait: !0 });
-	let n = O(e.id);
-	return n ? `<img src="${n}" alt="" draggable="false" style="width:100%;height:100%;display:block;object-fit:cover">` : `<span style="width:100%;height:100%;display:grid;place-items:center;font:700 10px/1.1 system-ui,sans-serif;letter-spacing:.04em;color:#F5B83D;text-align:center;background:radial-gradient(circle at 50% 35%,#141833,#070916 80%)">${A(e.name)}<br>Live2D</span>`;
+	let r = k(e.id);
+	return r ? `<img src="${r}" alt="" draggable="false" style="width:100%;height:100%;display:block;object-fit:cover">` : `<span style="width:100%;height:100%;display:grid;place-items:center;font:700 10px/1.1 system-ui,sans-serif;letter-spacing:.04em;color:#F5B83D;text-align:center;background:radial-gradient(circle at 50% 35%,#141833,#070916 80%)">${j(e.name)}<br>Live2D</span>`;
 }
 //#endregion
 //#region src/companion/rig/lipsync.ts
-var M = "aăâàáạảãằắặẳẵầấậẩẫ", N = "iyìíịỉĩỳýỵỷỹ", P = "uưùúụủũừứựửữ", F = "eêèéẹẻẽềếệểễ", te = "oôơòóọỏõồốộổỗờớợởỡ";
-function ne(e) {
+var N = "aăâàáạảãằắặẳẵầấậẩẫ", P = "iyìíịỉĩỳýỵỷỹ", F = "uưùúụủũừứựửữ", I = "eêèéẹẻẽềếệểễ", L = "oôơòóọỏõồốộổỗờớợởỡ";
+function te(e) {
 	let t = e.toLowerCase();
-	return M.includes(t) ? "A" : N.includes(t) ? "I" : P.includes(t) ? "U" : F.includes(t) ? "E" : te.includes(t) ? "O" : null;
+	return N.includes(t) ? "A" : P.includes(t) ? "I" : F.includes(t) ? "U" : I.includes(t) ? "E" : L.includes(t) ? "O" : null;
 }
-function re(e) {
+function ne(e) {
 	let t = [];
 	for (let n of (e || "").split(/\s+/)) {
 		let e = null;
-		for (let t of n) if (e = ne(t), e) break;
+		for (let t of n) if (e = te(t), e) break;
 		e && t.push(e);
 	}
 	return t.length ? t : [
@@ -330,18 +342,18 @@ function re(e) {
 		"E"
 	];
 }
-var I = 4.5;
-function ie(e, t) {
+var R = 4.5;
+function re(e, t) {
 	if (!e.length) return "X";
-	let n = Math.floor(t * I);
+	let n = Math.floor(t * R);
 	return n >= e.length ? "X" : e[n % e.length];
 }
-function ae(e, t) {
+function ie(e, t) {
 	if (e >= t.length / 4.5) return 0;
-	let n = e * I % 1, r = Math.sin(n * Math.PI), i = .85 + .15 * Math.sin(e * 13.7);
+	let n = e * R % 1, r = Math.sin(n * Math.PI), i = .85 + .15 * Math.sin(e * 13.7);
 	return Math.max(0, Math.min(1, r * i));
 }
-var L = {
+var ae = {
 	A: 1,
 	O: .85,
 	E: .7,
@@ -349,13 +361,22 @@ var L = {
 	U: .5,
 	X: 0
 };
-function R(e, t, n) {
+function oe(e, t, n) {
 	let r = t > e ? .03 : .09, i = 1 - Math.exp(-Math.max(.001, n) / r);
 	return e + (t - e) * i;
 }
 //#endregion
-//#region src/companion/rig/rig.ts
-var z = {
+//#region src/companion/rig/view.ts
+var z = [
+	"X",
+	"smile",
+	"sad",
+	"A",
+	"I",
+	"U",
+	"E",
+	"O"
+], B = {
 	neutral: {
 		browY: 0,
 		browRot: 0,
@@ -446,7 +467,7 @@ var z = {
 		fx: null,
 		lookY: 0
 	}
-}, B = {
+}, V = {
 	wave: 1800,
 	nod: 900,
 	shake: 900,
@@ -455,13 +476,13 @@ var z = {
 	dance: 2400,
 	bow: 1300,
 	celebrate: 2e3
-}, V = [
+}, H = [
 	"A",
 	"I",
 	"U",
 	"E",
 	"O"
-], H = (e, t, n) => Math.max(t, Math.min(n, e)), U = (e, t, n) => e + (t - e) * n, W = class {
+], U = (e, t, n) => Math.max(t, Math.min(n, e)), W = (e, t, n) => e + (t - e) * n, G = class {
 	host;
 	ch;
 	opt;
@@ -508,30 +529,47 @@ var z = {
 	l2dGen = 0;
 	ro = null;
 	l2dState = "none";
+	mesh = null;
+	meshGen = 0;
+	meshState = "none";
 	reduced;
 	onPointer = (e) => {
-		let t = this.host.getBoundingClientRect(), n = t.left + t.width / 2, r = t.top + t.height * (this.opt.portrait ? .5 : .3);
+		let t = this.host.getBoundingClientRect(), n = t.left + t.width / 2, r = t.top + t.height * (this.opt.portrait ? .5 : this.bust ? .38 : .3);
 		this.lookTarget = {
-			x: H((e.clientX - n) / Math.max(240, innerWidth / 2), -1, 1),
-			y: H((e.clientY - r) / Math.max(200, innerHeight / 2), -1, 1)
+			x: U((e.clientX - n) / Math.max(240, innerWidth / 2), -1, 1),
+			y: U((e.clientY - r) / Math.max(200, innerHeight / 2), -1, 1)
 		};
 	};
 	onVis = () => {
 		this.visible = !document.hidden && this.inView, this.tick();
 	};
 	inView = !0;
+	get bust() {
+		return !this.opt.portrait && !!this.opt.bust;
+	}
 	constructor(e, t, n = {}) {
 		this.host = e, this.ch = t, this.opt = n, this.reduced = n.reducedMotion ?? (typeof matchMedia == "function" && matchMedia("(prefers-reduced-motion: reduce)").matches), this.mount();
 	}
 	mount() {
-		if (this.l2dGen++, this.l2d?.destroy(), this.l2d = null, this.l2dLoading = !1, this.ro?.disconnect(), this.ro = null, this.el = {}, this.mouths = {}, this.blushes = [], d(this.ch)) {
-			this.mountLive2DPlaceholder();
-			return;
-		}
-		this.l2dState = "none", this.mountSvg(this.ch);
+		this.l2dGen++, this.l2d?.destroy(), this.l2d = null, this.l2dLoading = !1, this.ro?.disconnect(), this.ro = null, this.meshGen++, this.mesh?.destroy(), this.mesh = null, this.meshState = "none", this.el = {}, this.mouths = {}, this.blushes = [], d(this.ch) ? this.mountLive2DPlaceholder() : (this.l2dState = "none", this.mountSvg(this.ch), this.ch.kind === "mesh" && this.ch.rig && !this.reduced && this.loadMesh());
+	}
+	loadMesh() {
+		let e = this.meshGen, t = this.ch;
+		this.meshState = "loading", import("./javis-companion-lazy-meshView-BqG0mqD3.js").then((e) => e.createMeshView(this.host, t, {
+			portrait: this.opt.portrait,
+			bust: this.bust,
+			base: this.opt.assetBase ?? "/ui/"
+		})).then((t) => {
+			e === this.meshGen ? (this.host.querySelectorAll(":scope > svg").forEach((e) => e.remove()), this.el = {}, this.mouths = {}, this.blushes = [], this.mesh = t, this.meshState = "ready", this.render(performance.now(), 0)) : t.destroy();
+		}).catch((t) => {
+			e === this.meshGen && (this.meshState = "failed", console.warn("[companion] mesh lỗi → giữ SVG", t));
+		});
 	}
 	mountSvg(e) {
-		this.host.innerHTML = T(e, "jc" + Math.random().toString(36).slice(2, 7), { portrait: this.opt.portrait });
+		this.host.innerHTML = T(e, "jc" + Math.random().toString(36).slice(2, 7), {
+			portrait: this.opt.portrait,
+			bust: this.bust
+		});
 		let t = (e) => this.host.querySelector(e);
 		this.el = {
 			root: t(".c-root"),
@@ -574,7 +612,9 @@ var z = {
 		this.blink.next = performance.now() + 1200 + Math.random() * 2e3;
 	}
 	mountLive2DPlaceholder() {
-		this.l2dState = "wait", this.host.innerHTML = "<span class=\"jc-l2d-wait\" style=\"position:absolute;inset:0;display:grid;place-items:center\"><span style=\"width:38%;aspect-ratio:1;border-radius:50%;border:2px solid rgba(245,184,61,.55);border-top-color:transparent;animation:jcspin 1s linear infinite\"></span></span><style>@keyframes jcspin{to{transform:rotate(1turn)}}</style>";
+		this.l2dState = "wait";
+		let e = this.opt.portrait ? k(this.ch.id) : null;
+		e ? this.host.innerHTML = `<img class="jc-l2d-wait" src="${e}" alt="" draggable="false" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : this.host.innerHTML = "<span class=\"jc-l2d-wait\" style=\"position:absolute;inset:0;display:grid;place-items:center\"><span style=\"width:38%;aspect-ratio:1;border-radius:50%;border:2px solid rgba(245,184,61,.55);border-top-color:transparent;animation:jcspin 1s linear infinite\"></span></span><style>@keyframes jcspin{to{transform:rotate(1turn)}}</style>";
 	}
 	loadLive2D() {
 		if (this.l2dLoading || this.l2d || this.l2dState === "failed" || !d(this.ch) || !this.ch.live2d) return;
@@ -582,11 +622,12 @@ var z = {
 		let e = this.l2dGen, t = this.ch;
 		(async () => {
 			try {
-				let n = await import("./javis-companion-lazy-live2d-qfR8Djeb.js"), r = this.opt.portrait && !O(t.id) ? (e) => k(t.id, e) : void 0, i = null, a = null;
+				let n = await import("./javis-companion-lazy-live2d-D0IAV1FI.js"), r = this.opt.portrait && !k(t.id) ? (e) => ee(t.id, e) : void 0, i = null, a = null;
 				for (let o = 0; o < 3 && !i; o++) try {
 					i = await n.Live2DLayer.create(this.host, {
 						model: t.live2d.model,
 						portrait: !!this.opt.portrait,
+						bust: this.bust,
 						reduced: this.reduced,
 						base: this.opt.live2dBase,
 						onSnapshot: r
@@ -624,7 +665,7 @@ var z = {
 		this.running = !1, cancelAnimationFrame(this.raf), this.raf = 0, document.removeEventListener("visibilitychange", this.onVis), removeEventListener("pointermove", this.onPointer), this.io?.disconnect(), this.io = null;
 	}
 	destroy() {
-		this.stop(), this.l2dGen++, this.l2d?.destroy(), this.l2d = null, this.ro?.disconnect(), this.ro = null, this.host.innerHTML = "";
+		this.stop(), this.meshGen++, this.mesh?.destroy(), this.mesh = null, this.l2dGen++, this.l2d?.destroy(), this.l2d = null, this.ro?.disconnect(), this.ro = null, this.host.innerHTML = "";
 	}
 	setEmotion(e, t = 0) {
 		this.emotion = e, this.emotionUntil = t > 0 ? performance.now() + t : 0, t || (this.baseEmotion = e), this.running || this.render(performance.now(), 0);
@@ -636,24 +677,20 @@ var z = {
 		this.gesture = {
 			g: e,
 			at: performance.now()
-		}, e === "celebrate" && this.setEmotion("excited", B[e]), e === "think" && this.setEmotion("thinking", B[e]), e === "bow" && this.setEmotion("happy", B[e]);
+		}, e === "celebrate" && this.setEmotion("excited", V[e]), e === "think" && this.setEmotion("thinking", V[e]), e === "bow" && this.setEmotion("happy", V[e]);
 	}
 	lookAt(e, t = 0) {
-		if (e === null) {
-			this.lookTarget = {
-				x: 0,
-				y: 0
-			};
-			return;
-		}
-		this.lookTarget = {
-			x: H(e, -1, 1),
-			y: H(t, -1, 1)
+		this.lookTarget = e === null ? {
+			x: 0,
+			y: 0
+		} : {
+			x: U(e, -1, 1),
+			y: U(t, -1, 1)
 		};
 	}
 	speak(e) {
 		this.speech = {
-			seq: re(e),
+			seq: ne(e),
 			at: performance.now()
 		};
 	}
@@ -667,22 +704,18 @@ var z = {
 		if (cancelAnimationFrame(this.raf), !this.running || !this.visible) return;
 		this.l2dState === "wait" && this.loadLive2D();
 		let e = performance.now(), t = Math.min(.1, (e - this.last) / 1e3);
-		if (this.reduced && e - this.last < 30) {
-			this.raf = requestAnimationFrame(this.tick);
-			return;
-		}
-		this.last = e, this.render(e, t), this.frames++, e - this.fpsAt >= 1e3 && (this.fps = this.frames, this.frames = 0, this.fpsAt = e), this.raf = requestAnimationFrame(this.tick);
+		this.reduced && e - this.last < 30 || (this.last = e, this.render(e, t), this.frames++, e - this.fpsAt >= 1e3 && (this.fps = this.frames, this.frames = 0, this.fpsAt = e)), this.raf = requestAnimationFrame(this.tick);
 	};
 	render(e, t) {
 		let n = this.el, r = (e - this.t0) / 1e3;
 		this.emotionUntil && e > this.emotionUntil && (this.emotionUntil = 0, this.emotion = this.baseEmotion);
-		let i = z[this.emotion], a = 1 - Math.exp(-t / .18);
-		this.pose.browY = U(this.pose.browY, i.browY, a), this.pose.browRot = U(this.pose.browRot, i.browRot, a), this.pose.browAsym = U(this.pose.browAsym, i.browAsym, a), this.pose.lid = U(this.pose.lid, i.lid, a), this.pose.blush = U(this.pose.blush, i.blush, a);
+		let i = B[this.emotion], a = 1 - Math.exp(-t / .18);
+		this.pose.browY = W(this.pose.browY, i.browY, a), this.pose.browRot = W(this.pose.browRot, i.browRot, a), this.pose.browAsym = W(this.pose.browAsym, i.browAsym, a), this.pose.lid = W(this.pose.lid, i.lid, a), this.pose.blush = W(this.pose.blush, i.blush, a);
 		let o = 1 - Math.exp(-t / .12);
-		this.look.x = U(this.look.x, this.lookTarget.x, o), this.look.y = U(this.look.y, this.lookTarget.y + i.lookY, o);
-		let s = +!this.reduced, c = Math.sin(r * Math.PI * 2 / 3.8) * s, l = (Math.sin(r * .45) * 1.6 + this.look.x * 5) * s, u = c * 1.2, d = 0, f = 0, p = 1, m = 0, h = this.gesture, g = h ? (e - h.at) / B[h.g] : 0;
+		this.look.x = W(this.look.x, this.lookTarget.x, o), this.look.y = W(this.look.y, this.lookTarget.y + i.lookY, o);
+		let s = +!this.reduced, c = Math.sin(r * Math.PI * 2 / 3.8) * s, l = (Math.sin(r * .45) * 1.6 + this.look.x * 5) * s, u = c * 1.2, d = 0, f = 0, p = 1, m = 0, h = this.gesture, g = h ? (e - h.at) / V[h.g] : 0;
 		if (h && s) {
-			let t = (e - h.at) / B[h.g];
+			let t = (e - h.at) / V[h.g];
 			if (t >= 1) this.gesture = null;
 			else {
 				let e = Math.sin(Math.PI * Math.min(1, t));
@@ -728,25 +761,57 @@ var z = {
 		let S = 0, C = "X";
 		if (this.speech) {
 			let t = (e - this.speech.at) / 1e3, n = this.opt.levelProvider?.(), r = t % Math.max(.5, this.speech.seq.length / 4.5 + .3);
-			S = n ?? ae(r, this.speech.seq), C = ie(this.speech.seq, r), C === "X" && (C = "A"), S *= L[C];
+			S = n ?? ie(r, this.speech.seq), C = re(this.speech.seq, r), C === "X" && (C = "A"), S *= ae[C];
 		}
-		this.level = R(this.level, S, t || .016);
-		let w = this.level, T = H(w * 1.6, 0, 1), E = (e, t) => {
+		this.level = oe(this.level, S, t || .016);
+		let w = this.level, T = U(w * 1.6, 0, 1), E = (e, t) => {
 			let n = this.mouths[e];
 			n && (n.style.opacity = String(t));
 		};
 		if (this.speech || w > .03) {
-			for (let e of V) E(e, e === C ? T : 0);
+			for (let e of H) E(e, e === C ? T : 0);
 			E("smile", 0), E("sad", 0), E("X", 1 - T);
 		} else {
-			for (let e of V) E(e, 0);
+			for (let e of H) E(e, 0);
 			E("smile", +(i.mouth === "smile")), E("sad", +(i.mouth === "sad")), E("O", i.mouth === "O" ? .9 : 0), E("X", +(i.mouth === "X"));
 		}
 		n.mouth && (n.mouth.style.transform = `scale(${1 + w * .12})`);
 		let D = (e, t, n = 0) => {
 			e && (e.style.opacity = t ? "1" : "0", t && s && (e.style.transform = `translateY(${Math.sin(r * 3 + n) * 2}px)`));
 		};
-		D(n.fxSparkle, i.fx === "sparkle", 0), D(n.fxThink, i.fx === "think", 1), D(n.fxSweat, i.fx === "sweat", 2), D(n.fxZzz, i.fx === "zzz", 3), D(n.fxHearts, h?.g === "celebrate" || h?.g === "bow", 4), this.l2d && this.l2d.frame({
+		if (D(n.fxSparkle, i.fx === "sparkle", 0), D(n.fxThink, i.fx === "think", 1), D(n.fxSweat, i.fx === "sweat", 2), D(n.fxZzz, i.fx === "zzz", 3), D(n.fxHearts, h?.g === "celebrate" || h?.g === "bow", 4), this.mesh) {
+			let e = Object.fromEntries(z.map((e) => [e, 0]));
+			this.speech || w > .03 ? (e[C] = T, e.X = 1 - T) : i.mouth === "O" ? e.O = .9 : e[i.mouth] = 1, this.mesh.apply({
+				t: r,
+				motion: s,
+				breath: c,
+				headRot: l,
+				headY: u,
+				rootY: d,
+				rootRot: f,
+				rootScale: p,
+				armRot: m,
+				tail: _,
+				eyeK: v,
+				eyeClosed: y,
+				lookX: this.look.x,
+				lookY: this.look.y,
+				browY: this.pose.browY,
+				browRot: this.pose.browRot,
+				browAsym: this.pose.browAsym,
+				blush: this.pose.blush,
+				mouth: e,
+				level: w,
+				fx: {
+					sparkle: i.fx === "sparkle",
+					think: i.fx === "think",
+					sweat: i.fx === "sweat",
+					zzz: i.fx === "zzz",
+					hearts: h?.g === "celebrate" || h?.g === "bow"
+				}
+			});
+		}
+		this.l2d && this.l2d.frame({
 			dt: t,
 			lookX: this.look.x,
 			lookY: this.look.y,
@@ -764,10 +829,10 @@ var z = {
 };
 //#endregion
 //#region src/companion/companionModel.ts
-function G(e) {
+function K(e) {
 	return e === "dot" || e === "stage" ? e : "mini";
 }
-function K(e, t, n) {
+function se(e, t, n) {
 	return e === "dot" ? {
 		mode: "mini",
 		panel: !1
@@ -779,7 +844,7 @@ function K(e, t, n) {
 		panel: !t
 	};
 }
-var q = [
+var ce = [
 	"neutral",
 	"happy",
 	"excited",
@@ -789,7 +854,7 @@ var q = [
 	"focused",
 	"sleepy",
 	"listening"
-], oe = [
+], le = [
 	"wave",
 	"nod",
 	"shake",
@@ -798,7 +863,7 @@ var q = [
 	"dance",
 	"bow",
 	"celebrate"
-], J = {
+], q = {
 	owner: {
 		x: null,
 		y: 0
@@ -824,18 +889,18 @@ var q = [
 		y: 1
 	}
 };
-function se(e) {
+function ue(e) {
 	let t = {};
 	if (!e) return t;
 	let n = e.action || "say";
-	return n === "say" && typeof e.text == "string" && e.text.trim() && (t.say = e.text.trim().slice(0, 600)), n === "idle" && (t.emotion = "neutral"), e.emotion && q.includes(e.emotion) && (t.emotion = e.emotion), e.gesture && oe.includes(e.gesture) && (t.gesture = e.gesture), n === "look" && e.target && J[e.target] && (t.look = J[e.target]), n === "move" && (e.to === "left" || e.to === "center" || e.to === "right") && (t.move = e.to), t;
+	return n === "say" && typeof e.text == "string" && e.text.trim() && (t.say = e.text.trim().slice(0, 600)), n === "idle" && (t.emotion = "neutral"), e.emotion && ce.includes(e.emotion) && (t.emotion = e.emotion), e.gesture && le.includes(e.gesture) && (t.gesture = e.gesture), n === "look" && e.target && q[e.target] && (t.look = q[e.target]), n === "move" && (e.to === "left" || e.to === "center" || e.to === "right") && (t.move = e.to), t;
 }
-function Y(e) {
+function J(e) {
 	return Math.min(14e3, 2500 + e.length * 45);
 }
 //#endregion
 //#region src/lib/sse.ts
-function X(e) {
+function Y(e) {
 	return e.split("\n").filter((e) => e.startsWith("data:") && !e.includes("[DONE]")).map((e) => {
 		try {
 			return JSON.parse(e.slice(5)).choices?.[0]?.delta?.content || "";
@@ -845,8 +910,46 @@ function X(e) {
 	}).filter(Boolean);
 }
 //#endregion
+//#region src/companion/hero.ts
+var de = "[data-slot=\"assistant-stage\"]", fe = "[data-slot=\"assistant-avatar\"]:not([data-own])", pe = () => typeof document > "u" ? null : document.querySelector(de), me = () => typeof document > "u" ? null : document.querySelector(fe);
+function he(e) {
+	return e.tucked === null ? e.heroOnScreen ? "hero" : "avatar" : e.tucked ? "hero" : "avatar";
+}
+function ge(e, t, n, r = 150) {
+	let i = !0, a = () => he({
+		tucked: t ? t.classList.contains("is-tucked") : null,
+		heroOnScreen: i
+	}), o = a(), s, c = () => {
+		clearTimeout(s), s = setTimeout(() => {
+			let e = a();
+			e !== o && (o = e, n(e));
+		}, r);
+	}, l = t && typeof MutationObserver < "u" ? new MutationObserver(c) : null;
+	l?.observe(t, {
+		attributes: !0,
+		attributeFilter: ["class"]
+	});
+	let u = !t && typeof IntersectionObserver < "u" ? new IntersectionObserver((e) => {
+		i = e.some((e) => e.isIntersecting), c();
+	}) : null;
+	return u?.observe(e), n(o), () => {
+		clearTimeout(s), l?.disconnect(), u?.disconnect();
+	};
+}
+var X = (e) => !!e.closest("button, a[href]");
+function _e() {
+	let e = document.querySelector("[data-open-ast]") || document.querySelector(".jx-assistant__avatar:not([data-own])");
+	return e ? (e.click(), !0) : !1;
+}
+//#endregion
+//#region src/core/brainError.ts
+function ve(e) {
+	let t = e instanceof Error ? e.message : String(e ?? ""), n = Number((t.match(/\b([1-5]\d\d)\b/) || [])[1] || 0);
+	return n === 401 || n === 403 ? "Đang chờ cập nhật máy chủ, chat sẽ dùng được sau ít phút." : n === 429 ? "Đang hơi đông, anh đợi chút rồi nhắn lại nhé." : n >= 500 ? "Máy chủ JAVIS đang bận, anh thử lại sau ít phút nhé." : /failed to fetch|network|load failed|aborted|timeout/i.test(t) ? "Mất kết nối tới JAVIS, anh kiểm tra mạng giúp em rồi thử lại nhé." : "Chưa kết nối được JAVIS, anh thử lại sau ít phút nhé.";
+}
+//#endregion
 //#region src/companion/element.ts
-var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:80;font-family:'Be Vietnam Pro',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:14px;line-height:1.45;color:var(--jx-text,#F3F1EA);\n  --bg0:var(--jx-bg,#070916);--bg1:var(--jx-bg-2,#0b0e22);--bg2:var(--jx-bg-3,#141833);--gold:var(--jx-accent,#F5B83D);--violet:var(--jx-violet,#7C6CFF);--cyan:var(--jx-cyan,#4FD1E8);--line:rgba(255,255,255,.09);--fg2:var(--jx-text-2,#A9AECB);--fg3:var(--jx-text-3,#7D83A6);--sf:rgba(255,255,255,.04);--sf2:rgba(255,255,255,.07)}\n@media(min-width:821px){:host{right:24px}}\n:host([hidden]){display:none}.wrap{position:relative;display:inline-block}:host([compact]) .ai{display:none}:host([compact]) .avatar{border-width:1px}*{box-sizing:border-box}\n.avatar{position:relative;width:var(--jc-size,64px);height:var(--jc-size,64px);border-radius:50%;padding:0;cursor:pointer;border:2px solid color-mix(in srgb,var(--gold) 70%,transparent);background:radial-gradient(circle at 50% 30%,var(--bg2),var(--bg0) 80%);\n  box-shadow:0 14px 34px -10px rgba(0,0,0,.9),0 0 28px -4px color-mix(in srgb,var(--violet) 55%,transparent);display:block;-webkit-tap-highlight-color:transparent}\n.avatar.inslot{width:100%;height:100%;border:0;box-shadow:none;background:transparent}\n.portrait{position:absolute;inset:0;border-radius:50%;overflow:hidden}.portrait svg,.portrait canvas,.figure canvas,.head .pf img{width:100%;height:100%;display:block}\n.credit{margin:0;display:flex;flex-direction:column;gap:1px;font-size:10px;line-height:1.3;color:var(--fg3)}.credit span:last-child{color:var(--fg2)}.panel .credit{flex:none;padding:6px 12px;border-bottom:1px solid var(--line);background:var(--bg2)}.hello .credit{margin-top:6px;padding-top:5px;border-top:1px solid var(--line);font-size:9px}\n.stage .credit{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);width:196px;padding:3px 8px;text-align:center;font-size:8.5px;border-radius:10px;background:color-mix(in srgb,var(--bg1) 72%,transparent);border:1px solid var(--line);pointer-events:none}\n.ai{position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);font-size:9px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:999px;background:var(--bg0);color:var(--fg2);border:1px solid var(--line);white-space:nowrap;pointer-events:none}\n.dot{width:44px;height:44px;border-radius:50%;border:1px solid color-mix(in srgb,var(--gold) 45%,transparent);background:radial-gradient(circle at 50% 35%,var(--bg2),var(--bg0) 75%);color:var(--gold);font-size:20px;display:grid;place-items:center;cursor:pointer;padding:0}\n.stage{position:fixed;width:176px;height:264px;right:24px;bottom:calc(44px + env(safe-area-inset-bottom,0px));z-index:81;touch-action:none;user-select:none;cursor:grab;filter:drop-shadow(0 18px 24px rgba(0,0,0,.55));animation:stepout .5s cubic-bezier(.2,.8,.2,1) both}\n.stage.placed{right:auto;bottom:auto}.figure{position:absolute;inset:0}.figure svg{width:100%;height:100%;display:block;overflow:visible}\n.name{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);white-space:nowrap;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;background:color-mix(in srgb,var(--bg1) 72%,transparent);border:1px solid var(--line);backdrop-filter:blur(10px);pointer-events:none}\n.name small{font-weight:500;color:var(--fg3);margin-left:6px}\n.tools{position:absolute;top:8px;right:-6px;display:flex;flex-direction:column;gap:6px;opacity:0;transition:opacity .2s}.stage:hover .tools,.open .tools{opacity:1}@media(hover:none){.tools{opacity:1}}\n.tools button{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:color-mix(in srgb,var(--bg1) 72%,transparent);color:var(--fg2);display:grid;place-items:center;cursor:pointer;padding:0;font-size:14px}\n.hello{position:absolute;right:0;bottom:calc(100% + 12px);width:max-content;max-width:min(300px,calc(100vw - 32px));padding:10px 14px;border-radius:16px 16px 4px 16px;background:color-mix(in srgb,var(--bg1) 80%,transparent);border:1px solid color-mix(in srgb,var(--gold) 35%,var(--line));backdrop-filter:blur(16px);box-shadow:0 16px 40px -16px rgba(0,0,0,.9);animation:pop .28s cubic-bezier(.2,.8,.2,1) both}\n.stage .hello{bottom:calc(100% - 8px);right:0}.open .stage .hello{max-width:176px}.hello b{color:var(--gold)}\n.panel{position:fixed;z-index:82;right:calc(24px + 176px + 16px);bottom:calc(16px + env(safe-area-inset-bottom,0px));width:400px;height:min(560px,calc(100dvh - 120px));display:flex;flex-direction:column;overflow:hidden;background:color-mix(in srgb,var(--bg1) 94%,transparent);border:1px solid var(--line);border-radius:24px;box-shadow:0 24px 64px -18px rgba(0,0,0,.95);backdrop-filter:blur(20px);animation:pop .26s cubic-bezier(.2,.7,.2,1) both}\n@media(max-width:820px){.panel{left:0;right:0;width:auto;top:auto;bottom:0;height:min(70vh,70dvh);border-radius:24px 24px 0 0;background:var(--bg1)}.stage{display:none}}\n.head{display:flex;align-items:center;gap:8px;padding:10px 8px 10px 12px;border-bottom:1px solid var(--line)}.head .pf{width:40px;height:40px;border-radius:50%;overflow:hidden;border:1.5px solid color-mix(in srgb,var(--gold) 60%,transparent);background:var(--bg2);flex:none}.head .pf svg{width:100%;height:100%;display:block}\n.head .who{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}.head b{font-size:15px}.head small{font-size:12px;color:var(--fg3)}\n.ib{min-width:40px;height:40px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--fg2);cursor:pointer;padding:0 8px;font:inherit;font-size:13px;font-weight:600}.ib:hover,.ib.on{color:inherit;background:var(--bg2);border-color:var(--line)}\n.log{flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}\n.msg{max-width:86%;padding:9px 12px;border-radius:16px;white-space:pre-wrap;word-break:break-word}.me{align-self:flex-end;background:color-mix(in srgb,var(--violet) 32%,var(--bg2));border:1px solid color-mix(in srgb,var(--violet) 45%,transparent);border-bottom-right-radius:6px}\n.aim{align-self:flex-start;background:var(--sf2);border:1px solid var(--line);border-bottom-left-radius:6px}.empty{color:var(--fg3)}\n.sess{display:flex;flex-direction:column;gap:4px;list-style:none;margin:0;padding:0}.sess button{all:unset;cursor:pointer;min-height:48px;padding:6px 12px;border-radius:10px;border:1px solid var(--line);background:var(--sf);display:flex;flex-direction:column;justify-content:center}.sess .on{border-color:color-mix(in srgb,var(--gold) 60%,transparent)}.sess small{font-size:12px;color:var(--fg3)}\n.bar{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line);align-items:flex-end}\ntextarea{flex:1;min-height:44px;max-height:116px;resize:none;padding:11px 14px;border-radius:16px;border:1px solid var(--line);background:var(--bg0);color:inherit;font:inherit;font-size:16px;outline:0}textarea:focus{border-color:color-mix(in srgb,var(--gold) 60%,transparent)}\n.send{width:44px;height:44px;border-radius:50%;border:0;background:var(--gold);color:#1a1405;cursor:pointer;font-size:18px}.send:disabled{background:var(--bg2);color:var(--fg3)}\n@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.96)}}@keyframes stepout{from{opacity:0;transform:translateY(24px) scale(.6)}}\n@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}", Z = (e) => String(e ?? "").replace(/[&<>"']/g, (e) => ({
+var ye = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:80;font-family:'Be Vietnam Pro',-apple-system,BlinkMacSystemFont,system-ui,sans-serif,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji';font-size:14px;line-height:1.45;color:var(--jx-text,#F3F1EA);\n  --bg0:var(--jx-bg-0,var(--jx-bg,#070916));--bg1:var(--jx-bg-1,#0b0e22);--bg2:var(--jx-bg-2,#141833);--gold:var(--jx-gold,var(--jx-accent,#F5B83D));--gold-t:var(--jx-gold-text,var(--gold));--on-gold:var(--jx-on-gold,#1a1405);--violet:var(--jx-violet,#7C6CFF);--cyan:var(--jx-cyan,#4FD1E8);--line:var(--jx-line,rgba(255,255,255,.09));--fg2:var(--jx-text-2,#A9AECB);--fg3:var(--jx-text-3,#7D83A6);--sf:var(--jx-surface,rgba(255,255,255,.04));--sf2:var(--jx-surface-2,rgba(255,255,255,.07));--shadow:var(--jx-shadow,0 16px 40px -16px rgba(0,0,0,.9))}\n@media(min-width:821px){:host{right:24px}}\n:host([hidden]){display:none}.wrap{position:relative;display:inline-block}:host([compact]) .ai{display:none}:host([compact]) .avatar{border-width:1px}*{box-sizing:border-box}\n.avatar{position:relative;width:var(--jc-size,64px);height:var(--jc-size,64px);border-radius:50%;padding:0;cursor:pointer;border:2px solid color-mix(in srgb,var(--gold) 70%,transparent);background:radial-gradient(circle at 50% 30%,var(--bg2),var(--bg0) 80%);\n  box-shadow:var(--shadow),0 0 28px -4px color-mix(in srgb,var(--violet) 55%,transparent);display:block;-webkit-tap-highlight-color:transparent}\n.portrait{position:absolute;inset:0;border-radius:50%;overflow:hidden}.portrait svg,.portrait canvas,.figure canvas,.head .pf img{width:100%;height:100%;display:block}\n.credit{margin:0;display:flex;flex-direction:column;gap:1px;font-size:10px;line-height:1.3;color:var(--fg3)}.credit span:last-child{color:var(--fg2)}.panel .credit{flex:none;padding:6px 12px;border-bottom:1px solid var(--line);background:var(--bg2)}.hello .credit{margin-top:6px;padding-top:5px;border-top:1px solid var(--line);font-size:9px}\n.stage .credit{position:absolute;left:50%;bottom:-40px;transform:translateX(-50%);width:max-content;max-width:240px;text-align:center;font-size:8.5px;opacity:.72;pointer-events:none}.stage .credit span:last-child{display:none}\n.ai{position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);font-size:9px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:999px;background:var(--bg0);color:var(--fg2);border:1px solid var(--line);white-space:nowrap;pointer-events:none}\n.dot{width:48px;height:48px;border-radius:50%;border:1px solid color-mix(in srgb,var(--gold) 45%,transparent);background:radial-gradient(circle at 50% 35%,var(--bg2),var(--bg0) 75%);color:var(--gold);font-size:20px;display:grid;place-items:center;cursor:pointer;padding:0}\n.stage{position:fixed;width:176px;height:264px;right:24px;bottom:calc(44px + env(safe-area-inset-bottom,0px));z-index:81;touch-action:none;user-select:none;cursor:grab;filter:drop-shadow(0 18px 24px color-mix(in srgb,var(--bg0) 55%,transparent));animation:stepout .5s cubic-bezier(.2,.8,.2,1) both}\n.stage.placed{right:auto;bottom:auto}.figure{position:absolute;inset:0}.figure svg{width:100%;height:100%;display:block;overflow:visible}\n.name{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);white-space:nowrap;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;background:color-mix(in srgb,var(--bg1) 72%,transparent);border:1px solid var(--line);backdrop-filter:blur(10px);pointer-events:none}\n.name small{font-weight:500;color:var(--fg3);margin-left:6px}\n.tools{position:absolute;top:8px;right:-6px;display:flex;flex-direction:column;gap:6px;opacity:0;transition:opacity .2s}.stage:hover .tools,.open .tools{opacity:1}@media(hover:none){.tools{opacity:1}}\n.tools button{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:color-mix(in srgb,var(--bg1) 72%,transparent);color:var(--fg2);display:grid;place-items:center;cursor:pointer;padding:0;font-size:14px}\n.hello{position:absolute;right:0;bottom:calc(100% + 12px);width:max-content;max-width:min(300px,calc(100vw - 32px));padding:10px 14px;border-radius:16px 16px 4px 16px;background:color-mix(in srgb,var(--bg1) 80%,transparent);border:1px solid color-mix(in srgb,var(--gold) 35%,var(--line));backdrop-filter:blur(16px);box-shadow:var(--shadow);animation:pop .28s cubic-bezier(.2,.8,.2,1) both}\n.stage .hello{bottom:calc(100% - 8px);right:0}.open .stage .hello{max-width:176px}.hello b{color:var(--gold-t)}\n.panel{position:fixed;z-index:82;right:calc(24px + 176px + 16px);bottom:calc(16px + env(safe-area-inset-bottom,0px));width:400px;height:min(560px,calc(100dvh - 120px));display:flex;flex-direction:column;overflow:hidden;background:color-mix(in srgb,var(--bg1) 94%,transparent);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);backdrop-filter:blur(20px);animation:pop .26s cubic-bezier(.2,.7,.2,1) both}\n@media(max-width:820px){.panel{left:0;right:0;width:auto;top:auto;bottom:0;height:min(70vh,70dvh);border-radius:24px 24px 0 0;background:var(--bg1)}.stage{display:none}}\n.head{display:flex;align-items:center;gap:8px;padding:10px 8px 10px 12px;border-bottom:1px solid var(--line)}.head .pf{width:40px;height:40px;border-radius:50%;overflow:hidden;border:1.5px solid color-mix(in srgb,var(--gold) 60%,transparent);background:var(--bg2);flex:none}.head .pf svg{width:100%;height:100%;display:block}\n.head .who{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}.head b{font-size:15px}.head small{font-size:12px;color:var(--fg3)}\n.ib{min-width:40px;height:40px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--fg2);cursor:pointer;padding:0 8px;font:inherit;font-size:13px;font-weight:600}.ib:hover,.ib.on{color:inherit;background:var(--bg2);border-color:var(--line)}\n.log{flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}\n.msg{max-width:86%;padding:9px 12px;border-radius:16px;white-space:pre-wrap;word-break:break-word}.me{align-self:flex-end;background:color-mix(in srgb,var(--violet) 32%,var(--bg2));border:1px solid color-mix(in srgb,var(--violet) 45%,transparent);border-bottom-right-radius:6px}\n.aim{align-self:flex-start;background:var(--sf2);border:1px solid var(--line);border-bottom-left-radius:6px}.empty{color:var(--fg3)}\n.sess{display:flex;flex-direction:column;gap:4px;list-style:none;margin:0;padding:0}.sess button{all:unset;cursor:pointer;min-height:48px;padding:6px 12px;border-radius:10px;border:1px solid var(--line);background:var(--sf);display:flex;flex-direction:column;justify-content:center}.sess .on{border-color:color-mix(in srgb,var(--gold) 60%,transparent)}.sess small{font-size:12px;color:var(--fg3)}\n.bar{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line);align-items:flex-end}\ntextarea{flex:1;min-height:44px;max-height:116px;resize:none;padding:11px 14px;border-radius:16px;border:1px solid var(--line);background:var(--bg0);color:inherit;font:inherit;font-size:16px;outline:0}textarea:focus{border-color:color-mix(in srgb,var(--gold) 60%,transparent)}\n.send{width:44px;height:44px;border-radius:50%;border:0;background:var(--gold);color:var(--on-gold);cursor:pointer;font-size:18px}.send:disabled{background:var(--bg2);color:var(--fg3)}\n@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.96)}}@keyframes stepout{from{opacity:0;transform:translateY(24px) scale(.6)}}\n@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}", be = "\n:host{all:initial;position:absolute;inset:0;display:block;border-radius:inherit;z-index:1;font-family:'Be Vietnam Pro',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--jx-text,#F3F1EA)}\n*{box-sizing:border-box}\n.hero,.avatar{all:unset;position:absolute;inset:0;display:block;border-radius:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}\n.hero:focus-visible,.avatar:focus-visible{box-shadow:inset 0 0 0 2px var(--jx-gold-text,#F5B83D)}\n.figure,.portrait{position:absolute;inset:0;border-radius:inherit;overflow:hidden}\n.figure canvas,.figure svg,.figure img,.portrait canvas,.portrait svg,.portrait img{width:100%;height:100%;display:block}\n.credit{position:absolute;left:0;right:0;bottom:0;margin:0;padding:12px 6px 5px;font-size:9.5px;line-height:1.2;text-align:center;color:var(--jx-text-2,#A9AECB);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;\n  background:linear-gradient(transparent,color-mix(in srgb,var(--jx-bg-1,#0b0e22) 82%,transparent) 60%)}\n.tools{position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity .2s}\n.hero:hover .tools,.hero:focus-within .tools{opacity:1}\n@media(hover:none){.tools{display:none}}\n.tools button,.on{width:32px;height:32px;border-radius:50%;border:1px solid var(--jx-line-2,rgba(255,255,255,.16));background:color-mix(in srgb,var(--jx-bg-1,#0b0e22) 72%,transparent);color:var(--jx-text-2,#A9AECB);display:grid;place-items:center;cursor:pointer;padding:0;backdrop-filter:blur(8px)}\n.tools button:hover{color:var(--jx-text,#F3F1EA);border-color:var(--jx-gold,#F5B83D)}\n.on{position:absolute;right:6px;bottom:6px;width:auto;height:32px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;white-space:nowrap;font-family:inherit;font-size:11px;font-weight:600;line-height:1;color:var(--jx-gold-text,#F5B83D);gap:4px}\n@media(max-width:767px){.credit{font-size:8px;line-height:1.15;white-space:normal;padding:10px 3px 3px}.on{font-size:10px;padding:0 8px}}\n@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}", xe = "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5\"/></svg>", Se = "<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18.4 5.6a9 9 0 1 1-12.8 0M12 2v10\"/></svg>", Z = (e) => String(e ?? "").replace(/[&<>"']/g, (e) => ({
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;",
@@ -877,21 +980,31 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 	level = 0;
 	audioLevel = () => null;
 	slotEl = null;
+	heroEl = null;
+	frameEl = null;
+	active = "hero";
+	unwatch = null;
+	unsnap = null;
+	saved = /* @__PURE__ */ new Map();
 	constructor() {
 		super(), this.root = this.attachShadow({ mode: "open" });
 	}
 	connectedCallback() {
-		this.ch = u(this.getAttribute("character") || localStorage.getItem("javis.companion.character")), this.mode = G(this.getAttribute("mode") || localStorage.getItem("javis.companion.mode")), this.slotEl = document.querySelector("[data-slot=\"assistant-avatar\"]:not([data-own])");
+		this.ch = u(this.getAttribute("character") || localStorage.getItem("javis.companion.character")), this.mode = K(this.getAttribute("mode") || localStorage.getItem("javis.companion.mode")), this.slotEl = me(), this.heroEl = pe(), this.frameEl = this.slotEl?.closest(".jx-assistant") ?? null, this.heroEl && this.mode === "stage" && (this.mode = "mini");
 		let e = document.createElement("style");
-		e.textContent = ce, this.root.appendChild(e), this.render(), this.getAttribute("stream") === "1" && this.listen(), localStorage.getItem("javis.companion.hello") || setTimeout(() => {
-			localStorage.setItem("javis.companion.hello", "1"), this.each((e) => e.doGesture("wave")), this.showBubble(this.ch.greeting);
+		e.textContent = ye, this.root.appendChild(e), this.heroEl && (this.unsnap = A((e) => {
+			e === this.ch.id && this.pageExtras(!0);
+		})), this.heroEl ? this.unwatch = ge(this.heroEl, this.frameEl, (e) => {
+			this.active = e, this.render();
+		}) : this.render(), this.getAttribute("stream") === "1" && this.listen(), localStorage.getItem("javis.companion.hello") || setTimeout(() => {
+			localStorage.setItem("javis.companion.hello", "1"), this.each((e) => e.doGesture("wave")), this.heroEl || this.showBubble(this.ch.greeting);
 		}, 1400);
 	}
 	disconnectedCallback() {
-		this.each((e) => e.destroy()), this.rigs.clear(), this.es?.close();
+		this.unwatch?.(), this.unwatch = null, this.unsnap?.(), this.unsnap = null, this.each((e) => e.destroy()), this.rigs.clear(), this.es?.close(), this.restoreSlots(), this.pageExtras(!1);
 	}
 	attributeChangedCallback(e, t, n) {
-		this.isConnected && (e === "character" && n && this.setCharacter(n), e === "mode" && n && (this.mode = G(n), this.render()));
+		this.isConnected && (e === "character" && n && this.setCharacter(n), e === "mode" && n && (this.mode = K(n), this.render()));
 	}
 	setCharacter(e) {
 		let t = u(e);
@@ -908,8 +1021,8 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 		}, t.voice !== !1);
 	}
 	act(e, t = !0) {
-		let n = se(e);
-		n.emotion && this.each((e) => e.setEmotion(n.emotion, 6e3)), n.gesture && this.each((e) => e.doGesture(n.gesture)), n.look && this.each((e) => e.lookAt(n.look.x, n.look.y)), n.say && (this.mode === "mini" && innerWidth > 820 && (this.mode = "stage", this.render()), this.showBubble(n.say), this.dispatchEvent(new CustomEvent("javis-companion-say", {
+		let n = ue(e);
+		n.emotion && this.each((e) => e.setEmotion(n.emotion, 6e3)), n.gesture && this.each((e) => e.doGesture(n.gesture)), n.look && this.each((e) => e.lookAt(n.look.x, n.look.y)), n.say && (this.mode === "mini" && innerWidth > 820 && !this.heroEl && (this.mode = "stage", this.render()), this.showBubble(n.say), this.dispatchEvent(new CustomEvent("javis-companion-say", {
 			detail: { text: n.say },
 			bubbles: !0,
 			composed: !0
@@ -917,6 +1030,12 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 	}
 	get fps() {
 		return [...this.rigs][0]?.fps ?? 0;
+	}
+	get activeSlot() {
+		return this.heroEl ? this.active : null;
+	}
+	get rigCount() {
+		return this.rigs.size;
 	}
 	get fleet() {
 		return (this.getAttribute("fleet") || localStorage.getItem("javis:fleet") || "").replace(/\/$/, "");
@@ -1018,11 +1137,11 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 				a += i.decode(t, { stream: !0 });
 				let s = a.lastIndexOf("\n\n");
 				if (!(s < 0)) {
-					for (let e of X(a.slice(0, s))) o += e;
+					for (let e of Y(a.slice(0, s))) o += e;
 					a = a.slice(s + 2), r.text = o || "…", this.renderPanel();
 				}
 			}
-			for (let e of X(a)) o += e;
+			for (let e of Y(a)) o += e;
 			r.text = o.trim() || "Dạ anh!", this.api("POST", "/fleet/chat/messages", {
 				session_id: this.sid,
 				message: {
@@ -1034,7 +1153,7 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 				e.stopSpeaking(), e.doGesture("nod");
 			}), localStorage.getItem("javis:voice") === "1" && this.speak(r.text);
 		} catch (e) {
-			r.text = "Chưa kết nối được bộ não JAVIS (" + (e.message || "lỗi") + ")", this.each((e) => {
+			r.text = ve(e), this.each((e) => {
 				e.stopSpeaking(), e.setEmotion("sad", 3e3);
 			});
 		}
@@ -1083,10 +1202,23 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 	showBubble(e) {
 		this.bubble = {
 			text: e,
-			until: Date.now() + Y(e)
+			until: Date.now() + J(e)
 		}, this.renderBubble(), setTimeout(() => {
 			this.bubble && Date.now() >= this.bubble.until && (this.bubble = null, this.renderBubble());
-		}, Y(e) + 20);
+		}, J(e) + 20);
+	}
+	get assetBase() {
+		let e = this.getAttribute("asset-base");
+		if (e) return e.replace(/\/?$/, "/");
+		try {
+			return new URL(
+				/* @vite-ignore */
+				"./",
+				import.meta.url
+			).href;
+		} catch {
+			return "/ui/";
+		}
 	}
 	get live2dBase() {
 		let e = this.getAttribute("live2d-base");
@@ -1101,23 +1233,25 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 			return "/live2d/";
 		}
 	}
-	mount(e, t) {
-		let n = new W(e, this.ch, {
+	mount(e, t, n = !1) {
+		let r = new G(e, this.ch, {
 			portrait: t,
+			bust: n,
 			levelProvider: () => this.audioLevel(),
 			trackPointer: !t,
 			live2dBase: this.live2dBase,
+			assetBase: this.assetBase,
 			onLive2DError: () => {
 				d(this.ch) && (this.ch = o[0], localStorage.setItem("javis.companion.character", this.ch.id), this.render());
 			}
 		});
-		return n.start(), this.rigs.add(n), n;
+		return r.start(), this.rigs.add(r), r;
 	}
 	credit(e = !1) {
 		return d(this.ch) ? `<p class="credit" data-credit="live2d"><span lang="en">${e ? i : r}</span><span>${a}</span></p>` : "";
 	}
 	tap = () => {
-		let e = K(this.mode, this.open, innerWidth <= 820);
+		let e = se(this.mode, this.open, innerWidth <= 820);
 		this.mode = e.mode, localStorage.setItem("javis.companion.mode", e.mode), this.dispatchEvent(new CustomEvent("javis-companion-open", {
 			detail: { mode: e.mode },
 			bubbles: !0,
@@ -1127,17 +1261,22 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 	render() {
 		this.each((e) => e.destroy()), this.rigs.clear();
 		for (let e of [...this.root.childNodes]) e.nodeName !== "STYLE" && e.remove();
-		this.slotEl && (this.slotEl.innerHTML = "");
+		this.restoreSlots();
 		let e = document.createElement("div");
-		e.className = "wrap" + (this.open ? " open" : ""), this.root.appendChild(e);
+		if (e.className = "wrap" + (this.open ? " open" : ""), this.root.appendChild(e), this.heroEl) {
+			this.renderHeroPage(e);
+			return;
+		}
 		let t = innerWidth <= 820;
 		if (this.mode === "dot") {
 			e.innerHTML = "<button class=\"dot\" aria-label=\"Bật lại nhân vật JAVIS\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z\"/></svg></button>", e.querySelector("button").onclick = this.tap;
 			return;
 		}
-		if (this.mode === "mini" || t) {
+		let n = this.mode === "mini" || t;
+		if (n && this.slotEl) this.renderAvatarSlot(this.slotEl);
+		else if (n) {
 			let t = document.createElement("button");
-			t.className = "avatar" + (this.slotEl ? " inslot" : ""), t.setAttribute("aria-label", `${this.ch.name} · JAVIS` + (d(this.ch) ? " · " + r : "")), t.title = this.ch.name + (d(this.ch) ? "\n" + r : ""), t.innerHTML = `<span class="portrait"></span>${this.slotEl ? "" : `<span class="ai">${d(this.ch) ? "© Live2D" : Z(this.ch.label)}</span>`}`, t.onclick = this.tap, (this.slotEl || e).appendChild(t), this.mount(t.querySelector(".portrait"), !0);
+			t.className = "avatar", t.setAttribute("aria-label", `${this.ch.name} · JAVIS` + (d(this.ch) ? " · " + r : "")), t.title = this.ch.name + (d(this.ch) ? "\n" + r : ""), t.innerHTML = `<span class="portrait"></span><span class="ai">${d(this.ch) ? "© Live2D" : Z(this.ch.label)}</span>`, t.onclick = this.tap, e.appendChild(t), this.mount(t.querySelector(".portrait"), !0);
 		}
 		if (this.mode === "stage" && !t) {
 			let t = document.createElement("div");
@@ -1177,26 +1316,107 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 				(e.key === "Enter" || e.key === " ") && (e.preventDefault(), this.tap());
 			};
 		}
-		if (this.open) {
-			let t = document.createElement("section");
-			t.className = "panel", t.setAttribute("role", "dialog"), t.setAttribute("aria-label", `${this.ch.name} · JAVIS`), e.appendChild(t), this.renderPanel();
+		this.open && this.appendPanel(e), this.renderBubble();
+	}
+	appendPanel(e) {
+		let t = document.createElement("section");
+		t.className = "panel", t.setAttribute("role", "dialog"), t.setAttribute("aria-label", `${this.ch.name} · JAVIS`), e.appendChild(t), this.renderPanel();
+	}
+	slotRoot(e, t = !1) {
+		let n = this.saved.get(e);
+		n || (n = [...e.childNodes], this.saved.set(e, n));
+		let r = document.createElement("span");
+		r.className = "jc-slot", r.dataset.jc = "1", e.replaceChildren(...t ? n : [], r);
+		let i = r.attachShadow({ mode: "open" }), a = document.createElement("style");
+		return a.textContent = be, i.appendChild(a), i;
+	}
+	restoreSlots() {
+		for (let [e, t] of this.saved) e.replaceChildren(...t);
+		this.saved.clear();
+	}
+	renderAvatarSlot(e) {
+		let t = this.slotRoot(e), n = !X(e), i = document.createElement(n ? "button" : "span");
+		i.className = "avatar", n && (i.setAttribute("aria-label", `${this.ch.name} · JAVIS` + (d(this.ch) ? " · " + r : "")), i.onclick = this.tap), i.title = this.ch.name + (d(this.ch) ? "\n" + r : ""), i.innerHTML = "<span class=\"portrait\"></span>", t.appendChild(i), this.mount(i.querySelector(".portrait"), !0);
+	}
+	renderHeroPage(e) {
+		let t = this.heroEl;
+		if (this.mode === "dot") {
+			let e = this.slotRoot(t, !0);
+			e.innerHTML += "<button class=\"on\" type=\"button\" aria-label=\"Bật lại nhân vật JAVIS\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z\"/></svg>Bật nhân vật</button>", e.querySelector(".on").onclick = (e) => {
+				e.stopPropagation(), this.setMode("mini");
+			};
+		} else if (this.active === "hero") {
+			let e = this.slotRoot(t), n = d(this.ch), i = document.createElement("div");
+			i.className = "hero", i.setAttribute("role", "button"), i.tabIndex = 0, i.setAttribute("aria-label", `${this.ch.name} · JAVIS — bấm để nói chuyện` + (n ? " · " + r : "")), i.innerHTML = `<div class="figure"></div>${n ? `<p class="credit" data-credit="live2d" title="${Z(r)}">${Z(a)}</p>` : ""}<div class="tools"><button type="button" data-a="next" title="Đổi nhân vật" aria-label="Đổi nhân vật">${xe}</button><button type="button" data-a="off" title="Tắt nhân vật" aria-label="Tắt nhân vật">${Se}</button></div>`, e.appendChild(i), this.mount(i.querySelector(".figure"), !1, !0), i.onclick = (e) => {
+				let t = e.target.closest("button")?.dataset.a;
+				t ? (e.stopPropagation(), this.tool(t)) : this.openChat();
+			}, i.onkeydown = (e) => {
+				(e.key === "Enter" || e.key === " ") && e.target === i && (e.preventDefault(), this.openChat());
+			};
+		} else this.slotEl && this.renderAvatarSlot(this.slotEl);
+		this.pageExtras(!0), this.open && this.appendPanel(e), this.renderBubble();
+	}
+	setMode(e) {
+		this.mode = e, localStorage.setItem("javis.companion.mode", e), this.render();
+	}
+	tool(e) {
+		if (e === "next") {
+			let e = l.findIndex((e) => e.id === this.ch.id);
+			this.setCharacter(l[(e + 1) % l.length].id);
 		}
-		this.renderBubble();
+		e === "off" && (this.open = !1, this.setMode("dot")), e === "on" && this.setMode("mini");
+	}
+	openChat() {
+		this.each((e) => e.setEmotion("happy", 2500)), this.dispatchEvent(new CustomEvent("javis-companion-open", {
+			detail: {
+				mode: this.mode,
+				from: "hero"
+			},
+			bubbles: !0,
+			composed: !0
+		})), !(this.hasAttribute("no-chat") || _e()) && (this.open = !0, this.loadChat(), this.render());
+	}
+	pageExtras(e) {
+		let t = this.frameEl?.querySelector(".jx-assistant__panel") || document.querySelector(".jx-assistant__panel:not([data-own])");
+		if (!t) return;
+		t.querySelector("[data-jc-bar]")?.remove();
+		let n = t.querySelector(".jx-assistant__mini");
+		if (n && (e && this.mode !== "dot" && (!d(this.ch) || k(this.ch.id)) ? (n.innerHTML = M(this.ch, "wcm-" + Q(), this.assetBase), n.style.overflow = "hidden") : (n.innerHTML = "", n.style.overflow = "")), !e) return;
+		let i = document.createElement("div");
+		i.dataset.jcBar = "1", i.style.cssText = "display:flex;align-items:center;gap:6px;padding:6px 12px 6px 18px;border-bottom:1px solid var(--jx-line);font-size:11px;line-height:1.3;color:var(--jx-text-3)";
+		let o = (e, t) => `<button type="button" data-a="${e}" style="flex:none;min-height:32px;padding:0 10px;border-radius:999px;border:1px solid var(--jx-line-2);background:var(--jx-surface);color:var(--jx-text-2);font:inherit;font-weight:600;cursor:pointer">${t}</button>`;
+		i.innerHTML = (d(this.ch) && this.mode !== "dot" ? `<span data-credit="live2d" title="${Z(r)}" aria-label="${Z(r)}" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${Z(a)}</span>` : `<span style="flex:1;min-width:0">${this.mode === "dot" ? "Nhân vật đang tắt" : Z(this.ch.name + " · " + this.ch.label)}</span>`) + (this.mode === "dot" ? o("on", "Bật nhân vật") : o("next", "Đổi") + o("off", "Tắt nhân vật")), i.onclick = (e) => {
+			let t = e.target.closest("button")?.dataset.a;
+			t && this.tool(t);
+		}, t.querySelector(".jx-assistant__head")?.after(i);
 	}
 	renderBubble() {
-		if (this.root.querySelectorAll(".hello").forEach((e) => e.remove()), !this.bubble || this.mode === "dot") return;
+		if (this.root.querySelectorAll(".hello").forEach((e) => e.remove()), this.heroEl) {
+			this.pageBubble();
+			return;
+		}
+		if (!this.bubble || this.mode === "dot") return;
 		let e = this.root.querySelector(".stage") || this.root.querySelector(".wrap");
 		if (!e) return;
 		let t = document.createElement("div");
-		t.className = "hello", t.setAttribute("role", "status"), t.innerHTML = `<b>${Z(this.ch.name)}:</b> ${Z(this.bubble.text)}${this.credit(!0)}`, t.onclick = () => {
+		t.className = "hello", t.setAttribute("role", "status"), t.innerHTML = `<b>${Z(this.ch.name)}:</b> ${Z(this.bubble.text)}`, t.onclick = () => {
 			this.bubble = null, this.renderBubble();
 		}, e.appendChild(t);
+	}
+	pageBubble() {
+		let e = this.heroEl.closest(".jx-assistant-card")?.querySelector(".jx-assistant-card__bubble"), t = this.frameEl?.querySelector(".jx-assistant__hello"), n = this.bubble && this.mode !== "dot" ? this.bubble.text : null, r = (e, t) => {
+			e && (e.dataset.jcOrig === void 0 && (e.dataset.jcOrig = e.textContent || ""), e.textContent = t ?? e.dataset.jcOrig);
+		};
+		if (r(e, this.active === "hero" ? n : null), t) {
+			let e = t.dataset.jcSay === "1";
+			r(t, this.active === "avatar" ? n : null), this.active === "avatar" && n ? (t.hidden = !1, t.dataset.jcSay = "1") : e && (t.hidden = !0, delete t.dataset.jcSay);
+		}
 	}
 	renderPanel() {
 		let e = this.root.querySelector(".panel");
 		if (!e) return;
 		let t = this.view === "sessions" ? `<ul class="sess">${this.sessions.length ? this.sessions.map((e) => `<li><button data-id="${Z(e.id)}" class="${e.id === this.sid ? "on" : ""}"><b>${Z(e.title || e.id)}</b><small>${e.id === this.sid ? "đang chat" : (e.count ?? 0) + " tin"}</small></button></li>`).join("") : "<li class=\"empty\">Chưa có phiên nào.</li>"}</ul>` : this.msgs.length ? this.msgs.map((e) => `<div class="msg ${e.role === "user" ? "me" : "aim"}">${Z(e.text)}</div>`).join("") : `<p class="empty">${Z(this.ch.greeting)}</p>`;
-		e.innerHTML = `<header class="head"><span class="pf">${j(this.ch, "wc-" + Q())}</span><span class="who"><b>${Z(this.ch.name)} · JAVIS</b><small>${Z(this.ch.role)} · ${Z(this.ch.label)}</small></span>
+		e.innerHTML = `<header class="head"><span class="pf">${M(this.ch, "wc-" + Q(), this.assetBase)}</span><span class="who"><b>${Z(this.ch.name)} · JAVIS</b><small>${Z(this.ch.role)} · ${Z(this.ch.label)}</small></span>
       <button class="ib ${this.view === "sessions" ? "on" : ""}" data-a="sess">Phiên ${this.sessions.length || ""}</button><button class="ib" data-a="new" title="Trò chuyện mới">+ Mới</button><button class="ib" data-a="close" aria-label="Đóng">×</button></header>${this.credit(innerWidth <= 820)}
       <div class="log" role="log" aria-live="polite">${t}</div>
       <form class="bar"><textarea rows="1" placeholder="Hỏi ${Z(this.ch.name)} bất cứ gì…" aria-label="Nhắn JAVIS"></textarea><button class="send" type="submit" aria-label="Gửi" ${this.busy ? "disabled" : ""}>${this.busy ? "…" : "<svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg>"}</button></form>`;
@@ -1223,4 +1443,4 @@ var ce = "\n:host{all:initial;position:fixed;right:16px;bottom:calc(16px + env(s
 };
 typeof customElements < "u" && !customElements.get("javis-companion") && customElements.define("javis-companion", $);
 //#endregion
-export { l as CHARACTERS, W as CompanionRig, $ as JavisCompanionElement, T as buildCharacterSvg };
+export { l as CHARACTERS, G as CompanionRig, $ as JavisCompanionElement, T as buildCharacterSvg };
