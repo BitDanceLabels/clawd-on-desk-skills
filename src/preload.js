@@ -19,4 +19,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onSkinChange: (cb) => ipcRenderer.on("skin-change", (_, skin) => cb(skin)),
   // Live2D sample credit under the character (JAVIS)
   onShowCharacterCredit: (cb) => ipcRenderer.on("show-character-credit", (_, credit) => cb(credit)),
+  // JAVIS secretary voice + lip-sync, and the small "new items" note (0.12.0)
+  onJavisSpeech: (cb) => ipcRenderer.on("javis-speech", (_, msg) => cb(msg)),
+  javisSpeechEnded: (id) => ipcRenderer.send("javis-speech-ended", id),
+  onJavisNote: (cb) => ipcRenderer.on("javis-note", (_, note) => cb(note)),
 });

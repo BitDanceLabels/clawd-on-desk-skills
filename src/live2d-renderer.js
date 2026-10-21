@@ -15,6 +15,9 @@
   let canvasContainer = null;
   let currentSkinPath = null;
   let currentMotionGroup = null;
+  // Lip-sync (0.12.0): 0..1 mouth opening, applied every frame after motions/physics.
+  let mouthValue = 0;
+  let mouthHooked = null;
 
   function ensureCanvas() {
     if (canvas && canvas.isConnected) return canvas;
@@ -81,6 +84,7 @@
         model = null;
       }
       model = await Live2DModel.from(modelPath, { autoInteract: false });
+      hookMouth(model);
       app.stage.addChild(model);
       fitModelToStage();
       currentSkinPath = modelPath;
@@ -165,8 +169,22 @@
     setTimeout(() => startMotion("idle"), Math.max(700, durationMs));
   }
 
+  function hookMouth(m) {
+    const internal = m && m.internalModel;
+    if (!internal || mouthHooked === internal) return;
+    mouthHooked = internal;
+    internal.on("beforeModelUpdate", () => {
+      if (mouthValue <= 0.001) return;
+      try { internal.coreModel.setParameterValueById("ParamMouthOpenY", mouthValue); } catch {}
+    });
+  }
+
+  function setMouth(v) {
+    mouthValue = Math.max(0, Math.min(1, Number(v) || 0));
+  }
+
   window.ClawdLive2DRenderer = {
     isAvailable, load, startMotion, setExpression, unload,
-    fit: fitModelToStage, eyeMove, playReaction,
+    fit: fitModelToStage, eyeMove, playReaction, setMouth, getMouth: () => mouthValue,
   };
 })();

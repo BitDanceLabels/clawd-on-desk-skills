@@ -1,4 +1,5 @@
-const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer, Notification, dialog } = require("electron");
+const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer, Notification, dialog, powerMonitor } = require("electron");
+const _focusGuard = require("./focus-guard").createFocusGuard({ powerMonitor });
 // Keep the pre-JAVIS userData folder (prefs, vocab, chat history, cookies) — before anything reads it.
 require("./user-data-path").pinUserDataPath(app);
 // javis-desk:// serves the JAVIS chat page and proxies /fleet/* (must be registered before ready).
@@ -61,7 +62,12 @@ const SIZES = {
 };
 const BUMBEE_VISION_URL = "https://vision.bumbee.asia/login";
 
-let lang = "en";
+const { langFromPrefs, LANG_PREFS_VERSION, translate } = require("./i18n");
+const { placeAvoiding } = require("./window-layout");
+const deskToolsMod = require("./javis-desk-tools");
+// Vietnamese by default (0.12.0); English / Chinese stay selectable in the menu.
+let lang = "vi";
+let clipShortcut = deskToolsMod.DEFAULT_CLIP_SHORTCUT;
 
 async function websocketDataToText(data) {
   if (typeof data === "string") return data;
@@ -145,7 +151,7 @@ function savePrefs() {
   const { x, y } = win.getBounds();
   const data = {
     x, y, size: currentSize,
-    miniMode: _mini.getMiniMode(), miniEdge: _mini.getMiniEdge(), preMiniX: _mini.getPreMiniX(), preMiniY: _mini.getPreMiniY(), lang,
+    miniMode: _mini.getMiniMode(), miniEdge: _mini.getMiniEdge(), preMiniX: _mini.getPreMiniX(), preMiniY: _mini.getPreMiniY(), lang, langV: LANG_PREFS_VERSION, clipShortcut,
     showTray, showDock,
     autoStartWithClaude, bubbleFollowPet, hideBubbles, showSessionId,
     ghostMode, assistantMode24x7,
@@ -2169,18 +2175,223 @@ function getJavisHost() {
   _javisHost = require("./javis-companion-host").initJavisCompanionHost({
     app, BrowserWindow, ipcMain, session, net, safeStorage, shell,
     getBounds: (w, h) => getChatBoundsNearPet(w, h),
+    onPairChange: (kind) => {
+      if (_deskTools) _deskTools.onPairChange(kind);
+      rebuildAllMenus();
+    },
+    // Menu shows "Đăng nhập JAVIS…" / "Đã đăng nhập: <email>".
+    onAuthState: (s) => {
+      scheduleMenuRebuild();
+      if (s.signedIn) sendToRenderer("javis-note", { clear: true, kind: "session" });
+    },
+    // Session over: the login screen is shown again; the character says so once (not while asleep).
+    onSessionExpired: () => {
+      if (doNotDisturb || petHidden) return;
+      sendToRenderer("javis-note", { text: translate(lang, "petSessionExpired"), ms: 9000, kind: "session" });
+    },
   });
   return _javisHost;
 }
 
-function openJavisChat() {
+function openJavisChat(opts = {}) {
   const host = getJavisHost();
-  if (host) host.openChat();
+  if (!host) return;
+  registerHomeIpc(host);
+  host.openChat(opts);
+  watchForVocabLayout(host.getWindow());
 }
 
-function openJavisPairing() {
+// ── Trang chủ JAVIS (main window tabs): local data only — vocab, hook sessions, web pages ──
+const javisHomeMod = require("./javis-home");
+let _homeIpc = false;
+function registerHomeIpc(host) {
+  if (_homeIpc || !host) return;
+  _homeIpc = true;
+  const { shell } = require("electron");
+  const handle = (ch, fn) => ipcMain.handle(`javis-home:${ch}`, async (e, ...args) => (host.isWindowSender(e) ? fn(...args) : null));
+  handle("vocab", () => {
+    const db = readVocabDb();
+    const words = (db.words || []).filter((w) => w && String(w.term || "").trim());
+    return { total: words.length, due: countDueVocab(db, Date.now()), mastered: words.filter((w) => w.mastered).length };
+  });
+  handle("open-vocab", (kind) => {
+    if (kind === "game") openVocabChallenge({ focus: true });
+    else if (kind === "profile") openVocabProfile();
+    else openVocabTinder();
+    return { ok: true };
+  });
+  handle("sessions", () => javisHomeMod.listMachineSessions(sessions).map(({ _id, ...row }) => row));
+  handle("focus-session", (key) => {
+    const k = String(key || "");
+    if (!k) return { ok: false };
+    for (const [id, s] of sessions) {
+      if (String(id).slice(-6) === k && s && s.sourcePid) {
+        focusTerminalWindow(s.sourcePid, s.cwd, s.editor, s.pidChain);
+        return { ok: true };
+      }
+    }
+    return { ok: false };
+  });
+  handle("web-pages", () => javisHomeMod.WEB_PAGES.map((p) => ({ ...p, url: javisHomeMod.webPageUrl(p.id) })));
+  handle("open-web-page", async (id) => {
+    const url = javisHomeMod.webPageUrl(String(id || "home"));
+    if (!url) return { ok: false };
+    await shell.openExternal(url);
+    return { ok: true, url };
+  });
+  handle("open-tool", (name) => {
+    const tools = getDeskTools();
+    if (!tools) return { ok: false };
+    if (name === "inbox") tools.openInbox();
+    else if (name === "clip") tools.openClipboard();
+    else if (name === "secretary") tools.openSecretary();
+    else return { ok: false };
+    return { ok: true };
+  });
+}
+
+// "Đăng nhập JAVIS…" (signed out) or the settings screen (signed in).
+// { start: true } also opens the browser sign-in right away.
+function openJavisLogin(opts) {
   const host = getJavisHost();
-  if (host) host.openPairing();
+  if (!host) return;
+  registerHomeIpc(host);
+  host.openLogin(opts);
+  watchForVocabLayout(host.getWindow());
+}
+
+function javisAuthForMenu() {
+  return _javisHost ? _javisHost.status() : { signedIn: false, state: "signed_out", email: "" };
+}
+
+// ── 0.12.0: Việc chờ anh · Thư ký đọc báo cáo · AI Clipboard ──
+let _deskTools = null;
+function getDeskTools() {
+  if (_deskTools) return _deskTools;
+  const host = getJavisHost();
+  if (!host) return null;
+  const { shell, clipboard, safeStorage } = require("electron");
+  _deskTools = deskToolsMod.initDeskTools({
+    app, BrowserWindow, ipcMain, shell, clipboard, safeStorage,
+    spawn: require("child_process").spawn,
+    host,
+    getBounds: (w, h) => getToolBoundsNearPet(w, h),
+    sendToCharacter: (channel, payload) => sendToRenderer(channel, payload),
+    isDoNotDisturb: () => doNotDisturb,
+  isUserBusy: () => _focusGuard.isUserBusy(),
+    isPetHidden: () => petHidden,
+    onMenuChange: () => scheduleMenuRebuild(),
+    openLogin: (opts) => openJavisLogin(opts),
+    t: (k) => translate(lang, k),
+    getClipShortcut: () => clipShortcut,
+    onWindowCreated: (w) => watchForVocabLayout(w),
+  });
+  return _deskTools;
+}
+
+// Tool windows open next to the character without covering the chat or each other.
+function getToolBoundsNearPet(width, height) {
+  const near = getChatBoundsNearPet(width, height);
+  const rect = { x: near.x, y: near.y, width, height };
+  const area = screen.getDisplayMatching(rect).workArea;
+  const others = layoutObstacles();
+  if (win && !win.isDestroyed() && win.isVisible()) others.push(win.getBounds());
+  const spot = placeAvoiding(rect, others, area);
+  return spot || near;
+}
+
+let _menuRebuildTimer = null;
+function scheduleMenuRebuild() {
+  if (_menuRebuildTimer) return;
+  _menuRebuildTimer = setTimeout(() => { _menuRebuildTimer = null; try { rebuildAllMenus(); } catch {} }, 250);
+}
+
+let _lastMenuInboxRefresh = 0;
+function inboxForMenu() {
+  const tools = _deskTools;
+  if (!tools) return { paired: false, count: 0, loaded: false };
+  const snap = tools.inboxSnapshot();
+  // Opening the menu is a real user action: refresh, at most once a minute.
+  if (snap.paired && Date.now() - _lastMenuInboxRefresh > 60 * 1000) {
+    _lastMenuInboxRefresh = Date.now();
+    void tools.refreshInbox("menu");
+  }
+  return snap;
+}
+
+function registerClipShortcut() {
+  if (!clipShortcut) return true;
+  try {
+    return globalShortcut.register(clipShortcut, () => { const tools = getDeskTools(); if (tools) tools.openClipboard(); });
+  } catch (err) {
+    console.warn("JAVIS: failed to register AI Clipboard shortcut:", err.message);
+    return false;
+  }
+}
+
+function setClipShortcut(acc) {
+  const next = acc === "" ? "" : deskToolsMod.normalizeClipShortcut(acc);
+  if (clipShortcut) { try { globalShortcut.unregister(clipShortcut); } catch {} }
+  const prev = clipShortcut;
+  clipShortcut = next;
+  if (next && !registerClipShortcut()) {
+    dialog.showMessageBox({ type: "warning", title: "JAVIS", message: translate(lang, "shortcutTaken").replace("{shortcut}", deskToolsMod.shortcutLabel(next)), buttons: [translate(lang, "ok")] }).catch(() => {});
+    clipShortcut = prev;
+    if (prev) registerClipShortcut();
+  }
+  savePrefs();
+  rebuildAllMenus();
+}
+
+// The vocab game panel floats on top: keep it clear of the chat / JAVIS windows.
+// It steps aside (or hides until they close) and comes back on its own.
+let _challengeHiddenForChat = false;
+let _challengeAutoMovedAt = 0;
+function layoutObstacles() {
+  const list = [];
+  const host = _javisHost;
+  const add = (w) => { if (w && !w.isDestroyed() && w.isVisible() && !w.isMinimized()) list.push(w.getBounds()); };
+  if (host) add(host.getWindow());
+  add(chatWin);
+  if (_deskTools) for (const w of _deskTools.windows()) add(w);
+  return list;
+}
+
+function keepVocabClearOfChat() {
+  if (!challengeWin || challengeWin.isDestroyed()) return;
+  const obstacles = layoutObstacles();
+  if (!obstacles.length) {
+    if (_challengeHiddenForChat) { _challengeHiddenForChat = false; challengeWin.showInactive(); }
+    return;
+  }
+  if (!challengeWin.isVisible() && !_challengeHiddenForChat) return;
+  const b = challengeWin.getBounds();
+  const area = screen.getDisplayMatching(b).workArea;
+  const spot = placeAvoiding(b, obstacles, area);
+  if (!spot) {
+    if (challengeWin.isVisible()) challengeWin.hide();
+    _challengeHiddenForChat = true;
+    return;
+  }
+  if (spot.x !== b.x || spot.y !== b.y) {
+    _challengeAutoMovedAt = Date.now();
+    challengeWin.setBounds({ ...b, x: spot.x, y: spot.y });
+  }
+  if (_challengeHiddenForChat) { _challengeHiddenForChat = false; challengeWin.showInactive(); }
+}
+
+let _layoutTimer = null;
+function scheduleVocabLayout() {
+  clearTimeout(_layoutTimer);
+  _layoutTimer = setTimeout(keepVocabClearOfChat, 150);
+}
+
+const _layoutWatched = new WeakSet();
+function watchForVocabLayout(w) {
+  if (!w || w.isDestroyed() || _layoutWatched.has(w)) { scheduleVocabLayout(); return; }
+  _layoutWatched.add(w);
+  for (const ev of ["show", "hide", "moved", "move", "resize", "minimize", "restore", "closed"]) w.on(ev, scheduleVocabLayout);
+  scheduleVocabLayout();
 }
 
 function showCharacterCredit() {
@@ -2193,22 +2404,23 @@ function showCharacterCredit() {
 }
 
 function showAboutJavis() {
+  const tr = (k) => translate(lang, k);
   const detail = [
-    `Version ${app.getVersion()}`,
-    "Trợ lý JAVIS trên máy tính — BitDance Labels.",
+    tr("version").replace("{version}", app.getVersion()),
+    tr("aboutBody"),
     "",
-    "Nhân vật mặc định: Hiyori (nhân vật mẫu Live2D, giữ nguyên thiết kế).",
+    tr("aboutCharacter"),
     javisBrand.LIVE2D_CREDIT,
     javisBrand.LIVE2D_CREDIT_VI,
     "",
-    "Based on Clawd on Desk (MIT, rullerzhou-afk). See LICENSES.md.",
+    tr("aboutBased"),
   ].join("\n");
   dialog.showMessageBox({
     type: "info",
-    title: "About JAVIS",
+    title: tr("aboutTitle"),
     message: "JAVIS",
     detail,
-    buttons: ["OK"],
+    buttons: [tr("ok")],
     icon: path.join(__dirname, "..", "assets", "icons", "128x128.png"),
   }).catch(() => {});
 }
@@ -2244,6 +2456,7 @@ function openBumbeeChat() {
   });
 
   chatWin.loadFile(path.join(__dirname, "bumbee-chat.html"));
+  watchForVocabLayout(chatWin);
   chatWin.once("ready-to-show", () => {
     if (chatWin && !chatWin.isDestroyed()) chatWin.show();
   });
@@ -2867,11 +3080,16 @@ function getVocabChallengeBounds(savedPos) {
   };
 }
 
-function openVocabChallenge() {
+// { focus: true } = anh tự mở (menu/Trang chủ): nhận phím ngay. Tự nảy theo lịch: hiện mà KHÔNG giành con trỏ,
+// chỉ nhận phím khi anh bấm vào thẻ (vocab-challenge:activate).
+function openVocabChallenge({ focus = false } = {}) {
   const bounds = getVocabChallengeBounds(challengeWinPos);
   if (challengeWin && !challengeWin.isDestroyed()) {
     challengeWin.setBounds(bounds);
-    challengeWin.showInactive();
+    _challengeHiddenForChat = false;
+    if (!challengeWin.isFocused()) challengeWin.setFocusable(focus);
+    if (focus) { challengeWin.show(); challengeWin.focus(); } else challengeWin.showInactive();
+    keepVocabClearOfChat();
     try { challengeWin.webContents.send("challenge-refresh"); } catch {}
     return;
   }
@@ -2887,6 +3105,7 @@ function openVocabChallenge() {
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
+    focusable: focus,
     title: "Bumbee Challenge",
     show: false,
     webPreferences: {
@@ -2899,17 +3118,22 @@ function openVocabChallenge() {
   challengeWin.setAlwaysOnTop(true, "floating");
   challengeWin.loadFile(path.join(__dirname, "vocab-challenge.html"));
   challengeWin.once("ready-to-show", () => {
-    if (challengeWin && !challengeWin.isDestroyed()) challengeWin.showInactive();
+    if (!challengeWin || challengeWin.isDestroyed()) return;
+    if (focus) { challengeWin.show(); challengeWin.focus(); } else challengeWin.showInactive();
+    keepVocabClearOfChat();
   });
+  // Rời thẻ → thôi nhận phím, để lần tự nảy sau không giành con trỏ.
+  challengeWin.on("blur", () => { if (challengeWin && !challengeWin.isDestroyed()) challengeWin.setFocusable(false); });
   let movedSaveTimer = null;
   challengeWin.on("moved", () => {
     if (!challengeWin || challengeWin.isDestroyed()) return;
+    if (Date.now() - _challengeAutoMovedAt < 800) return; // stepped aside for the chat: not the user's spot
     const b = challengeWin.getBounds();
     challengeWinPos = { x: b.x, y: b.y };
     if (movedSaveTimer) clearTimeout(movedSaveTimer);
     movedSaveTimer = setTimeout(() => { try { savePrefs(); } catch {} }, 600);
   });
-  challengeWin.on("closed", () => { challengeWin = null; });
+  challengeWin.on("closed", () => { challengeWin = null; _challengeHiddenForChat = false; });
 }
 
 function closeVocabChallenge() {
@@ -2933,6 +3157,7 @@ function startChallengeScheduler() {
     // Only pop when there is something actually due
     const db = readVocabDb();
     if (countDueVocab(db, Date.now()) <= 0) return;
+    if (_focusGuard.isUserBusy()) return;  // anh đang gõ/chat: chờ anh ngừng tay (kiểm lại sau 30s)
     openVocabChallenge();
     // Space out the next auto-pop by the configured interval
     challengeSnoozeUntil = Date.now() + Math.max(1, vocabChallengeIntervalMin) * 60 * 1000;
@@ -3570,7 +3795,7 @@ function scheduleCoachReminder(delayMs = COACH_IDLE_PROMPT_MS) {
     coachReminderTimer = null;
     const idleLongEnough = Date.now() - coachLastInteractionAt >= Math.min(delayMs, COACH_IDLE_PROMPT_MS);
     const chatActive = chatWin && !chatWin.isDestroyed() && chatWin.isVisible() && chatWin.isFocused();
-    if (LEARN_ON_START && idleLongEnough && !chatActive) triggerCoachInteraction("idle");
+    if (LEARN_ON_START && idleLongEnough && !chatActive && !_focusGuard.isUserBusy()) triggerCoachInteraction("idle");
     scheduleCoachReminder(COACH_IDLE_PROMPT_MS);
   }, Math.max(3000, delayMs));
 }
@@ -3605,6 +3830,7 @@ function onSessionStop(sessionId) {
   if (workingMs < SAVE_KNOWLEDGE_MIN_WORKING_MS) return; // session quá ngắn
   if (Date.now() - _lastSaveKnowledgePromptAt < SAVE_KNOWLEDGE_COOLDOWN_MS) return; // vừa nhắc rồi
   if (doNotDisturb || hideBubbles) return;
+  if (_focusGuard.isUserBusy()) return; // anh đang gõ/chat: không nhảy bong bóng ra giữa chừng
   _lastSaveKnowledgePromptAt = Date.now();
   // Delay 1.5s cho attention animation chạy xong rồi mới nhắc
   setTimeout(() => {
@@ -3801,11 +4027,22 @@ const _menuCtx = {
   getWiki: () => _wiki,
   openBumbeeChat: () => openJavisChat(),
   openJavisChat: () => openJavisChat(),
-  openJavisPairing: () => openJavisPairing(),
+  openJavisLogin: () => openJavisLogin(),
+  getJavisAuth: () => javisAuthForMenu(),
   openEnglishCoach: () => openBumbeeChat(),
+  getInbox: () => inboxForMenu(),
+  openInbox: () => { const tools = getDeskTools(); if (tools) tools.openInbox(); },
+  readReport: () => { const tools = getDeskTools(); if (tools) void tools.readReport(); },
+  stopReading: () => { if (_deskTools) _deskTools.stopReading(); },
+  isReading: () => !!(_deskTools && _deskTools.isReading()),
+  openClipboard: () => { const tools = getDeskTools(); if (tools) tools.openClipboard(); },
+  getClipShortcut: () => clipShortcut,
+  setClipShortcut: (acc) => setClipShortcut(acc),
+  clipShortcutChoices: deskToolsMod.CLIP_SHORTCUTS,
+  shortcutLabel: (acc) => deskToolsMod.shortcutLabel(acc),
   showAbout: () => showAboutJavis(),
   openBumbeeVocab: openVocabTinder,
-  openBumbeeChallenge: openVocabChallenge,
+  openBumbeeChallenge: () => openVocabChallenge({ focus: true }),
   getVocabAutoChallenge: () => vocabAutoChallenge,
   setVocabAutoChallenge: (v) => setVocabChallengeConfig({ auto: !!v }),
   getVocabAutoSource: () => vocabAutoSource,
@@ -3838,6 +4075,7 @@ const { setupAutoUpdater, checkForUpdates, getUpdateMenuItem, getUpdateMenuLabel
 // ── Rabbit periodic popup — delegated to src/rabbit.js ──
 const _rabbitCtx = {
   isDoNotDisturb: () => doNotDisturb,
+  isUserBusy: () => _focusGuard.isUserBusy(),
   getLang: () => lang,
   savePrefs,
   initialEnabled: rabbitEnabled,
@@ -3871,7 +4109,8 @@ function notifyBumbeeSystemBootstrap(result) {
 function createWindow() {
   const prefs = loadPrefs();
   if (prefs && SIZES[prefs.size]) currentSize = prefs.size;
-  if (prefs && (prefs.lang === "en" || prefs.lang === "zh")) lang = prefs.lang;
+  lang = langFromPrefs(prefs);
+  if (prefs) clipShortcut = deskToolsMod.normalizeClipShortcut(prefs.clipShortcut);
   // macOS: restore tray/dock visibility from prefs
   if (isMac && prefs) {
     if (typeof prefs.showTray === "boolean") showTray = prefs.showTray;
@@ -4363,6 +4602,12 @@ function createWindow() {
     return { ok: true, snoozeMin: m };
   });
   ipcMain.handle("vocab-challenge:close", () => { closeVocabChallenge(); return { ok: true }; });
+  // Anh bấm vào thẻ → giờ mới nhận phím (thẻ tự nảy không giành con trỏ).
+  ipcMain.on("vocab-challenge:activate", () => {
+    if (!challengeWin || challengeWin.isDestroyed() || challengeWin.isFocused()) return;
+    challengeWin.setFocusable(true);
+    challengeWin.focus();
+  });
   // Kéo cửa sổ game bằng JS fallback (delta theo screen coords từ renderer)
   ipcMain.on("vocab-challenge:move-by", (_event, d = {}) => {
     if (!challengeWin || challengeWin.isDestroyed()) return;
@@ -4376,7 +4621,7 @@ function createWindow() {
     ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, gameType: vocabGameType, intervalMin: vocabChallengeIntervalMin,
   }));
   ipcMain.handle("vocab-challenge:set-config", (_event, cfg = {}) => setVocabChallengeConfig(cfg));
-  ipcMain.on("open-vocab-challenge", () => openVocabChallenge());
+  ipcMain.on("open-vocab-challenge", () => openVocabChallenge({ focus: true }));
   // ── Vocab auto-source (Phase 2) ──
   ipcMain.handle("vocab-source:grab-clipboard", () => ensureAutoSource().grabClipboard(true));
   ipcMain.handle("vocab-source:add-url", (_event, url) => ensureAutoSource().addFromUrl(url));
@@ -4708,6 +4953,9 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     getJavisHost();
+    const tools = getDeskTools();
+    if (tools) tools.startWatching();
+    registerClipShortcut();
     // Dev-only (never in packaged builds): JAVIS_DEV_OPEN=chat,pair,about,credit opens
     // windows at start-up for headless screenshot checks.
     if (!app.isPackaged && process.env.JAVIS_DEV_OPEN) {
@@ -4715,9 +4963,53 @@ if (!gotTheLock) {
       setTimeout(() => {
         if (want.has("credit")) showCharacterCredit();
         if (want.has("chat")) openJavisChat();
-        if (want.has("pair")) openJavisPairing();
+        if (want.has("pair") || want.has("login")) openJavisLogin();
         if (want.has("about")) showAboutJavis();
+        if (want.has("inbox") && tools) tools.openInbox();
+        if (want.has("report") && tools) void tools.readReport();
+        if (want.has("clip") && tools) tools.openClipboard();
+        if (want.has("vocab")) openVocabChallenge();
       }, 4000);
+    }
+    // Dev-only test hooks for the Playwright tester (never in packaged builds):
+    // read/click native menu items, which Playwright cannot reach.
+    if (!app.isPackaged && process.env.JAVIS_TEST_HOOKS === "1") {
+      const flatten = (menu, out = []) => {
+        for (const it of menu.items) {
+          if (it.type === "separator") continue;
+          out.push(it);
+          if (it.submenu) flatten(it.submenu, out);
+        }
+        return out;
+      };
+      const contextItems = () => { buildContextMenu(); return flatten(contextMenu); };
+      globalThis.__javisTest = {
+        contextLabels: () => contextItems().map((i) => i.label),
+        clickMenu: (prefix) => {
+          const it = contextItems().find((i) => i.label.startsWith(prefix));
+          if (!it) return false;
+          it.click();
+          return true;
+        },
+        popupMenu: () => showPetContextMenu(),
+        closeMenu: () => { try { contextMenu.closePopup(); } catch {} },
+        lang: () => lang,
+        dnd: (on) => (on ? _menuCtx.enableDoNotDisturb() : _menuCtx.disableDoNotDisturb()),
+        clipShortcut: () => ({ acc: clipShortcut, registered: !!clipShortcut && globalShortcut.isRegistered(clipShortcut) }),
+        bounds: () => ({
+          chat: _javisHost && _javisHost.getWindow() && !_javisHost.getWindow().isDestroyed() ? _javisHost.getWindow().getBounds() : null,
+          challenge: challengeWin && !challengeWin.isDestroyed() ? { ...challengeWin.getBounds(), visible: challengeWin.isVisible() } : null,
+          pet: win && !win.isDestroyed() ? win.getBounds() : null,
+        }),
+        openVocabChallenge: () => openVocabChallenge({ focus: true }),
+        openChat: () => openJavisChat(),
+        openLogin: (start) => openJavisLogin({ start: !!start }),
+        authState: () => javisAuthForMenu(),
+        refreshInbox: () => (_deskTools ? _deskTools.refreshInbox("test") : null),
+        readReport: () => (_deskTools ? _deskTools.readReport() : null),
+        clipStatus: () => (_deskTools ? _deskTools.clipStatus() : null),
+        isReading: () => !!(_deskTools && _deskTools.isReading()),
+      };
     }
     try {
       app.setAboutPanelOptions({
@@ -4751,9 +5043,10 @@ if (!gotTheLock) {
     configureDisplayCapturePermissions(session.defaultSession);
     createWindow();
     if (LEARN_ON_START) {
-      // Start-up chat is now the JAVIS assistant (shows "Ghép đôi JAVIS" until paired).
+      // Start-up chat is now the JAVIS assistant (shows "Đăng nhập JAVIS" until signed in).
       setTimeout(() => {
-        if (!app.isQuitting) openJavisChat();
+        // Tự mở lúc khởi động: không giành con trỏ của anh.
+        if (!app.isQuitting) openJavisChat({ inactive: true });
       }, 900);
       setTimeout(() => {
         if (!isQuitting) triggerCoachInteraction("welcome");

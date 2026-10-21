@@ -1,5 +1,5 @@
-import { a as e, f as t, i as n, n as r, r as i, s as a, u as o } from "./javis-companion-lazy-lib-BEBkEh7I.js";
-import { Container as s } from "./javis-companion-lazy-lib--KqWq4Q4.js";
+import { S as e, c as t, f as n, i as r, l as i, s as a, y as o } from "./javis-companion-lazy-lib-FoDFHkt2.js";
+import { Container as s } from "./javis-companion-lazy-lib-hCuWBK0s.js";
 //#region node_modules/pixi-live2d-display/dist/cubism4.es.js
 var c = Object.defineProperty, l = Math.pow, u = (e, t, n) => t in e ? c(e, t, {
 	enumerable: !0,
@@ -551,26 +551,10 @@ var x = ne, S = class e {
 		T = !1, E = !1, D = void 0;
 	}
 	static initialize(e = 0) {
-		if (!T) {
-			j("CubismFramework is not started.");
-			return;
-		}
-		if (E) {
-			j("CubismFramework.initialize() skipped, already initialized.");
-			return;
-		}
-		Live2DCubismCore.Memory.initializeAmountOfMemory(e), E = !0, A("CubismFramework.initialize() is complete.");
+		T ? E ? j("CubismFramework.initialize() skipped, already initialized.") : (Live2DCubismCore.Memory.initializeAmountOfMemory(e), E = !0, A("CubismFramework.initialize() is complete.")) : j("CubismFramework is not started.");
 	}
 	static dispose() {
-		if (!T) {
-			j("CubismFramework is not started.");
-			return;
-		}
-		if (!E) {
-			j("CubismFramework.dispose() skipped, not initialized.");
-			return;
-		}
-		re.staticRelease(), E = !1, A("CubismFramework.dispose() is complete.");
+		T ? E ? (re.staticRelease(), E = !1, A("CubismFramework.dispose() is complete.")) : j("CubismFramework.dispose() skipped, not initialized.") : j("CubismFramework is not started.");
 	}
 	static isStarted() {
 		return T;
@@ -767,11 +751,7 @@ var N = class {
 		return this._model.parts.count;
 	}
 	setPartOpacityByIndex(e, t) {
-		if (e in this._notExistPartOpacities) {
-			this._notExistPartOpacities[e] = t;
-			return;
-		}
-		0 <= e && this.getPartCount(), this._partOpacities[e] = t;
+		e in this._notExistPartOpacities ? this._notExistPartOpacities[e] = t : (0 <= e && this.getPartCount(), this._partOpacities[e] = t);
 	}
 	setPartOpacityById(e, t) {
 		let n = this.getPartIndex(e);
@@ -812,11 +792,7 @@ var N = class {
 		return this.getParameterValueByIndex(t);
 	}
 	setParameterValueByIndex(e, t, n = 1) {
-		if (e in this._notExistParameterValues) {
-			this._notExistParameterValues[e] = n == 1 ? t : this._notExistParameterValues[e] * (1 - n) + t * n;
-			return;
-		}
-		0 <= e && this.getParameterCount(), this._model.parameters.maximumValues[e] < t && (t = this._model.parameters.maximumValues[e]), this._model.parameters.minimumValues[e] > t && (t = this._model.parameters.minimumValues[e]), this._parameterValues[e] = n == 1 ? t : this._parameterValues[e] = this._parameterValues[e] * (1 - n) + t * n;
+		e in this._notExistParameterValues ? this._notExistParameterValues[e] = n == 1 ? t : this._notExistParameterValues[e] * (1 - n) + t * n : (0 <= e && this.getParameterCount(), this._model.parameters.maximumValues[e] < t && (t = this._model.parameters.maximumValues[e]), this._model.parameters.minimumValues[e] > t && (t = this._model.parameters.minimumValues[e]), this._parameterValues[e] = n == 1 ? t : this._parameterValues[e] = this._parameterValues[e] * (1 - n) + t * n);
 	}
 	setParameterValueById(e, t, n = 1) {
 		let r = this.getParameterIndex(e);
@@ -1543,16 +1519,12 @@ var Re = class e extends ge {
 		let e = 0;
 		for (; e < this._motions.length;) {
 			let t = this._motions[e];
-			if (t == null) {
-				this._motions.splice(e, 1);
-				continue;
+			if (t == null) this._motions.splice(e, 1);
+			else if (t._motion == null) t.release(), this._motions.splice(e, 1);
+			else {
+				if (!t.isFinished()) return !1;
+				e++;
 			}
-			if (t._motion == null) {
-				t.release(), this._motions.splice(e, 1);
-				continue;
-			}
-			if (!t.isFinished()) return !1;
-			e++;
 		}
 		return !0;
 	}
@@ -2192,18 +2164,10 @@ var xt = class {
 		t ? this.gl.enableVertexAttribArray(e) : this.gl.disableVertexAttribArray(e);
 	}
 	save() {
-		if (this.gl == null) {
-			M("'gl' is null. WebGLRenderingContext is required.\nPlease call 'CubimRenderer_WebGL.startUp' function.");
-			return;
-		}
-		this._lastArrayBufferBinding = this.gl.getParameter(this.gl.ARRAY_BUFFER_BINDING), this._lastArrayBufferBinding = this.gl.getParameter(this.gl.ELEMENT_ARRAY_BUFFER_BINDING), this._lastProgram = this.gl.getParameter(this.gl.CURRENT_PROGRAM), this._lastActiveTexture = this.gl.getParameter(this.gl.ACTIVE_TEXTURE), this.gl.activeTexture(this.gl.TEXTURE1), this._lastTexture1Binding2D = this.gl.getParameter(this.gl.TEXTURE_BINDING_2D), this.gl.activeTexture(this.gl.TEXTURE0), this._lastTexture0Binding2D = this.gl.getParameter(this.gl.TEXTURE_BINDING_2D), this._lastVertexAttribArrayEnabled[0] = this.gl.getVertexAttrib(0, this.gl.VERTEX_ATTRIB_ARRAY_ENABLED), this._lastVertexAttribArrayEnabled[1] = this.gl.getVertexAttrib(1, this.gl.VERTEX_ATTRIB_ARRAY_ENABLED), this._lastVertexAttribArrayEnabled[2] = this.gl.getVertexAttrib(2, this.gl.VERTEX_ATTRIB_ARRAY_ENABLED), this._lastVertexAttribArrayEnabled[3] = this.gl.getVertexAttrib(3, this.gl.VERTEX_ATTRIB_ARRAY_ENABLED), this._lastScissorTest = this.gl.isEnabled(this.gl.SCISSOR_TEST), this._lastStencilTest = this.gl.isEnabled(this.gl.STENCIL_TEST), this._lastDepthTest = this.gl.isEnabled(this.gl.DEPTH_TEST), this._lastCullFace = this.gl.isEnabled(this.gl.CULL_FACE), this._lastBlend = this.gl.isEnabled(this.gl.BLEND), this._lastFrontFace = this.gl.getParameter(this.gl.FRONT_FACE), this._lastColorMask = this.gl.getParameter(this.gl.COLOR_WRITEMASK), this._lastBlending[0] = this.gl.getParameter(this.gl.BLEND_SRC_RGB), this._lastBlending[1] = this.gl.getParameter(this.gl.BLEND_DST_RGB), this._lastBlending[2] = this.gl.getParameter(this.gl.BLEND_SRC_ALPHA), this._lastBlending[3] = this.gl.getParameter(this.gl.BLEND_DST_ALPHA), this._lastFBO = this.gl.getParameter(this.gl.FRAMEBUFFER_BINDING), this._lastViewport = this.gl.getParameter(this.gl.VIEWPORT);
+		this.gl == null ? M("'gl' is null. WebGLRenderingContext is required.\nPlease call 'CubimRenderer_WebGL.startUp' function.") : (this._lastArrayBufferBinding = this.gl.getParameter(this.gl.ARRAY_BUFFER_BINDING), this._lastArrayBufferBinding = this.gl.getParameter(this.gl.ELEMENT_ARRAY_BUFFER_BINDING), this._lastProgram = this.gl.getParameter(this.gl.CURRENT_PROGRAM), this._lastActiveTexture = this.gl.getParameter(this.gl.ACTIVE_TEXTURE), this.gl.activeTexture(this.gl.TEXTURE1), this._lastTexture1Binding2D = this.gl.getParameter(this.gl.TEXTURE_BINDING_2D), this.gl.activeTexture(this.gl.TEXTURE0), this._lastTexture0Binding2D = this.gl.getParameter(this.gl.TEXTURE_BINDING_2D), this._lastVertexAttribArrayEnabled[0] = this.gl.getVertexAttrib(0, this.gl.VERTEX_ATTRIB_ARRAY_ENABLED), this._lastVertexAttribArrayEnabled[1] = this.gl.getVertexAttrib(1, this.gl.VERTEX_ATTRIB_ARRAY_ENABLED), this._lastVertexAttribArrayEnabled[2] = this.gl.getVertexAttrib(2, this.gl.VERTEX_ATTRIB_ARRAY_ENABLED), this._lastVertexAttribArrayEnabled[3] = this.gl.getVertexAttrib(3, this.gl.VERTEX_ATTRIB_ARRAY_ENABLED), this._lastScissorTest = this.gl.isEnabled(this.gl.SCISSOR_TEST), this._lastStencilTest = this.gl.isEnabled(this.gl.STENCIL_TEST), this._lastDepthTest = this.gl.isEnabled(this.gl.DEPTH_TEST), this._lastCullFace = this.gl.isEnabled(this.gl.CULL_FACE), this._lastBlend = this.gl.isEnabled(this.gl.BLEND), this._lastFrontFace = this.gl.getParameter(this.gl.FRONT_FACE), this._lastColorMask = this.gl.getParameter(this.gl.COLOR_WRITEMASK), this._lastBlending[0] = this.gl.getParameter(this.gl.BLEND_SRC_RGB), this._lastBlending[1] = this.gl.getParameter(this.gl.BLEND_DST_RGB), this._lastBlending[2] = this.gl.getParameter(this.gl.BLEND_SRC_ALPHA), this._lastBlending[3] = this.gl.getParameter(this.gl.BLEND_DST_ALPHA), this._lastFBO = this.gl.getParameter(this.gl.FRAMEBUFFER_BINDING), this._lastViewport = this.gl.getParameter(this.gl.VIEWPORT));
 	}
 	restore() {
-		if (this.gl == null) {
-			M("'gl' is null. WebGLRenderingContext is required.\nPlease call 'CubimRenderer_WebGL.startUp' function.");
-			return;
-		}
-		this.gl.useProgram(this._lastProgram), this.setGlEnableVertexAttribArray(0, this._lastVertexAttribArrayEnabled[0]), this.setGlEnableVertexAttribArray(1, this._lastVertexAttribArrayEnabled[1]), this.setGlEnableVertexAttribArray(2, this._lastVertexAttribArrayEnabled[2]), this.setGlEnableVertexAttribArray(3, this._lastVertexAttribArrayEnabled[3]), this.setGlEnable(this.gl.SCISSOR_TEST, this._lastScissorTest), this.setGlEnable(this.gl.STENCIL_TEST, this._lastStencilTest), this.setGlEnable(this.gl.DEPTH_TEST, this._lastDepthTest), this.setGlEnable(this.gl.CULL_FACE, this._lastCullFace), this.setGlEnable(this.gl.BLEND, this._lastBlend), this.gl.frontFace(this._lastFrontFace), this.gl.colorMask(this._lastColorMask[0], this._lastColorMask[1], this._lastColorMask[2], this._lastColorMask[3]), this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this._lastArrayBufferBinding), this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this._lastElementArrayBufferBinding), this.gl.activeTexture(this.gl.TEXTURE1), this.gl.bindTexture(this.gl.TEXTURE_2D, this._lastTexture1Binding2D), this.gl.activeTexture(this.gl.TEXTURE0), this.gl.bindTexture(this.gl.TEXTURE_2D, this._lastTexture0Binding2D), this.gl.activeTexture(this._lastActiveTexture), this.gl.blendFuncSeparate(this._lastBlending[0], this._lastBlending[1], this._lastBlending[2], this._lastBlending[3]);
+		this.gl == null ? M("'gl' is null. WebGLRenderingContext is required.\nPlease call 'CubimRenderer_WebGL.startUp' function.") : (this.gl.useProgram(this._lastProgram), this.setGlEnableVertexAttribArray(0, this._lastVertexAttribArrayEnabled[0]), this.setGlEnableVertexAttribArray(1, this._lastVertexAttribArrayEnabled[1]), this.setGlEnableVertexAttribArray(2, this._lastVertexAttribArrayEnabled[2]), this.setGlEnableVertexAttribArray(3, this._lastVertexAttribArrayEnabled[3]), this.setGlEnable(this.gl.SCISSOR_TEST, this._lastScissorTest), this.setGlEnable(this.gl.STENCIL_TEST, this._lastStencilTest), this.setGlEnable(this.gl.DEPTH_TEST, this._lastDepthTest), this.setGlEnable(this.gl.CULL_FACE, this._lastCullFace), this.setGlEnable(this.gl.BLEND, this._lastBlend), this.gl.frontFace(this._lastFrontFace), this.gl.colorMask(this._lastColorMask[0], this._lastColorMask[1], this._lastColorMask[2], this._lastColorMask[3]), this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this._lastArrayBufferBinding), this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this._lastElementArrayBufferBinding), this.gl.activeTexture(this.gl.TEXTURE1), this.gl.bindTexture(this.gl.TEXTURE_2D, this._lastTexture1Binding2D), this.gl.activeTexture(this.gl.TEXTURE0), this.gl.bindTexture(this.gl.TEXTURE_2D, this._lastTexture0Binding2D), this.gl.activeTexture(this._lastActiveTexture), this.gl.blendFuncSeparate(this._lastBlending[0], this._lastBlending[1], this._lastBlending[2], this._lastBlending[3]));
 	}
 	setGl(e) {
 		this.gl = e;
@@ -2548,8 +2512,8 @@ var Yn = class extends o.default {
 		if (typeof t != "string") throw TypeError("The `url` field in settings JSON must be defined as a string.");
 		this.url = t, this.name = qn(this.url);
 	}
-	resolveURL(e) {
-		return t.resolve(this.url, e);
+	resolveURL(t) {
+		return e.resolve(this.url, t);
 	}
 	replaceFiles(e) {
 		this.moc = e(this.moc, "moc"), this.pose !== void 0 && (this.pose = e(this.pose, "pose")), this.physics !== void 0 && (this.physics = e(this.physics, "physics"));
@@ -2763,7 +2727,7 @@ var ar = /* @__PURE__ */ ((e) => (e.ALL = "ALL", e.IDLE = "IDLE", e.NONE = "NONE
 	height: 0
 }, cr = class extends o.default {
 	constructor() {
-		super(...arguments), d(this, "focusController", new $n()), d(this, "pose"), d(this, "physics"), d(this, "originalWidth", 0), d(this, "originalHeight", 0), d(this, "width", 0), d(this, "height", 0), d(this, "localTransform", new e()), d(this, "drawingMatrix", new e()), d(this, "hitAreas", {}), d(this, "textureFlipY", !1), d(this, "viewport", [
+		super(...arguments), d(this, "focusController", new $n()), d(this, "pose"), d(this, "physics"), d(this, "originalWidth", 0), d(this, "originalHeight", 0), d(this, "width", 0), d(this, "height", 0), d(this, "localTransform", new i()), d(this, "drawingMatrix", new i()), d(this, "hitAreas", {}), d(this, "textureFlipY", !1), d(this, "viewport", [
 			0,
 			0,
 			0,
@@ -2969,15 +2933,15 @@ var hr = "Live2DFactory", gr = (e, t) => f(void 0, null, function* () {
 		return e.internalModel = r.createInternalModel(a, n, e.options), t();
 	}
 	throw TypeError("Missing settings.");
-}), J = class e {
+}), J = class t {
 	static unzip(n, r) {
 		return f(this, null, function* () {
-			let i = yield e.getFilePaths(n), a = [];
-			for (let e of r.getDefinedFiles()) {
-				let n = decodeURI(t.resolve(r.url, e));
+			let i = yield t.getFilePaths(n), a = [];
+			for (let t of r.getDefinedFiles()) {
+				let n = decodeURI(e.resolve(r.url, t));
 				i.includes(n) && a.push(n);
 			}
-			let o = yield e.getFiles(n, a);
+			let o = yield t.getFiles(n, a);
 			for (let e = 0; e < o.length; e++) {
 				let t = a[e], n = o[e];
 				Object.defineProperty(n, "webkitRelativePath", { value: t });
@@ -2985,15 +2949,15 @@ var hr = "Live2DFactory", gr = (e, t) => f(void 0, null, function* () {
 			return o;
 		});
 	}
-	static createSettings(t) {
+	static createSettings(e) {
 		return f(this, null, function* () {
-			let n = (yield e.getFilePaths(t)).find((e) => e.endsWith("model.json") || e.endsWith("model3.json"));
+			let n = (yield t.getFilePaths(e)).find((e) => e.endsWith("model.json") || e.endsWith("model3.json"));
 			if (!n) throw Error("Settings file not found");
-			let r = yield e.readText(t, n);
+			let r = yield t.readText(e, n);
 			if (!r) throw Error("Empty settings file: " + n);
 			let i = JSON.parse(r);
 			i.url = n;
-			let a = e.live2dFactory.findRuntime(i);
+			let a = t.live2dFactory.findRuntime(i);
 			if (!a) throw Error("Unknown settings JSON");
 			return a.createModelSettings(i);
 		});
@@ -3039,27 +3003,27 @@ d(J, "live2dFactory"), d(J, "ZIP_PROTOCOL", "zip://"), d(J, "uid", 0), d(J, "fac
 	}
 	return t();
 }));
-var Sr = J, Y = class e {
-	static resolveURL(t, n) {
-		let r = e.filesMap[t]?.[n];
+var Sr = J, Y = class t {
+	static resolveURL(e, n) {
+		let r = t.filesMap[e]?.[n];
 		if (r === void 0) throw Error("Cannot find this file from uploaded files: " + n);
 		return r;
 	}
 	static upload(n, r) {
 		return f(this, null, function* () {
 			let i = {};
-			for (let e of r.getDefinedFiles()) {
-				let a = decodeURI(t.resolve(r.url, e)), o = n.find((e) => e.webkitRelativePath === a);
-				o && (i[e] = URL.createObjectURL(o));
+			for (let t of r.getDefinedFiles()) {
+				let a = decodeURI(e.resolve(r.url, t)), o = n.find((e) => e.webkitRelativePath === a);
+				o && (i[t] = URL.createObjectURL(o));
 			}
-			e.filesMap[r._objectURL] = i;
+			t.filesMap[r._objectURL] = i;
 		});
 	}
-	static createSettings(t) {
+	static createSettings(e) {
 		return f(this, null, function* () {
-			let n = t.find((e) => e.name.endsWith("model.json") || e.name.endsWith("model3.json"));
+			let n = e.find((e) => e.name.endsWith("model.json") || e.name.endsWith("model3.json"));
 			if (!n) throw TypeError("Settings file not found");
-			let r = yield e.readText(n), i = JSON.parse(r);
+			let r = yield t.readText(n), i = JSON.parse(r);
 			i.url = n.webkitRelativePath;
 			let a = Z.findRuntime(i);
 			if (!a) throw Error("Unknown settings JSON");
@@ -3251,9 +3215,9 @@ function Dr(e) {
 function Or(e) {
 	this.onPointerMove(e);
 }
-var kr = class extends i {}, Q = new a(), Ar = new e(), jr = class extends s {
+var kr = class extends a {}, Q = new n(), Ar = new i(), jr = class extends s {
 	constructor(e) {
-		super(), d(this, "tag", "Live2DModel(uninitialized)"), d(this, "internalModel"), d(this, "textures", []), d(this, "transform", new kr()), d(this, "anchor", new n(this.onAnchorChange, this, 0, 0)), d(this, "glContextID", -1), d(this, "elapsedTime", 0), d(this, "deltaTime", 0), d(this, "automator"), this.automator = new Tr(this, e), this.once("modelLoaded", () => this.init(e));
+		super(), d(this, "tag", "Live2DModel(uninitialized)"), d(this, "internalModel"), d(this, "textures", []), d(this, "transform", new kr()), d(this, "anchor", new t(this.onAnchorChange, this, 0, 0)), d(this, "glContextID", -1), d(this, "elapsedTime", 0), d(this, "deltaTime", 0), d(this, "automator"), this.automator = new Tr(this, e), this.once("modelLoaded", () => this.init(e));
 	}
 	static from(e, t) {
 		let n = new this(t);
@@ -3388,8 +3352,8 @@ var Mr = class extends Yn {
 		super.destroy(), this.queueManager.release(), this.queueManager = void 0;
 	}
 }, Pr = new S(), Fr = class extends cr {
-	constructor(t, n, r) {
-		super(), d(this, "settings"), d(this, "coreModel"), d(this, "motionManager"), d(this, "lipSync", !0), d(this, "breath", p.create()), d(this, "eyeBlink"), d(this, "userData"), d(this, "renderer", new Bt()), d(this, "idParamAngleX", Yt), d(this, "idParamAngleY", Xt), d(this, "idParamAngleZ", Zt), d(this, "idParamEyeBallX", nn), d(this, "idParamEyeBallY", rn), d(this, "idParamBodyAngleX", _n), d(this, "idParamBreath", bn), d(this, "pixelsPerUnit", 1), d(this, "centeringTransform", new e()), this.coreModel = t, this.settings = n, this.motionManager = new Nr(n, r), this.init();
+	constructor(e, t, n) {
+		super(), d(this, "settings"), d(this, "coreModel"), d(this, "motionManager"), d(this, "lipSync", !0), d(this, "breath", p.create()), d(this, "eyeBlink"), d(this, "userData"), d(this, "renderer", new Bt()), d(this, "idParamAngleX", Yt), d(this, "idParamAngleY", Xt), d(this, "idParamAngleZ", Zt), d(this, "idParamEyeBallX", nn), d(this, "idParamEyeBallY", rn), d(this, "idParamBodyAngleX", _n), d(this, "idParamBreath", bn), d(this, "pixelsPerUnit", 1), d(this, "centeringTransform", new i()), this.coreModel = e, this.settings = t, this.motionManager = new Nr(t, n), this.init();
 	}
 	init() {
 		super.init(), this.settings.getEyeBlinkParameters()?.length && (this.eyeBlink = g.create(this.settings)), this.breath.setParameters([

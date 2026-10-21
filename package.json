@@ -1,7 +1,7 @@
 {
   "name": "clawd-on-desk",
   "productName": "JAVIS",
-  "version": "0.11.0",
+  "version": "0.12.1",
   "description": "JAVIS — trợ lý AI trên máy tính (nhân vật Hiyori), phản ứng theo phiên Claude Code / Codex / Gemini / Cursor và chat chung với JAVIS web.",
   "main": "src/main.js",
   "scripts": {

@@ -53,195 +53,12 @@ const SIZES = {
   L: { width: 360, height: 360 },
 };
 
-// ── Internationalization ──
-const i18n = {
-  en: {
-    size: "Size",
-    small: "Small (S)",
-    medium: "Medium (M)",
-    large: "Large (L)",
-    miniMode: "Mini Mode",
-    exitMiniMode: "Exit Mini Mode",
-    sleep: "Sleep (Do Not Disturb)",
-    wake: "Wake JAVIS",
-    startOnLogin: "Start on Login",
-    startWithClaude: "Start with Claude Code",
-    showInMenuBar: "Show in Menu Bar",
-    showInDock: "Show in Dock",
-    language: "Language",
-    checkForUpdates: "Check for Updates",
-    checkingForUpdates: "Checking for Updates…",
-    updateAvailable: "Update Available",
-    updateAvailableMsg: "v{version} is available. Download and install now?",
-    updateAvailableMacMsg: "v{version} is available. Open the download page?",
-    updateNotAvailable: "You're Up to Date",
-    updateNotAvailableMsg: "JAVIS v{version} is the latest version.",
-    updateDownloading: "Downloading Update…",
-    updateReady: "Update Ready",
-    updateReadyMsg: "v{version} has been downloaded. Restart now to update?",
-    updateError: "Update Error",
-    updateErrorMsg: "Failed to check for updates. Please try again later.",
-    restartNow: "Restart Now",
-    restartLater: "Later",
-    download: "Download",
-    bubbleFollow: "Bubble Follow Pet",
-    hideBubbles: "Hide Bubbles",
-    ghostMode: "Ghost Matrix Mode",
-    assistantMode24x7: "24/7 Assistant Mode",
-    showSessionId: "Show Session ID",
-    sessions: "Sessions",
-    noSessions: "No active sessions",
-    sessionLocal: "Local",
-    sessionWorking: "Working",
-    sessionThinking: "Thinking",
-    sessionJuggling: "Juggling",
-    sessionIdle: "Idle",
-    sessionSleeping: "Sleeping",
-    sessionJustNow: "just now",
-    sessionMinAgo: "{n}m ago",
-    sessionHrAgo: "{n}h ago",
-    showPet: "Show JAVIS",
-    hidePet: "Hide JAVIS",
-    toggleShortcut: "Toggle Shortcut: {shortcut}",
-    rabbitMode: "Rabbit Mode 🐰",
-    rabbitInterval: "Rabbit Interval",
-    rabbitMinutes: "{n} min",
-    rabbitShowNow: "Show Rabbit Now",
-    character: "Character",
-    characterClawd: "Crab (classic)",
-    characterHiyori: "Hiyori (default)",
-    javisOpenChat: "💬 Chat with JAVIS…",
-    javisPair: "🔗 Pair JAVIS…",
-    javisAbout: "About JAVIS",
-    javisEnglishCoach: "📚 English Coach (legacy)…",
-    characterBunny: "Bunny 🐰",
-    characterLive2D: "Live2D Characters",
-    characterVRM: "VRM 3D Characters",
-    characterAddLive2D: "Add Live2D Character…",
-    characterAddVRM: "Add VRM Character…",
-    characterEmpty: "(none yet — drop files in folder)",
-    bumbee: "Bumbee Hub",
-    bumbeeOpenChat: "💬 Mở JAVIS Chat…",
-    bumbeeOpenOs: "🐝 Mở Bumbee OS…",
-    bumbeeOpenDashboard: "📊 Dashboard điều hành…",
-    bumbeeOpenVocab: "📇 Lướt thẻ từ vựng…",
-    bumbeeOpenChallenge: "🎮 Chơi game từ vựng (bật lại)…",
-    bumbeeAutoChallenge: "🎯 Tự động nảy game học",
-    bumbeeAutoSource: "Auto-mine vocab from clipboard 📋",
-    bumbeeGrabClipboard: "Mine clipboard now",
-    bumbeeSyncTma: "🔄 Đồng bộ từ vựng với Telegram",
-    bumbeeOpenPhaseHub: "Open Phase Hub…",
-    bumbeeStatus: "Connection Status…",
-    bumbeeReloadSkills: "Reload Skills ({n})",
-    bumbeeOpenSkillsFolder: "Open Skills Folder",
-    bumbeeRegister: "Re-register with Gateway",
-    bumbeeSmartHint: "Smart endpoints: POST /chat, POST /skills/trigger",
-    bumbeeStatusTitle: "Bumbee integrations",
-    bumbeeStatusGw: "Gateway: {url} — {state}",
-    bumbeeStatusBot: "Clawdbot: {url} — {state}",
-    bumbeeStatusSkills: "Skills: {n} loaded",
-    bumbeeStatusSmart: "Smart layer: {state} ({endpoint})",
-    bumbeeStateOk: "connected",
-    bumbeeStateOff: "offline",
-    bumbeeStateDisabled: "disabled",
-    quit: "Quit",
-  },
-  zh: {
-    size: "大小",
-    small: "小 (S)",
-    medium: "中 (M)",
-    large: "大 (L)",
-    miniMode: "极简模式",
-    exitMiniMode: "退出极简模式",
-    sleep: "休眠（免打扰）",
-    wake: "唤醒 JAVIS",
-    startOnLogin: "开机自启",
-    startWithClaude: "随 Claude Code 启动",
-    showInMenuBar: "在菜单栏显示",
-    showInDock: "在 Dock 显示",
-    language: "语言",
-    checkForUpdates: "检查更新",
-    checkingForUpdates: "正在检查更新…",
-    updateAvailable: "发现新版本",
-    updateAvailableMsg: "v{version} 已发布，是否下载并安装？",
-    updateAvailableMacMsg: "v{version} 已发布，是否打开下载页面？",
-    updateNotAvailable: "已是最新版本",
-    updateNotAvailableMsg: "JAVIS v{version} 已是最新版本。",
-    updateDownloading: "正在下载更新…",
-    updateReady: "更新就绪",
-    updateReadyMsg: "v{version} 已下载完成，是否立即重启以完成更新？",
-    updateError: "更新失败",
-    updateErrorMsg: "检查更新失败，请稍后再试。",
-    restartNow: "立即重启",
-    restartLater: "稍后",
-    download: "下载",
-    bubbleFollow: "气泡跟随宠物",
-    hideBubbles: "隐藏气泡",
-    ghostMode: "幽灵矩阵模式",
-    assistantMode24x7: "24/7 助手模式",
-    showSessionId: "显示会话编号",
-    sessions: "会话",
-    noSessions: "无活跃会话",
-    sessionLocal: "本机",
-    sessionWorking: "工作中",
-    sessionThinking: "思考中",
-    sessionJuggling: "多任务",
-    sessionIdle: "空闲",
-    sessionSleeping: "睡眠",
-    sessionJustNow: "刚刚",
-    sessionMinAgo: "{n}分钟前",
-    sessionHrAgo: "{n}小时前",
-    showPet: "显示 JAVIS",
-    hidePet: "隐藏 JAVIS",
-    toggleShortcut: "切换快捷键: {shortcut}",
-    rabbitMode: "兔兔模式 🐰",
-    rabbitInterval: "兔兔间隔",
-    rabbitMinutes: "{n} 分钟",
-    rabbitShowNow: "立即出现",
-    character: "角色",
-    characterClawd: "螃蟹（经典）",
-    characterHiyori: "Hiyori（默认）",
-    javisOpenChat: "💬 与 JAVIS 聊天…",
-    javisPair: "🔗 配对 JAVIS…",
-    javisAbout: "关于 JAVIS",
-    javisEnglishCoach: "📚 English Coach（旧版）…",
-    characterBunny: "小兔 🐰",
-    characterLive2D: "Live2D 角色",
-    characterVRM: "VRM 3D 角色",
-    bumbee: "Bumbee 集成",
-    bumbeeOpenChat: "打开 Bumbee 聊天…",
-    bumbeeOpenChallenge: "词汇挑战（游戏）…",
-    bumbeeAutoChallenge: "自动弹出挑战 🎯",
-    bumbeeAutoSource: "从剪贴板自动挖词 📋",
-    bumbeeGrabClipboard: "立即挖取剪贴板",
-    bumbeeSyncTma: "同步词汇到 Telegram 🔄",
-    bumbeeOpenOs: "打开 Bumbee OS…",
-    bumbeeOpenDashboard: "打开经营仪表盘…",
-    bumbeeOpenPhaseHub: "打开 Phase Hub…",
-    bumbeeStatus: "连接状态…",
-    bumbeeReloadSkills: "重载技能 ({n})",
-    bumbeeOpenSkillsFolder: "打开技能目录",
-    bumbeeRegister: "重新注册到网关",
-    bumbeeSmartHint: "智能接口: POST /chat, POST /skills/trigger",
-    bumbeeStatusTitle: "Bumbee 集成状态",
-    bumbeeStatusGw: "网关: {url} — {state}",
-    bumbeeStatusBot: "Clawdbot: {url} — {state}",
-    bumbeeStatusSkills: "技能: 已加载 {n}",
-    bumbeeStatusSmart: "智能层: {state} ({endpoint})",
-    bumbeeStateOk: "已连接",
-    bumbeeStateOff: "离线",
-    bumbeeStateDisabled: "已禁用",
-    characterAddLive2D: "添加 Live2D 文件夹…",
-    characterAddVRM: "添加 VRM 文件夹…",
-    characterEmpty: "（暂无 — 请将文件放入文件夹）",
-    quit: "退出",
-  },
-};
+const { translate, LANGS } = require("./i18n");
 
 module.exports = function initMenu(ctx) {
   // ── Translation helper ──
   function t(key) {
-    return (i18n[ctx.lang] || i18n.en)[key] || key;
+    return translate(ctx.lang, key);
   }
 
   // ── Character skin menu item (shared by tray + context menu) ──
@@ -280,7 +97,7 @@ module.exports = function initMenu(ctx) {
 
     const live2dItems = lists.live2d.length
       ? lists.live2d.map((s) => ({
-          label: brand.isLive2DSampleSkin(s) ? `${brand.sampleDisplayName(s.name)} · Live2D sample` : s.name,
+          label: brand.isLive2DSampleSkin(s) ? `${brand.sampleDisplayName(s.name)} · ${t("live2dSample")}` : s.name,
           type: "radio",
           checked: current === s.id,
           click: () => { ctx.setCharacterSkin(s.id); rebuildAllMenus(); },
@@ -318,19 +135,85 @@ module.exports = function initMenu(ctx) {
     };
   }
 
+  // ── 0.12.0 top items: Việc chờ anh · Đọc báo cáo · AI Clipboard ──
+  function inboxLabel() {
+    const s = ctx.getInbox ? ctx.getInbox() : null;
+    if (!s || !s.paired) return t("inboxNotPaired");
+    return s.count ? t("inboxCount").replace("{n}", s.count) : t("inbox");
+  }
+
+  function buildToolItems() {
+    const reading = !!(ctx.isReading && ctx.isReading());
+    const clipAcc = ctx.getClipShortcut ? ctx.getClipShortcut() : "";
+    return [
+      {
+        label: inboxLabel(),
+        enabled: typeof ctx.openInbox === "function",
+        click: () => { if (ctx.openInbox) ctx.openInbox(); },
+      },
+      reading
+        ? { label: t("stopReading"), click: () => { if (ctx.stopReading) ctx.stopReading(); rebuildAllMenus(); } }
+        : { label: t("readReport"), enabled: typeof ctx.readReport === "function", click: () => { if (ctx.readReport) ctx.readReport(); } },
+      {
+        // The real shortcut is global (registered in main). macOS shows it as a menu hint;
+        // GTK/Windows menus can't show unregistered accelerators, so it goes in the label.
+        label: clipAcc && !isMac ? `${t("aiClipboard")}   ${ctx.shortcutLabel(clipAcc)}` : t("aiClipboard"),
+        enabled: typeof ctx.openClipboard === "function",
+        ...(clipAcc && isMac ? { accelerator: clipAcc, registerAccelerator: false } : {}),
+        click: () => { if (ctx.openClipboard) ctx.openClipboard(); },
+      },
+    ];
+  }
+
+  function buildClipShortcutMenuItem() {
+    const current = ctx.getClipShortcut ? ctx.getClipShortcut() : "";
+    const choices = ctx.clipShortcutChoices || [];
+    return {
+      label: t("clipShortcut"),
+      submenu: choices.map((acc) => ({
+        label: acc ? ctx.shortcutLabel(acc) : t("shortcutOff"),
+        type: "radio",
+        checked: current === acc,
+        click: () => { if (ctx.setClipShortcut) ctx.setClipShortcut(acc); },
+      })),
+    };
+  }
+
+  function buildLanguageMenuItem() {
+    return {
+      label: t("language"),
+      submenu: [
+        { label: "Tiếng Việt", type: "radio", checked: ctx.lang === "vi", click: () => setLanguage("vi") },
+        { label: "English", type: "radio", checked: ctx.lang === "en", click: () => setLanguage("en") },
+        { label: "中文", type: "radio", checked: ctx.lang === "zh", click: () => setLanguage("zh") },
+      ],
+    };
+  }
+
+  // Signed out: "Đăng nhập JAVIS…". Signed in: "Đã đăng nhập: <email>" (opens Settings).
+  function javisLoginItem() {
+    const a = ctx.getJavisAuth ? ctx.getJavisAuth() : null;
+    const label = a && a.signedIn
+      ? t("javisSignedIn").replace("{email}", a.email || t("javisDeviceKey"))
+      : t("javisLogin");
+    return {
+      label,
+      enabled: typeof ctx.openJavisLogin === "function",
+      click: () => { if (ctx.openJavisLogin) ctx.openJavisLogin(); },
+    };
+  }
+
   // ── JAVIS assistant items (shared by tray + context menu) ──
   function buildJavisItems() {
     return [
+      ...buildToolItems(),
+      { type: "separator" },
       {
         label: t("javisOpenChat"),
         enabled: typeof ctx.openJavisChat === "function",
         click: () => { if (ctx.openJavisChat) ctx.openJavisChat(); },
       },
-      {
-        label: t("javisPair"),
-        enabled: typeof ctx.openJavisPairing === "function",
-        click: () => { if (ctx.openJavisPairing) ctx.openJavisPairing(); },
-      },
+      javisLoginItem(),
       {
         label: t("javisAbout"),
         enabled: typeof ctx.showAbout === "function",
@@ -559,7 +442,7 @@ module.exports = function initMenu(ctx) {
             title: t("bumbeeStatusTitle"),
             message: t("bumbeeStatusTitle"),
             detail: lines.join("\n"),
-            buttons: ["OK"],
+            buttons: [t("ok")],
           });
         },
       },
@@ -578,7 +461,7 @@ module.exports = function initMenu(ctx) {
                 type: "info",
                 title: t("bumbee"),
                 message: t("bumbeeStatusSkills").replace("{n}", r.count),
-                buttons: ["OK"],
+                buttons: [t("ok")],
               });
             } catch {}
           }
@@ -605,8 +488,8 @@ module.exports = function initMenu(ctx) {
     ];
 
     const stateBadges = [
-      gw ? `gw:${stateLabel(gw)}` : null,
-      bot ? `bot:${stateLabel(bot)}` : null,
+      gw ? `Gateway: ${stateLabel(gw)}` : null,
+      bot ? `Clawdbot: ${stateLabel(bot)}` : null,
     ].filter(Boolean).join(" • ");
 
     return {
@@ -743,13 +626,7 @@ module.exports = function initMenu(ctx) {
       { type: "separator" },
       ctx.getUpdateMenuItem(),
       { type: "separator" },
-      {
-        label: t("language"),
-        submenu: [
-          { label: "English", type: "radio", checked: ctx.lang === "en", click: () => setLanguage("en") },
-          { label: "中文", type: "radio", checked: ctx.lang === "zh", click: () => setLanguage("zh") },
-        ],
-      },
+      buildLanguageMenuItem(),
       { type: "separator" },
       {
         label: ctx.petHidden ? t("showPet") : t("hidePet"),
@@ -759,6 +636,7 @@ module.exports = function initMenu(ctx) {
         label: t("toggleShortcut").replace("{shortcut}", isMac ? "⌘⇧⌥C" : "Ctrl+Shift+Alt+C"),
         enabled: false,
       },
+      buildClipShortcutMenuItem(),
       { type: "separator" },
       { label: t("quit"), click: () => requestAppQuit() },
     );
@@ -797,6 +675,10 @@ module.exports = function initMenu(ctx) {
       maximizable: false,
       hasShadow: false,
     });
+
+    // Give the 1×1 owner a document: a never-navigated window has no renderer, and
+    // DevTools-based tools (the Playwright tester) wait on it forever.
+    ctx.contextMenuOwner.loadURL("about:blank").catch(() => {});
 
     // macOS: ensure owner can appear on fullscreen Spaces
     ctx.reapplyMacVisibility();
@@ -929,6 +811,8 @@ module.exports = function initMenu(ctx) {
     }
     template.push(
       { type: "separator" },
+      buildLanguageMenuItem(),
+      buildClipShortcutMenuItem(),
       {
         label: t("toggleShortcut").replace("{shortcut}", isMac ? "⌘⇧⌥C" : "Ctrl+Shift+Alt+C"),
         enabled: false,
@@ -946,6 +830,7 @@ module.exports = function initMenu(ctx) {
   }
 
   function setLanguage(newLang) {
+    if (!LANGS.includes(newLang)) return;
     ctx.lang = newLang;
     rebuildAllMenus();
     ctx.savePrefs();

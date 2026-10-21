@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+  <title>Việc chờ anh</title>
+  <link rel="stylesheet" href="javis-tools.css">
+</head>
+<body>
+  <header class="top">
+    <img src="icon.png" alt="">
+    <div class="who"><b>Việc chờ anh</b><small id="sub">Đang tải…</small></div>
+    <span id="count" class="badge zero">0</span>
+  </header>
+  <main>
+    <section id="not-paired" class="hidden">
+      <div class="card">
+        <p><b>Máy này chưa đăng nhập JAVIS.</b></p>
+        <p class="muted">Đăng nhập một lần là thấy việc chờ anh ngay trên máy, dùng lâu dài.</p>
+        <button id="btn-login" class="primary">Đăng nhập JAVIS</button>
+      </div>
+    </section>
+    <section id="error" class="card hidden">
+      <p class="warn" id="error-text"></p>
+      <button id="btn-retry">Thử lại</button>
+    </section>
+    <section id="empty" class="card hidden">
+      <p><b>Không có việc nào chờ anh. 🎉</b></p>
+      <p class="muted">Khi có việc mới cần anh duyệt, cô bé sẽ báo nhẹ (trừ lúc đang ngủ).</p>
+    </section>
+    <ul id="list" class="items"></ul>
+  </main>
+  <footer>
+    <span id="updated"></span><span class="sp"></span>
+    <button id="btn-web" class="small">Mở JAVIS web</button>
+    <button id="btn-refresh" class="small">Làm mới</button>
+  </footer>
+  <script src="javis-inbox-page.js"></script>
+</body>
+</html>

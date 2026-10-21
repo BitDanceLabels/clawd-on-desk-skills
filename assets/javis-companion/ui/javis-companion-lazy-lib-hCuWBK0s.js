@@ -1,4 +1,4 @@
-import { a as e, c as t, d as n, h as r, l as i, m as a, o, p as s, r as c, u as l } from "./javis-companion-lazy-lib-BEBkEh7I.js";
+import { C as e, E as t, b as n, d as r, l as i, m as a, p as o, s, w as c, y as l } from "./javis-companion-lazy-lib-FoDFHkt2.js";
 //#region node_modules/@pixi/display/lib/Bounds.mjs
 var u = class {
 	constructor() {
@@ -11,7 +11,7 @@ var u = class {
 		this.minX = 1 / 0, this.minY = 1 / 0, this.maxX = -1 / 0, this.maxY = -1 / 0;
 	}
 	getRectangle(e) {
-		return this.minX > this.maxX || this.minY > this.maxY ? o.EMPTY : (e ||= new o(0, 0, 1, 1), e.x = this.minX, e.y = this.minY, e.width = this.maxX - this.minX, e.height = this.maxY - this.minY, e);
+		return this.minX > this.maxX || this.minY > this.maxY ? r.EMPTY : (e ||= new r(0, 0, 1, 1), e.x = this.minX, e.y = this.minY, e.width = this.maxX - this.minX, e.height = this.maxY - this.minY, e);
 	}
 	addPoint(e) {
 		this.minX = Math.min(this.minX, e.x), this.maxX = Math.max(this.maxX, e.x), this.minY = Math.min(this.minY, e.y), this.maxY = Math.max(this.maxY, e.y);
@@ -79,7 +79,7 @@ var u = class {
 	}
 }, d = class e extends l.default {
 	constructor() {
-		super(), this.tempDisplayObjectParent = null, this.transform = new c(), this.alpha = 1, this.visible = !0, this.renderable = !0, this.cullable = !1, this.cullArea = null, this.parent = null, this.worldAlpha = 1, this._lastSortedIndex = 0, this._zIndex = 0, this.filterArea = null, this.filters = null, this._enabledFilters = null, this._bounds = new u(), this._localBounds = null, this._boundsID = 0, this._boundsRect = null, this._localBoundsRect = null, this._mask = null, this._maskRefCount = 0, this._destroyed = !1, this.isSprite = !1, this.isMask = !1;
+		super(), this.tempDisplayObjectParent = null, this.transform = new s(), this.alpha = 1, this.visible = !0, this.renderable = !0, this.cullable = !1, this.cullArea = null, this.parent = null, this.worldAlpha = 1, this._lastSortedIndex = 0, this._zIndex = 0, this.filterArea = null, this.filters = null, this._enabledFilters = null, this._bounds = new u(), this._localBounds = null, this._boundsID = 0, this._boundsRect = null, this._localBoundsRect = null, this._mask = null, this._maskRefCount = 0, this._destroyed = !1, this.isSprite = !1, this.isMask = !1;
 	}
 	static mixin(t) {
 		let n = Object.keys(t);
@@ -98,16 +98,16 @@ var u = class {
 		this._boundsID++, this.transform.updateTransform(this.parent.transform), this.worldAlpha = this.alpha * this.parent.worldAlpha;
 	}
 	getBounds(e, t) {
-		return e || (this.parent ? (this._recursivePostUpdateTransform(), this.updateTransform()) : (this.parent = this._tempDisplayObjectParent, this.updateTransform(), this.parent = null)), this._bounds.updateID !== this._boundsID && (this.calculateBounds(), this._bounds.updateID = this._boundsID), t ||= (this._boundsRect ||= new o(), this._boundsRect), this._bounds.getRectangle(t);
+		return e || (this.parent ? (this._recursivePostUpdateTransform(), this.updateTransform()) : (this.parent = this._tempDisplayObjectParent, this.updateTransform(), this.parent = null)), this._bounds.updateID !== this._boundsID && (this.calculateBounds(), this._bounds.updateID = this._boundsID), t ||= (this._boundsRect ||= new r(), this._boundsRect), this._bounds.getRectangle(t);
 	}
 	getLocalBounds(e) {
-		e ||= (this._localBoundsRect ||= new o(), this._localBoundsRect), this._localBounds ||= new u();
+		e ||= (this._localBoundsRect ||= new r(), this._localBoundsRect), this._localBounds ||= new u();
 		let t = this.transform, n = this.parent;
 		this.parent = null, this._tempDisplayObjectParent.worldAlpha = n?.worldAlpha ?? 1, this.transform = this._tempDisplayObjectParent.transform;
-		let r = this._bounds, i = this._boundsID;
+		let i = this._bounds, a = this._boundsID;
 		this._bounds = this._localBounds;
-		let a = this.getBounds(!1, e);
-		return this.parent = n, this.transform = t, this._bounds = r, this._bounds.updateID += this._boundsID - i, a;
+		let o = this.getBounds(!1, e);
+		return this.parent = n, this.transform = t, this._bounds = i, this._bounds.updateID += this._boundsID - a, o;
 	}
 	toGlobal(e, t, n = !1) {
 		return n || (this._recursivePostUpdateTransform(), this.parent ? this.displayObjectUpdateTransform() : (this.parent = this._tempDisplayObjectParent, this.displayObjectUpdateTransform(), this.parent = null)), this.worldTransform.apply(e, t);
@@ -187,10 +187,10 @@ var u = class {
 		this.transform.rotation = e;
 	}
 	get angle() {
-		return this.transform.rotation * i;
+		return this.transform.rotation * a;
 	}
 	set angle(e) {
-		this.transform.rotation = e * t;
+		this.transform.rotation = e * o;
 	}
 	get zIndex() {
 		return this._zIndex;
@@ -229,7 +229,7 @@ var u = class {
 d.prototype.displayObjectUpdateTransform = d.prototype.updateTransform;
 //#endregion
 //#region node_modules/@pixi/display/lib/Container.mjs
-var p = new e();
+var p = new i();
 function m(e, t) {
 	return e.zIndex === t.zIndex ? e._lastSortedIndex - t._lastSortedIndex : e.zIndex - t.zIndex;
 }
@@ -355,18 +355,18 @@ var h = class e extends d {
 		}
 	}
 	renderAdvanced(e) {
-		let t = this.filters, n = this._mask;
-		if (t) {
+		let n = this.filters, r = this._mask;
+		if (n) {
 			this._enabledFilters ||= [], this._enabledFilters.length = 0;
-			for (let e = 0; e < t.length; e++) t[e].enabled && this._enabledFilters.push(t[e]);
+			for (let e = 0; e < n.length; e++) n[e].enabled && this._enabledFilters.push(n[e]);
 		}
-		let i = t && this._enabledFilters?.length || n && (!n.isMaskData || n.enabled && (n.autoDetect || n.type !== r.NONE));
-		if (i && e.batch.flush(), t && this._enabledFilters?.length && e.filter.push(this, this._enabledFilters), n && e.mask.push(this, this._mask), this.cullable) this._renderWithCulling(e);
+		let i = n && this._enabledFilters?.length || r && (!r.isMaskData || r.enabled && (r.autoDetect || r.type !== t.NONE));
+		if (i && e.batch.flush(), n && this._enabledFilters?.length && e.filter.push(this, this._enabledFilters), r && e.mask.push(this, this._mask), this.cullable) this._renderWithCulling(e);
 		else {
 			this._render(e);
 			for (let t = 0, n = this.children.length; t < n; ++t) this.children[t].render(e);
 		}
-		i && e.batch.flush(), n && e.mask.pop(this), t && this._enabledFilters?.length && e.filter.pop();
+		i && e.batch.flush(), r && e.mask.pop(this), n && this._enabledFilters?.length && e.filter.pop();
 	}
 	_render(e) {}
 	destroy(e) {
@@ -393,12 +393,12 @@ h.defaultSortableChildren = !1;
 var g = h;
 //#endregion
 //#region node_modules/@pixi/display/lib/settings.mjs
-g.prototype.containerUpdateTransform = g.prototype.updateTransform, Object.defineProperties(a, { SORTABLE_CHILDREN: {
+g.prototype.containerUpdateTransform = g.prototype.updateTransform, Object.defineProperties(c, { SORTABLE_CHILDREN: {
 	get() {
 		return g.defaultSortableChildren;
 	},
-	set(e) {
-		s("7.1.0", "settings.SORTABLE_CHILDREN is deprecated, use Container.defaultSortableChildren"), g.defaultSortableChildren = e;
+	set(t) {
+		e("7.1.0", "settings.SORTABLE_CHILDREN is deprecated, use Container.defaultSortableChildren"), g.defaultSortableChildren = t;
 	}
 } });
 //#endregion

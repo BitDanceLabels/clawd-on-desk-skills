@@ -22,10 +22,11 @@ const DEFAULT_INTERVAL_MIN = 60;
 const MESSAGES = {
   en: ["Hi! 🥕", "Hop hop!", "Take a break!", "Snack time?", "Stretch a bit!"],
   zh: ["嗨！🥕", "蹦蹦跳跳~", "休息一下吧！", "来点零食？", "伸个懒腰~"],
+  vi: ["Chào anh! 🥕", "Nhảy nhảy nào!", "Nghỉ tay chút anh!", "Uống ngụm nước nhé?", "Vươn vai cái nào!"],
 };
 
 function pickMessage(lang) {
-  const list = MESSAGES[lang] || MESSAGES.en;
+  const list = MESSAGES[lang] || MESSAGES.vi;
   return list[Math.floor(Math.random() * list.length)];
 }
 
@@ -113,12 +114,13 @@ module.exports = function initRabbit(ctx) {
   }
 
   function showNow() {
-    if (ctx.isDoNotDisturb && ctx.isDoNotDisturb()) {
+    // Anh đang gõ/chat cũng hoãn như Không làm phiền: thỏ không nhảy ra giữa lúc làm việc.
+    if ((ctx.isDoNotDisturb && ctx.isDoNotDisturb()) || (ctx.isUserBusy && ctx.isUserBusy())) {
       // Skip during DND; reschedule next slot
       scheduleNext();
       return;
     }
-    const lang = (ctx.getLang && ctx.getLang()) || "en";
+    const lang = (ctx.getLang && ctx.getLang()) || "vi";
     const message = pickMessage(lang);
 
     const win = createPopup();
