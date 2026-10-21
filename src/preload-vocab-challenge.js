@@ -17,3 +17,6 @@ contextBridge.exposeInMainWorld("bumbeeChallenge", {
   // main asks the popup to reload the current round (e.g. after scheduler re-show)
   onRefresh: (cb) => ipcRenderer.on("challenge-refresh", () => { try { cb(); } catch {} }),
 });
+
+// Thẻ tự nảy hiện mà không giành con trỏ; anh bấm vào thẻ thì mới nhận phím.
+window.addEventListener("pointerdown", () => ipcRenderer.send("vocab-challenge:activate"), true);

@@ -519,7 +519,8 @@ function initJavisCompanionHost(deps) {
   }
 
   return {
-    openChat: () => open(null),
+    // { inactive: true } = hiện mà không giành con trỏ (lúc app tự khởi động, anh có thể đang gõ).
+    openChat: (opts = {}) => open(null, { inactive: !!opts.inactive }),
     // { start: true } = also open the browser sign-in right away (one click from other windows).
     openLogin: (opts = {}) => {
       if (auth.isSignedIn()) return open("settings");

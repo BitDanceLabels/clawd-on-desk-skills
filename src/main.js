@@ -1,4 +1,5 @@
-const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer, Notification, dialog } = require("electron");
+const { app, BrowserWindow, screen, Menu, ipcMain, globalShortcut, session, systemPreferences, desktopCapturer, Notification, dialog, powerMonitor } = require("electron");
+const _focusGuard = require("./focus-guard").createFocusGuard({ powerMonitor });
 // Keep the pre-JAVIS userData folder (prefs, vocab, chat history, cookies) — before anything reads it.
 require("./user-data-path").pinUserDataPath(app);
 // javis-desk:// serves the JAVIS chat page and proxies /fleet/* (must be registered before ready).
@@ -2192,11 +2193,11 @@ function getJavisHost() {
   return _javisHost;
 }
 
-function openJavisChat() {
+function openJavisChat(opts = {}) {
   const host = getJavisHost();
   if (!host) return;
   registerHomeIpc(host);
-  host.openChat();
+  host.openChat(opts);
   watchForVocabLayout(host.getWindow());
 }
 
@@ -2214,7 +2215,7 @@ function registerHomeIpc(host) {
     return { total: words.length, due: countDueVocab(db, Date.now()), mastered: words.filter((w) => w.mastered).length };
   });
   handle("open-vocab", (kind) => {
-    if (kind === "game") openVocabChallenge();
+    if (kind === "game") openVocabChallenge({ focus: true });
     else if (kind === "profile") openVocabProfile();
     else openVocabTinder();
     return { ok: true };
@@ -2277,6 +2278,7 @@ function getDeskTools() {
     getBounds: (w, h) => getToolBoundsNearPet(w, h),
     sendToCharacter: (channel, payload) => sendToRenderer(channel, payload),
     isDoNotDisturb: () => doNotDisturb,
+  isUserBusy: () => _focusGuard.isUserBusy(),
     isPetHidden: () => petHidden,
     onMenuChange: () => scheduleMenuRebuild(),
     openLogin: (opts) => openJavisLogin(opts),
@@ -3078,12 +3080,15 @@ function getVocabChallengeBounds(savedPos) {
   };
 }
 
-function openVocabChallenge() {
+// { focus: true } = anh tự mở (menu/Trang chủ): nhận phím ngay. Tự nảy theo lịch: hiện mà KHÔNG giành con trỏ,
+// chỉ nhận phím khi anh bấm vào thẻ (vocab-challenge:activate).
+function openVocabChallenge({ focus = false } = {}) {
   const bounds = getVocabChallengeBounds(challengeWinPos);
   if (challengeWin && !challengeWin.isDestroyed()) {
     challengeWin.setBounds(bounds);
     _challengeHiddenForChat = false;
-    challengeWin.showInactive();
+    if (!challengeWin.isFocused()) challengeWin.setFocusable(focus);
+    if (focus) { challengeWin.show(); challengeWin.focus(); } else challengeWin.showInactive();
     keepVocabClearOfChat();
     try { challengeWin.webContents.send("challenge-refresh"); } catch {}
     return;
@@ -3100,6 +3105,7 @@ function openVocabChallenge() {
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
+    focusable: focus,
     title: "Bumbee Challenge",
     show: false,
     webPreferences: {
@@ -3112,9 +3118,12 @@ function openVocabChallenge() {
   challengeWin.setAlwaysOnTop(true, "floating");
   challengeWin.loadFile(path.join(__dirname, "vocab-challenge.html"));
   challengeWin.once("ready-to-show", () => {
-    if (challengeWin && !challengeWin.isDestroyed()) challengeWin.showInactive();
+    if (!challengeWin || challengeWin.isDestroyed()) return;
+    if (focus) { challengeWin.show(); challengeWin.focus(); } else challengeWin.showInactive();
     keepVocabClearOfChat();
   });
+  // Rời thẻ → thôi nhận phím, để lần tự nảy sau không giành con trỏ.
+  challengeWin.on("blur", () => { if (challengeWin && !challengeWin.isDestroyed()) challengeWin.setFocusable(false); });
   let movedSaveTimer = null;
   challengeWin.on("moved", () => {
     if (!challengeWin || challengeWin.isDestroyed()) return;
@@ -3148,6 +3157,7 @@ function startChallengeScheduler() {
     // Only pop when there is something actually due
     const db = readVocabDb();
     if (countDueVocab(db, Date.now()) <= 0) return;
+    if (_focusGuard.isUserBusy()) return;  // anh đang gõ/chat: chờ anh ngừng tay (kiểm lại sau 30s)
     openVocabChallenge();
     // Space out the next auto-pop by the configured interval
     challengeSnoozeUntil = Date.now() + Math.max(1, vocabChallengeIntervalMin) * 60 * 1000;
@@ -3785,7 +3795,7 @@ function scheduleCoachReminder(delayMs = COACH_IDLE_PROMPT_MS) {
     coachReminderTimer = null;
     const idleLongEnough = Date.now() - coachLastInteractionAt >= Math.min(delayMs, COACH_IDLE_PROMPT_MS);
     const chatActive = chatWin && !chatWin.isDestroyed() && chatWin.isVisible() && chatWin.isFocused();
-    if (LEARN_ON_START && idleLongEnough && !chatActive) triggerCoachInteraction("idle");
+    if (LEARN_ON_START && idleLongEnough && !chatActive && !_focusGuard.isUserBusy()) triggerCoachInteraction("idle");
     scheduleCoachReminder(COACH_IDLE_PROMPT_MS);
   }, Math.max(3000, delayMs));
 }
@@ -4031,7 +4041,7 @@ const _menuCtx = {
   shortcutLabel: (acc) => deskToolsMod.shortcutLabel(acc),
   showAbout: () => showAboutJavis(),
   openBumbeeVocab: openVocabTinder,
-  openBumbeeChallenge: openVocabChallenge,
+  openBumbeeChallenge: () => openVocabChallenge({ focus: true }),
   getVocabAutoChallenge: () => vocabAutoChallenge,
   setVocabAutoChallenge: (v) => setVocabChallengeConfig({ auto: !!v }),
   getVocabAutoSource: () => vocabAutoSource,
@@ -4064,6 +4074,7 @@ const { setupAutoUpdater, checkForUpdates, getUpdateMenuItem, getUpdateMenuLabel
 // ── Rabbit periodic popup — delegated to src/rabbit.js ──
 const _rabbitCtx = {
   isDoNotDisturb: () => doNotDisturb,
+  isUserBusy: () => _focusGuard.isUserBusy(),
   getLang: () => lang,
   savePrefs,
   initialEnabled: rabbitEnabled,
@@ -4590,6 +4601,12 @@ function createWindow() {
     return { ok: true, snoozeMin: m };
   });
   ipcMain.handle("vocab-challenge:close", () => { closeVocabChallenge(); return { ok: true }; });
+  // Anh bấm vào thẻ → giờ mới nhận phím (thẻ tự nảy không giành con trỏ).
+  ipcMain.on("vocab-challenge:activate", () => {
+    if (!challengeWin || challengeWin.isDestroyed() || challengeWin.isFocused()) return;
+    challengeWin.setFocusable(true);
+    challengeWin.focus();
+  });
   // Kéo cửa sổ game bằng JS fallback (delta theo screen coords từ renderer)
   ipcMain.on("vocab-challenge:move-by", (_event, d = {}) => {
     if (!challengeWin || challengeWin.isDestroyed()) return;
@@ -4603,7 +4620,7 @@ function createWindow() {
     ok: true, auto: vocabAutoChallenge, reverse: vocabReverseMode, gameType: vocabGameType, intervalMin: vocabChallengeIntervalMin,
   }));
   ipcMain.handle("vocab-challenge:set-config", (_event, cfg = {}) => setVocabChallengeConfig(cfg));
-  ipcMain.on("open-vocab-challenge", () => openVocabChallenge());
+  ipcMain.on("open-vocab-challenge", () => openVocabChallenge({ focus: true }));
   // ── Vocab auto-source (Phase 2) ──
   ipcMain.handle("vocab-source:grab-clipboard", () => ensureAutoSource().grabClipboard(true));
   ipcMain.handle("vocab-source:add-url", (_event, url) => ensureAutoSource().addFromUrl(url));
@@ -4983,7 +5000,7 @@ if (!gotTheLock) {
           challenge: challengeWin && !challengeWin.isDestroyed() ? { ...challengeWin.getBounds(), visible: challengeWin.isVisible() } : null,
           pet: win && !win.isDestroyed() ? win.getBounds() : null,
         }),
-        openVocabChallenge: () => openVocabChallenge(),
+        openVocabChallenge: () => openVocabChallenge({ focus: true }),
         openChat: () => openJavisChat(),
         openLogin: (start) => openJavisLogin({ start: !!start }),
         authState: () => javisAuthForMenu(),
@@ -5027,7 +5044,8 @@ if (!gotTheLock) {
     if (LEARN_ON_START) {
       // Start-up chat is now the JAVIS assistant (shows "Đăng nhập JAVIS" until signed in).
       setTimeout(() => {
-        if (!app.isQuitting) openJavisChat();
+        // Tự mở lúc khởi động: không giành con trỏ của anh.
+        if (!app.isQuitting) openJavisChat({ inactive: true });
       }, 900);
       setTimeout(() => {
         if (!isQuitting) triggerCoachInteraction("welcome");

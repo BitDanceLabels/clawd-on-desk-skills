@@ -114,7 +114,8 @@ module.exports = function initRabbit(ctx) {
   }
 
   function showNow() {
-    if (ctx.isDoNotDisturb && ctx.isDoNotDisturb()) {
+    // Anh đang gõ/chat cũng hoãn như Không làm phiền: thỏ không nhảy ra giữa lúc làm việc.
+    if ((ctx.isDoNotDisturb && ctx.isDoNotDisturb()) || (ctx.isUserBusy && ctx.isUserBusy())) {
       // Skip during DND; reschedule next slot
       scheduleNext();
       return;
