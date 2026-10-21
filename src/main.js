@@ -3830,6 +3830,7 @@ function onSessionStop(sessionId) {
   if (workingMs < SAVE_KNOWLEDGE_MIN_WORKING_MS) return; // session quá ngắn
   if (Date.now() - _lastSaveKnowledgePromptAt < SAVE_KNOWLEDGE_COOLDOWN_MS) return; // vừa nhắc rồi
   if (doNotDisturb || hideBubbles) return;
+  if (_focusGuard.isUserBusy()) return; // anh đang gõ/chat: không nhảy bong bóng ra giữa chừng
   _lastSaveKnowledgePromptAt = Date.now();
   // Delay 1.5s cho attention animation chạy xong rồi mới nhắc
   setTimeout(() => {

@@ -348,7 +348,17 @@ function initJavisCompanionHost(deps) {
   const configStore = createConfigStore({ userDataDir });
   // userData/javis-auth.log: đăng nhập / refresh / 401 theo đường (không ghi token) để chẩn đoán lần sau.
   const authLog = createAuthLog({ userDataDir, mirror: (line) => console.warn(`JAVIS ${line}`) });
-  const fetchImpl = (url, init) => net.fetch(url, init);
+  const netRecover = require("./net-recover").createNetRecover({
+    getSession: () => require("electron").session.defaultSession,
+    fetchImpl: (url, init) => net.fetch(url, init),
+    log: (line) => authLog(line),
+  });
+  const fetchImpl = netRecover.fetch;
+  // Máy ngủ dậy / mở khoá: bỏ kết nối cũ trước khi app gọi lại máy chủ.
+  try {
+    const { powerMonitor } = require("electron");
+    for (const ev of ["resume", "unlock-screen"]) powerMonitor.on(ev, () => { void netRecover.reset(ev); });
+  } catch {}
   let win = null;
   // Last answer of the gateway to a chat request (401/403 = chat refused for this machine for now).
   let chatHealth = { ok: true, status: 0, at: 0 };
