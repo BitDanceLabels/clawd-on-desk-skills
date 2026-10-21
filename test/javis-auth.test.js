@@ -309,6 +309,11 @@ describe("Khoá jvk_ cũ (tương thích)", () => {
     let s = env.auth.getState();
     assert.deepStrictEqual([s.state, s.kind], ["signed_in", "legacy"]);
     assert.strictEqual(await env.auth.token(), "jvk_OLDKEYOLDKEYOLDKEY");
+    // 1 tính năng trả 401 nhưng whoami vẫn nhận khoá → giữ đăng nhập
+    assert.strictEqual(await env.auth.onUnauthorized("jvk_OLDKEYOLDKEYOLDKEY", { path: "/fleet/chat" }), null);
+    assert.strictEqual(env.auth.getState().state, "signed_in");
+    env.fake.legacy.delete("jvk_OLDKEYOLDKEYOLDKEY"); // máy chủ thu hồi khoá
+    env.clock.now += 61 * 1000;
     assert.strictEqual(await env.auth.onUnauthorized("jvk_OLDKEYOLDKEYOLDKEY"), null);
     s = env.auth.getState();
     assert.deepStrictEqual([s.state, s.notice], ["expired", TEXT.legacyRejected]);
@@ -327,6 +332,7 @@ describe("Khoá jvk_ cũ (tương thích)", () => {
 describe("Một máy trạng thái — không bao giờ 2 thông báo trái nhau", () => {
   it("mọi lần đổi trạng thái chỉ có 1 trạng thái và tối đa 1 thông báo", async () => {
     const env = setup({ preKey: "jvk_OLDKEYOLDKEYOLDKEY" });
+    env.fake.legacy.delete("jvk_OLDKEYOLDKEYOLDKEY");
     await env.auth.onUnauthorized("jvk_OLDKEYOLDKEYOLDKEY");
     await env.auth.emailStart("owner@demo.test");
     await env.auth.emailVerify(env.fake.lastMailCode("owner@demo.test"));
@@ -357,20 +363,34 @@ describe("Proxy / gateway client dùng phiên đăng nhập", () => {
     const whoami = calls.filter((c) => c.path === "/fleet/whoami");
     assert.strictEqual(whoami.length, 2);
     assert.notStrictEqual(whoami[0].auth, whoami[1].auth);
+    // giữa 2 lần: auth hỏi whoami (token cũ → 401) rồi mới refresh
+    const authSide = env.calls.map((c) => c.path);
+    assert.ok(authSide.indexOf("/fleet/whoami") >= 0 && authSide.lastIndexOf("/fleet/auth/desktop/refresh") > authSide.indexOf("/fleet/whoami"));
     assert.ok(!calls.some((c) => c.auth.includes("leak")));
   });
 
-  it("gateway client: 401 lần 2 sau refresh → kết thúc phiên; 403 không đăng xuất", async () => {
+  it("gateway client: 403 không đăng xuất; 401 của 1 tính năng (token còn tốt) → featureDenied, vẫn đăng nhập; máy bị thu hồi → hết phiên", async () => {
     const env = setup();
     await loginA(env);
     let status = 403;
+    const calls = [];
     const c = createGatewayClient({ auth: env.auth, configStore: { getGateway: () => GW }, fetchImpl: async (url, init) => {
+      calls.push(new URL(url).pathname);
       if (url.includes("/fleet/auth/")) return fakeFetch(env.fake)(url, init);
       return new Response("{}", { status });
     } });
     assert.strictEqual((await c.request("POST", "/fleet/orders/x/approve", {})).status, 403);
     assert.strictEqual(env.auth.getState().state, "signed_in");
     status = 401;
+    const r1 = await c.request("GET", "/fleet/report/morning");
+    assert.deepStrictEqual([r1.status, r1.featureDenied, r1.data.error], [403, true, "feature_denied"]);
+    assert.strictEqual(env.auth.getState().state, "signed_in");
+    const r2 = await c.request("GET", "/fleet/report/morning");
+    assert.strictEqual(r2.featureDenied, true);
+    assert.ok(!calls.some((p) => p.includes("/refresh")), "token còn tốt → không refresh");
+    assert.ok(env.fake.log.filter((l) => l === "refresh").length === 0);
+    env.fake.revokeAll();
+    env.clock.now += 61 * 1000;
     await c.request("GET", "/fleet/desk/pending");
     assert.strictEqual(env.auth.getState().state, "expired");
     assert.strictEqual(c.isPaired(), false);
@@ -400,5 +420,106 @@ describe("Proxy / gateway client dùng phiên đăng nhập", () => {
     const proxy = createFleetProxy({ auth: env.auth, configStore: { getGateway: () => GW }, fetchImpl: async () => { n++; return new Response("{}"); } });
     assert.strictEqual((await proxy.handle(new Request("javis-desk://app/fleet/chat"))).status, 401);
     assert.strictEqual(n, 0);
+  });
+});
+
+describe("FIX 21/10 · đăng nhập xong không bị đá ra vì 1 tính năng 401", () => {
+  it("whoami 401 ngay sau refresh thành công → hết phiên (không vòng lặp)", async () => {
+    const fake = createFakeAuth();
+    const base = fakeFetch(fake);
+    let whoamiCalls = 0;
+    const env = setup({ fake, fetchImpl: async (url, init) => {
+      if (url.endsWith("/fleet/whoami")) { whoamiCalls++; return new Response(JSON.stringify({ authenticated: false }), { status: 200 }); }
+      return base(url, init);
+    } });
+    await loginA(env);
+    const used = await env.auth.token();
+    const next = await env.auth.onUnauthorized(used, { path: "/fleet/chat" });
+    assert.ok(next && next !== used, "token cũ chết → refresh");
+    assert.strictEqual(await env.auth.onUnauthorized(next, { retried: true, path: "/fleet/chat" }), null);
+    assert.strictEqual(env.auth.getState().state, "expired");
+    assert.strictEqual(whoamiCalls, 2);
+  });
+
+  it("đã kiểm whoami cho đường A, máy bị thu hồi → 401 ở đường B kiểm lại ngay → hết phiên (không đợi cache 1 phút)", async () => {
+    const env = setup();
+    await loginA(env);
+    const tok = await env.auth.token();
+    assert.strictEqual(await env.auth.onUnauthorized(tok, { path: "/fleet/home/tasks" }), null);
+    assert.strictEqual(await env.auth.onUnauthorized(tok, { path: "/fleet/home/tasks" }), null);
+    assert.strictEqual(env.calls.filter((c) => c.path === "/fleet/whoami").length, 1, "cùng đường bị từ chối lặp lại → không gọi whoami dồn");
+    env.fake.revokeAll();
+    await env.auth.onUnauthorized(tok, { path: "/fleet/desk/pending" });
+    assert.strictEqual(env.auth.getState().state, "expired");
+  });
+
+  it("whoami không tới được → giữ phiên", async () => {
+    const fake = createFakeAuth();
+    const base = fakeFetch(fake);
+    const env = setup({ fake, fetchImpl: async (url, init) => {
+      if (url.endsWith("/fleet/whoami")) throw new Error("ECONNRESET");
+      return base(url, init);
+    } });
+    await loginA(env);
+    assert.strictEqual(await env.auth.onUnauthorized(await env.auth.token(), { retried: true }), null);
+    assert.strictEqual(env.auth.getState().state, "signed_in");
+  });
+
+  it("refresh trả 400 không có relogin → giữ phiên", async () => {
+    const fake = createFakeAuth();
+    const base = fakeFetch(fake);
+    const env = setup({ fake, fetchImpl: async (url, init) => {
+      if (url.endsWith("/refresh")) return new Response(JSON.stringify({ detail: "bad client" }), { status: 400 });
+      return base(url, init);
+    } });
+    await loginA(env);
+    env.clock.now += 3600 * 1000;
+    assert.strictEqual(await env.auth.token(), null);
+    assert.strictEqual(env.auth.getState().state, "signed_in");
+  });
+
+  it("proxy: 1 tính năng 401 (token tốt) → trang nhận 403 feature_denied, phiên giữ nguyên, các tính năng khác vẫn chạy", async () => {
+    const env = setup();
+    await loginA(env);
+    const base = fakeFetch(env.fake);
+    const proxy = createFleetProxy({ auth: env.auth, configStore: { getGateway: () => GW }, fetchImpl: async (url, init) => {
+      if (new URL(url).pathname === "/fleet/voice/tts") return new Response("{}", { status: 401 });
+      return base(url, init);
+    } });
+    const r = await proxy.handle(new Request("javis-desk://app/fleet/voice/tts", { method: "POST", body: "{}" }));
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual((await r.json()).error, "feature_denied");
+    assert.strictEqual(env.auth.getState().state, "signed_in");
+    assert.strictEqual((await proxy.handle(new Request("javis-desk://app/fleet/chat"))).status, 200);
+    assert.strictEqual(env.expired.length, 0);
+  });
+
+  it("javis-auth.log ghi đăng nhập / 401 / hết phiên nhưng không bao giờ ghi token", async () => {
+    const { createAuthLog, redact, AUTH_LOG_FILE } = require("../src/javis-auth");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "javis-authlog-"));
+    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const authLog = createAuthLog({ userDataDir: dir });
+    const fake = createFakeAuth();
+    const sessionStore = createSessionStore({ userDataDir: dir, safeStorage: fakeSafeStorage });
+    const clk = { now: 1_000_000 };
+    const auth = createAuth({ fetchImpl: fakeFetch(fake), getGateway: () => GW, sessionStore, legacyStore: null, openExternal: async () => {},
+      log: authLog, sleep: async () => {}, now: () => clk.now });
+    auth.init();
+    cleanups.push(() => auth.dispose());
+    const r = await auth.login();
+    await browserApproves(fake, r.url);
+    const tok = await auth.token();
+    await auth.onUnauthorized(tok, { path: "/fleet/voice/chat" });
+    fake.revokeAll();
+    clk.now += 61 * 1000;
+    await auth.onUnauthorized(tok, { retried: true, path: "/fleet/chat" });
+    assert.strictEqual(auth.getState().state, "expired");
+    authLog(`debug Bearer ${tok} refresh_token=jvr_abc code=xyz {"access_token":"jat_1"}`);
+    const text = fs.readFileSync(path.join(dir, AUTH_LOG_FILE), "utf8");
+    for (const want of ["browser sign-in started", "browser sign-in ok", "401 on /fleet/voice/chat", "session expired"]) assert.ok(text.includes(want), want);
+    assert.ok(!text.includes(tok.slice(4)), "không có access token");
+    assert.ok(!text.includes(sessionStore.read() ? sessionStore.read().refresh : "jvr_abc"));
+    assert.ok(!/jvr_abc|code=xyz|jat_1/.test(text));
+    assert.strictEqual(redact("x jvd_SECRET y"), "x jvd_*** y");
   });
 });

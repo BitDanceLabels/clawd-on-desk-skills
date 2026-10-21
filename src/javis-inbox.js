@@ -183,7 +183,8 @@ function createInbox({ client, isPaired, onChange = () => {}, onNew = () => {}, 
       return snapshot();
     }
     if (r.status === 403) {
-      state.error = "forbidden";
+      // featureDenied: the gateway refused this feature only — still signed in, try again later.
+      state.error = r.featureDenied ? "feature_denied" : "forbidden";
       state.stoppedUntilEvent = true;
       onChange(snapshot());
       return snapshot();

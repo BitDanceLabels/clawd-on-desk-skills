@@ -6,7 +6,12 @@
 //   signed_out ──login()──▶ waiting_browser ──/cb?code──▶ signed_in
 //        │                        └─ cancel / 5 min ─▶ signed_out
 //        └──emailStart()──▶ waiting_code ──emailVerify()──▶ signed_in
-//   signed_in ──refresh says relogin / old jvk_ key rejected──▶ expired ──login()──▶ …
+//   signed_in ──refresh says relogin/401, or whoami rejects the token──▶ expired ──login()──▶ …
+//
+// A 401 from ONE feature (chat, voice, report, clipboard…) is not "session over" (FIX 21/10:
+// the app signed in, then a feature answered 401 and the app wiped the session). The session
+// ends only when /fleet/auth/desktop/refresh says relogin:true / 401, or /fleet/whoami rejects
+// the token we just got. Otherwise the feature shows "chưa có quyền" and the session stays.
 //
 // Flow A: loopback http://127.0.0.1:<random>/cb + PKCE S256 + state, default browser.
 // Flow B: 6-digit code by email.
@@ -28,6 +33,10 @@ const REFRESH_EARLY_MS = 5 * 60 * 1000;
 const MAX_TRIES = 3;
 const RETRY_BASE_MS = 1000;
 const OFFLINE_COOLDOWN_MS = 60 * 1000;
+// A feature that keeps answering 401 must not cost a refresh + whoami on every call.
+const VERIFY_TTL_MS = 60 * 1000;
+const AUTH_LOG_FILE = "javis-auth.log";
+const AUTH_LOG_MAX_BYTES = 256 * 1024;
 
 const STATES = ["signed_out", "waiting_browser", "waiting_code", "signed_in", "expired"];
 
@@ -104,6 +113,29 @@ function createSessionStore({ userDataDir, safeStorage, fsImpl = fs }) {
   return { read, save, clear, file };
 }
 
+// Never write a secret to the log: tokens (jvd_/jvr_/jvk_/jat_…), Bearer values, codes, verifiers.
+function redact(text) {
+  return String(text)
+    .replace(/\b(jv[a-z]|ja[a-z]|jr[a-z])_[A-Za-z0-9._~+/=-]+/g, "$1_***")
+    .replace(/\b(Bearer)\s+\S+/gi, "$1 ***")
+    .replace(/((?:code|code_verifier|refresh_token|access_token|state|token)=)[^&\s]+/gi, "$1***")
+    .replace(/("(?:code|code_verifier|refresh_token|access_token|token)"\s*:\s*")[^"]*"/gi, '$1***"');
+}
+
+/** userData/javis-auth.log: sign-in / refresh / 401 trail for diagnosis (no tokens). */
+function createAuthLog({ userDataDir, fsImpl = fs, now = () => Date.now(), maxBytes = AUTH_LOG_MAX_BYTES, mirror = () => {} }) {
+  const file = path.join(userDataDir, AUTH_LOG_FILE);
+  const { rotatedAppend } = require("./log-rotate");
+  return Object.assign((msg) => {
+    const line = `${new Date(now()).toISOString()} ${redact(msg)}`;
+    try { mirror(line); } catch {}
+    try {
+      fsImpl.mkdirSync(userDataDir, { recursive: true });
+      rotatedAppend(file, line + "\n", maxBytes);
+    } catch {}
+  }, { file });
+}
+
 function callbackPage(ok, text) {
   const color = ok ? "#8fe3a8" : "#ffcf7a";
   return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>JAVIS</title></head>
@@ -137,6 +169,10 @@ function createAuth(deps) {
   let offlineUntil = 0;
   let pending = null; // flow A: { server, timer, pkce, redirectUri, url, prev }
   let cfgCache = null;
+  // "token|path" → when whoami last accepted the token after a 401 on that path. A feature that
+  // keeps refusing does not cost a whoami per call; a 401 on another path is checked right away.
+  const verified = new Map();
+  let verifying = null; // { token, p } — one whoami in flight per token
 
   function snapshot() {
     return { ...st, signedIn: st.state === "signed_in" };
@@ -213,14 +249,17 @@ function createAuth(deps) {
     // One sign-in at a time: the new account replaces an old jvk_ key.
     if (legacyStore) legacyStore.clear();
     access = { token: data.access_token, expiresAt: now() + Math.max(60, Number(data.expires_in) || 3600) * 1000 };
+    verified.clear();
     offlineUntil = 0;
     set({ state: "signed_in", kind: "oauth", email, name, pendingEmail: "" });
     scheduleRefresh();
     return true;
   }
 
-  function expire(notice = TEXT.expired) {
+  function expire(notice = TEXT.expired, why = "") {
+    log(`auth: session expired (${why || "unknown"})`);
     access = null;
+    verified.clear();
     if (refreshTimer) { clearTimer(refreshTimer); refreshTimer = null; }
     if (st.kind === "legacy" && legacyStore) legacyStore.clear();
     sessionStore.clear();
@@ -243,11 +282,17 @@ function createAuth(deps) {
         } catch (err) {
           log(`JAVIS: refresh failed (${attempt}/${MAX_TRIES}): ${err && err.message}`);
         }
-        if (r && r.ok && applyTokens(r.data)) return access.token;
-        if (r && (r.data.relogin || r.status === 401 || r.status === 400)) {
-          expire();
+        if (r && r.ok && applyTokens(r.data)) { log("auth: refresh ok"); return access.token; }
+        if (r && (r.data.relogin || r.status === 401)) {
+          expire(TEXT.expired, `refresh ${r.status}${r.data.relogin ? " relogin" : ""}`);
           return null;
         }
+        if (r && r.status >= 400 && r.status < 500) {
+          // Not "relogin": keep the session, stop asking for a minute.
+          log(`auth: refresh rejected ${r.status} without relogin, keep session`);
+          break;
+        }
+        if (r) log(`auth: refresh failed ${r.status} (${attempt}/${MAX_TRIES})`);
         if (attempt < MAX_TRIES) await sleep(RETRY_BASE_MS * 2 ** (attempt - 1));
       }
       offlineUntil = now() + OFFLINE_COOLDOWN_MS;
@@ -268,17 +313,63 @@ function createAuth(deps) {
     return refresh();
   }
 
+  // GET /fleet/whoami with `used`: false only when the gateway says this token is dead
+  // (401 or authenticated:false). Offline / 5xx → assume alive. One check per token+path per minute.
+  function verifySession(used, where = "") {
+    const key = `${used}|${where}`;
+    if (now() - (verified.get(key) || -Infinity) < VERIFY_TTL_MS) return Promise.resolve(true);
+    if (verifying && verifying.token === used) return verifying.p;
+    const p = (async () => {
+      let res = null;
+      let data = null;
+      try {
+        res = await fetchImpl(getGateway() + "/fleet/whoami", {
+          method: "GET", headers: { Accept: "application/json", Authorization: `Bearer ${used}`, "X-Javis-Client": "javis-desktop" },
+        });
+        try { data = await res.json(); } catch {}
+      } catch (err) {
+        log(`auth: whoami unreachable (${err && err.message}), keep session`);
+        return true;
+      }
+      const dead = res.status === 401 || (res.ok && data && data.authenticated === false);
+      log(`auth: whoami ${res.status}${data && "authenticated" in data ? ` authenticated=${data.authenticated}` : ""} → ${dead ? "token rejected" : "session ok"}`);
+      if (!dead) {
+        if (verified.size > 50) verified.clear();
+        verified.set(key, now());
+      }
+      return !dead;
+    })().finally(() => { if (verifying && verifying.p === p) verifying = null; });
+    verifying = { token: used, p };
+    return p;
+  }
+
   /**
-   * The gateway answered 401 to `used`. Returns a new token to retry once with, or null.
-   * `retried`: the retry with a fresh token was rejected too → the session is over.
+   * The gateway answered 401 to `used` on `path`. Returns a token to retry once with, or null.
+   * null + isSignedIn() → only this feature is refused (show "chưa có quyền", keep the session);
+   * null + !isSignedIn() → the session is over (refresh said relogin, or whoami rejected the token).
    */
-  async function onUnauthorized(used, { retried = false } = {}) {
+  async function onUnauthorized(used, { retried = false, path: where = "" } = {}) {
     if (st.state !== "signed_in") return null;
-    if (st.kind === "legacy") { expire(TEXT.legacyRejected); return null; }
-    if (retried) { expire(); return null; }
+    log(`auth: 401 on ${where || "?"}${retried ? " (after retry)" : ""} kind=${st.kind}`);
+    if (st.kind === "legacy") {
+      if (!(await verifySession(used, where))) expire(TEXT.legacyRejected, `old key rejected by whoami after 401 on ${where || "?"}`);
+      else log(`auth: 401 on ${where || "?"} is a feature refusal, session kept`);
+      return null;
+    }
     if (access && access.token !== used) return access.token;
+    // Is the token itself dead, or does only this feature refuse it?
+    if (await verifySession(used, where)) {
+      log(`auth: 401 on ${where || "?"} is a feature refusal, session kept`);
+      return null;
+    }
+    if (st.state !== "signed_in") return null;
+    if (retried) {
+      // whoami rejects the token refresh just gave us: the account/device is gone.
+      expire(TEXT.expired, `whoami rejected a fresh token after 401 on ${where || "?"}`);
+      return null;
+    }
     access = null;
-    return refresh();
+    return refresh(); // relogin:true / 401 → expired; offline → null, session kept
   }
 
   // ── Flow A: browser + loopback + PKCE ──
@@ -305,10 +396,12 @@ function createAuth(deps) {
       r = await postJson("/fleet/auth/desktop/token", {
         grant_type: "authorization_code", code, code_verifier: p.pkce.verifier, redirect_uri: p.redirectUri, client_id: CLIENT_ID,
       });
-    } catch {
+    } catch (err) {
+      log(`auth: code exchange unreachable (${err && err.message})`);
       return { ok: false, notice: TEXT.offline };
     }
-    if (r.ok && applyTokens(r.data)) return { ok: true };
+    if (r.ok && applyTokens(r.data)) { log("auth: browser sign-in ok (code exchanged)"); return { ok: true }; }
+    log(`auth: code exchange failed ${r.status}`);
     return { ok: false, notice: TEXT.loginFailed };
   }
 
@@ -326,6 +419,7 @@ function createAuth(deps) {
     p.done = true;
     const code = u.searchParams.get("code");
     if (!code) {
+      log("auth: browser callback without code (denied)");
       stopPending();
       backFromWaiting(p, TEXT.browserDenied);
       return send(200, false, "Đã huỷ. Anh quay lại app JAVIS nhé.");
@@ -367,6 +461,7 @@ function createAuth(deps) {
       backFromWaiting(p, TEXT.browserTimeout);
     }, BROWSER_WAIT_MS);
     set({ state: "waiting_browser", pendingEmail: "" });
+    log(`auth: browser sign-in started (gateway ${getGateway()}, page ${cfg.publicBase})`);
     try { await openExternal(p.url); } catch {}
     return { ok: true, url: p.url, redirectUri: p.redirectUri };
   }
@@ -416,7 +511,8 @@ function createAuth(deps) {
       set({ notice: TEXT.offline });
       return { ok: false, error: "offline" };
     }
-    if (r.ok && applyTokens(r.data)) return { ok: true };
+    if (r.ok && applyTokens(r.data)) { log("auth: email sign-in ok"); return { ok: true }; }
+    log(`auth: email verify failed ${r.status}`);
     set({ notice: (r.data && r.data.detail) || TEXT.badCode });
     return { ok: false, error: "bad_code" };
   }
@@ -438,6 +534,7 @@ function createAuth(deps) {
   }
 
   async function logout() {
+    log("auth: logout");
     stopPending();
     const s = sessionStore.read();
     const bearer = access ? access.token : null;
@@ -473,6 +570,6 @@ function createAuth(deps) {
 }
 
 module.exports = {
-  CLIENT_ID, STATES, TEXT, BROWSER_WAIT_MS, REFRESH_EARLY_MS, MAX_TRIES,
-  createAuth, createSessionStore, createPkce, isEmail, isPlausibleDeviceKey, b64u,
+  CLIENT_ID, STATES, TEXT, BROWSER_WAIT_MS, REFRESH_EARLY_MS, MAX_TRIES, VERIFY_TTL_MS, AUTH_LOG_FILE,
+  createAuth, createSessionStore, createAuthLog, redact, createPkce, isEmail, isPlausibleDeviceKey, b64u,
 };

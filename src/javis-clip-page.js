@@ -2,7 +2,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const api = window.javisTools;
-const SECTIONS = ["s-not-paired", "s-offline", "s-no-clip", "s-need-key", "s-ready"];
+const SECTIONS = ["s-not-paired", "s-denied", "s-offline", "s-no-clip", "s-need-key", "s-ready"];
 let pendingSensitive = false;
 
 function only(id) { for (const s of SECTIONS) $(s).classList.toggle("hidden", s !== id); }
@@ -54,7 +54,7 @@ async function refresh() {
   $("msg").textContent = "";
   const s = await api.clipStatus();
   const st = (s && s.state) || "offline";
-  only({ not_paired: "s-not-paired", offline: "s-offline", no_clipboard: "s-no-clip", need_key: "s-need-key", ready: "s-ready" }[st] || "s-offline");
+  only({ not_paired: "s-not-paired", denied: "s-denied", offline: "s-offline", no_clipboard: "s-no-clip", need_key: "s-need-key", ready: "s-ready" }[st] || "s-offline");
   $("sub").textContent = st === "ready" ? `Đã nối · ${s.devices || 0} máy` : "Chép ở máy này, dán ở máy kia";
   $("paused").textContent = s && s.paused ? "· đang tạm dừng" : "";
   if (st === "ready") { await loadRecent(); $("quick").focus(); }
@@ -81,6 +81,7 @@ async function send() {
 
 $("btn-login").onclick = () => api.login();
 $("btn-retry").onclick = refresh;
+$("btn-retry-denied").onclick = refresh;
 $("btn-create").onclick = async () => { const r = await api.clipCreate(); if (!r || !r.ok) $("msg").textContent = `Chưa tạo được (${(r && r.error) || "lỗi"}).`; await refresh(); };
 $("btn-link").onclick = async () => {
   const r = await api.clipLink($("link").value);

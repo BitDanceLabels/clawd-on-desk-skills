@@ -55,6 +55,7 @@ function createClip({ client, keys, deviceName = "JAVIS Desktop", now = Date.now
     let r;
     try { r = await client.request("GET", "/fleet/clip/state"); } catch { return { state: "offline" }; }
     if (r.status === 401) return { state: "not_paired", rejected: true };
+    if (r.featureDenied || r.status === 403) return { state: "denied" };
     if (r.status !== 200) return { state: "offline", error: `gateway_${r.status}` };
     const serverKid = r.data.key_id || null;
     const K = keys.read();

@@ -217,6 +217,7 @@ function initDeskTools(deps) {
     isReading: () => speaker.isSpeaking(),
     inboxSnapshot: () => inbox.snapshot(),
     refreshInbox: (reason = "menu") => inbox.refresh({ reason }),
+    clipStatus: () => clip.status(),
     startWatching,
     stopWatching: () => watcher.stop(),
     onPairChange,

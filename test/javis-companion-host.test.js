@@ -147,11 +147,12 @@ describe("JAVIS /fleet proxy", () => {
     keyStore.save(FAKE_KEY);
     let expired = 0;
     const gw = fakeGateway(() => new Response("{}", { status: 401 }));
-    const auth = authFor(dir, keyStore, { onExpired: () => expired++ });
+    // whoami (asked by auth) also says 401 → the key is dead
+    const auth = authFor(dir, keyStore, { onExpired: () => expired++, fetchImpl: gw.fetchImpl });
     const proxy = createFleetProxy({ auth, configStore, fetchImpl: gw.fetchImpl });
     assert.strictEqual((await proxy.handle(new Request("javis-desk://app/fleet/chat"))).status, 401);
     assert.strictEqual((await proxy.handle(new Request("javis-desk://app/fleet/chat"))).status, 401);
-    assert.strictEqual(gw.calls.length, 1);
+    assert.deepStrictEqual(gw.calls.map((c) => new URL(c.url).pathname), ["/fleet/chat", "/fleet/whoami"]);
     assert.strictEqual(expired, 1);
     assert.strictEqual(auth.getState().state, "expired");
   });

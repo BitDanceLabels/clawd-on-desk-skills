@@ -485,8 +485,13 @@ describe("5 · Cửa sổ không đè nhau + ghép đôi dễ hơn", () => {
     let status = 403;
     const { createAuth } = require("../src/javis-auth");
     let key = { key: "jvk_FAKEFAKEFAKEFAKE" };
+    let keyAlive = true;
+    let clock = 1_000_000;
     const auth = createAuth({
-      fetchImpl: async () => { throw new Error("no"); }, getGateway: () => "http://gw.test",
+      now: () => clock,
+      // whoami decides whether the key is dead (FIX 21/10: a feature 401 alone is not "signed out")
+      fetchImpl: async () => new Response(JSON.stringify({ authenticated: keyAlive }), { status: keyAlive ? 200 : 401 }),
+      getGateway: () => "http://gw.test",
       sessionStore: { read: () => null, save() {}, clear() {} },
       legacyStore: { read: () => key, save() {}, clear() { key = null; } },
     });
@@ -499,10 +504,14 @@ describe("5 · Cửa sổ không đè nhau + ghép đôi dễ hơn", () => {
     assert.strictEqual((await c.request("POST", "/fleet/orders/x/approve", {})).status, 403);
     assert.strictEqual(auth.getState().state, "signed_in");
     status = 401;
+    assert.strictEqual((await c.request("GET", "/fleet/report/morning")).featureDenied, true);
+    assert.strictEqual(auth.getState().state, "signed_in", "key still good → only this feature refused");
+    keyAlive = false;
+    clock += 61 * 1000; // whoami answer is cached for a minute
     await c.request("GET", "/fleet/desk/pending");
     assert.strictEqual(auth.getState().state, "expired");
     await c.request("GET", "/fleet/desk/pending");
-    assert.strictEqual(calls, 2, "no call after 401");
+    assert.strictEqual(calls, 3, "no call after the key is rejected");
     assert.strictEqual(c.isPaired(), false);
   });
 });

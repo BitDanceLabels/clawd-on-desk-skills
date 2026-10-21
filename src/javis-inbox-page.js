@@ -6,6 +6,7 @@ const api = window.javisTools;
 const ERRORS = {
   pairing_rejected: "Phiên đăng nhập đã hết hạn. Anh bấm Đăng nhập JAVIS để vào lại nhé.",
   forbidden: "Máy chủ chưa cho máy này xem việc chờ. Anh mở JAVIS web để xem nhé.",
+  feature_denied: "Tài khoản trên máy này chưa có quyền xem việc chờ. Anh vẫn đang đăng nhập — bấm Làm mới để thử lại.",
   rate_limited: "Máy chủ đang bận, em sẽ tự tải lại sau ít phút.",
   gateway_unreachable: "Chưa kết nối được máy chủ JAVIS (đã thử 3 lần rồi dừng). Kiểm tra mạng/Tailscale rồi bấm Thử lại.",
 };

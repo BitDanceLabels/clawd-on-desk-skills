@@ -14,7 +14,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { createAuth, createSessionStore, isPlausibleDeviceKey } = require("./javis-auth");
+const { createAuth, createSessionStore, createAuthLog, isPlausibleDeviceKey } = require("./javis-auth");
 
 const SCHEME = "javis-desk";
 const ORIGIN = `${SCHEME}://app`;
@@ -25,6 +25,7 @@ const CLIENT_ID_HEADER = "X-Javis-Client";
 
 // Retry policy (owner rule): at most 3 attempts with growing back-off, then stop.
 const MAX_FAILURES = 3;
+const FEATURE_DENIED = "Tính năng này chưa có quyền với tài khoản trên máy. Anh vẫn đang đăng nhập, thử lại sau nhé.";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -151,7 +152,9 @@ function jsonResponse(status, body, extraHeaders = {}) {
 /**
  * Proxy for javis-desk://app/fleet/*. `fetchImpl` is Electron's net.fetch in the app
  * and a fake in tests (no real gateway / LLM calls from tests). The bearer comes from
- * `auth` (access token, or an old jvk_ key); a 401 refreshes once and retries once.
+ * `auth` (access token, or an old jvk_ key); a 401 refreshes once and retries once. A 401 that
+ * survives the retry while the session is still good (auth checked whoami) is one feature being
+ * refused: the page gets 403 feature_denied and the session stays.
  */
 function createFleetProxy({ auth, configStore, fetchImpl, log = () => {} }) {
   const state = { streamFailures: 0, streamBlockedUntil: 0 };
@@ -218,8 +221,13 @@ function createFleetProxy({ auth, configStore, fetchImpl, log = () => {} }) {
         return jsonResponse(502, { error: "gateway_unreachable" });
       }
       if (res.status !== 401) break;
-      const next = await auth.onUnauthorized(token, { retried: attempt > 0 });
-      if (!next) { if (ac) liveStreams.delete(ac); return jsonResponse(401, { error: "signed_out" }); }
+      const next = await auth.onUnauthorized(token, { retried: attempt > 0, path: url.pathname });
+      if (!next) {
+        if (ac) liveStreams.delete(ac);
+        if (!auth.isSignedIn()) return jsonResponse(401, { error: "signed_out" });
+        if (isStream) { state.streamFailures = MAX_FAILURES; return new Response(null, { status: 204 }); }
+        return jsonResponse(403, { error: "feature_denied", detail: FEATURE_DENIED });
+      }
       token = next;
     }
 
@@ -246,8 +254,9 @@ function createFleetProxy({ auth, configStore, fetchImpl, log = () => {} }) {
 /**
  * Main-process calls to the gateway (Việc chờ anh, báo cáo, giọng đọc, Clipboard) with the
  * same sign-in as the proxy. A 401 refreshes the access token and retries once; if that is
- * rejected too the session ends (login screen). A 403 is returned to the caller (machine
- * tokens cannot approve anything) and does not sign out. A 429 carries `retryAfter` (seconds).
+ * rejected too, auth asks whoami: token dead → session ends (login screen); token fine → this
+ * feature is refused and the caller gets 403 `featureDenied` (session stays). A 403 is
+ * returned to the caller as is. A 429 carries `retryAfter` (seconds).
  */
 function createGatewayClient({ auth, configStore, fetchImpl }) {
   function headersFor(token, extra = {}) {
@@ -260,12 +269,9 @@ function createGatewayClient({ auth, configStore, fetchImpl }) {
     if (!token) return { offline: auth.isSignedIn(), notSignedIn: !auth.isSignedIn() };
     for (let attempt = 0; ; attempt++) {
       const res = await fetchImpl(configStore.getGateway() + pathname, { ...init0, method, headers: headersFor(token, init0.headers) });
-      if (res.status !== 401 || attempt > 0) {
-        if (res.status === 401) await auth.onUnauthorized(token, { retried: true });
-        return { res };
-      }
-      const next = await auth.onUnauthorized(token);
-      if (!next) return { res };
+      if (res.status !== 401) return { res };
+      const next = await auth.onUnauthorized(token, { retried: attempt > 0, path: pathname.split("?")[0] });
+      if (!next) return auth.isSignedIn() ? { res, featureDenied: true } : { res };
       token = next;
     }
   }
@@ -276,6 +282,7 @@ function createGatewayClient({ auth, configStore, fetchImpl }) {
     const r = await send(method, pathname, init);
     if (r.notSignedIn) return { status: 0, data: { error: "not_paired" }, notPaired: true };
     if (r.offline) throw new Error("gateway_unreachable");
+    if (r.featureDenied) return { status: 403, data: { error: "feature_denied", detail: FEATURE_DENIED }, featureDenied: true, buffer: null, contentType: "" };
     const res = r.res;
     if (raw) {
       const buffer = res.ok ? await res.arrayBuffer() : null;
@@ -307,6 +314,7 @@ function createGatewayClient({ auth, configStore, fetchImpl }) {
     if (!r.res || !r.res.ok) liveStreams.delete(ac);
     if (r.notSignedIn) return { status: 401, ok: false };
     if (r.offline) throw new Error("gateway_unreachable");
+    if (r.featureDenied) return { status: 403, ok: false, featureDenied: true };
     return r.res;
   }
 
@@ -326,6 +334,8 @@ function initJavisCompanionHost(deps) {
   const keyStore = createKeyStore({ userDataDir, safeStorage });
   const sessionStore = createSessionStore({ userDataDir, safeStorage });
   const configStore = createConfigStore({ userDataDir });
+  // userData/javis-auth.log: đăng nhập / refresh / 401 theo đường (không ghi token) để chẩn đoán lần sau.
+  const authLog = createAuthLog({ userDataDir, mirror: (line) => console.warn(`JAVIS ${line}`) });
   const fetchImpl = (url, init) => net.fetch(url, init);
   let win = null;
 
@@ -356,10 +366,10 @@ function initJavisCompanionHost(deps) {
       open("login", { inactive: true });
       onSessionExpired(s);
     },
-    log: (msg) => console.warn(msg),
+    log: authLog,
   });
   auth.init();
-  proxy = createFleetProxy({ auth, configStore, fetchImpl, log: (msg) => console.warn(msg) });
+  proxy = createFleetProxy({ auth, configStore, fetchImpl, log: authLog });
   gatewayClient = createGatewayClient({ auth, configStore, fetchImpl });
   let emailEnabled = true;
 

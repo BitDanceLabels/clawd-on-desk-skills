@@ -4937,6 +4937,8 @@ if (!gotTheLock) {
         openLogin: (start) => openJavisLogin({ start: !!start }),
         authState: () => javisAuthForMenu(),
         refreshInbox: () => (_deskTools ? _deskTools.refreshInbox("test") : null),
+        readReport: () => (_deskTools ? _deskTools.readReport() : null),
+        clipStatus: () => (_deskTools ? _deskTools.clipStatus() : null),
         isReading: () => !!(_deskTools && _deskTools.isReading()),
       };
     }
