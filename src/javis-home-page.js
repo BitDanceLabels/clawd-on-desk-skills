@@ -58,7 +58,7 @@
     const blocked = !!(h && h.ok === false);
     show("chat-banner", blocked);
     $("tab-chat").classList.toggle("blocked", blocked);
-    if (blocked) $("chat-banner-title").textContent = `Chat chưa dùng được (máy chủ trả ${h.status}).`;
+    if (blocked) $("chat-banner-title").textContent = "Đang chờ cập nhật máy chủ";
   }
 
   // ── Cần anh duyệt (GET /fleet/desk/pending via main) ──

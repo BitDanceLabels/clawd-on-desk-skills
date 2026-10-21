@@ -173,7 +173,7 @@ function createFleetProxy({ auth, configStore, fetchImpl, log = () => {}, onChat
     liveStreams.clear();
   }
 
-  // Home shows "Chat sẽ dùng được khi máy chủ cập nhật xong" while the server refuses chat (401/403).
+  // Home shows "Đang chờ cập nhật máy chủ, chat sẽ dùng được sau ít phút" while the server refuses chat (401/403).
   async function handle(request) {
     const res = await forward(request);
     const path0 = new URL(request.url).pathname;
