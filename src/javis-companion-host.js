@@ -15,6 +15,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createAuth, createSessionStore, createAuthLog, isPlausibleDeviceKey } = require("./javis-auth");
+const { isChatPath, chatHealthFrom } = require("./javis-home");
 
 const SCHEME = "javis-desk";
 const ORIGIN = `${SCHEME}://app`;
@@ -68,7 +69,7 @@ function resolveStaticPath(pathname, roots) {
   rel = path.posix.normalize(rel);
   if (rel.includes("..")) return null;
   if (rel === "/" || rel === "/index.html") return path.join(roots.src, "javis-chat.html");
-  if (rel === "/javis-chat.js" || rel === "/javis-chat.css") return path.join(roots.src, rel.slice(1));
+  if (rel === "/javis-chat.js" || rel === "/javis-chat.css" || rel === "/javis-home-page.js") return path.join(roots.src, rel.slice(1));
   if (rel === "/icon.png") return path.join(roots.assets, "icons", "128x128.png");
   // 0.12.0 tool windows: Việc chờ anh, Thư ký đọc báo cáo, AI Clipboard.
   let t = rel.match(/^\/(inbox|secretary|clip)\.html$/);
@@ -156,7 +157,7 @@ function jsonResponse(status, body, extraHeaders = {}) {
  * survives the retry while the session is still good (auth checked whoami) is one feature being
  * refused: the page gets 403 feature_denied and the session stays.
  */
-function createFleetProxy({ auth, configStore, fetchImpl, log = () => {} }) {
+function createFleetProxy({ auth, configStore, fetchImpl, log = () => {}, onChatStatus = () => {} }) {
   const state = { streamFailures: 0, streamBlockedUntil: 0 };
   // Open /fleet/stream connections. Closed when the session ends, otherwise they keep
   // HTTP/1.1 sockets to the gateway busy and later calls (even "Đăng xuất") queue forever.
@@ -172,7 +173,18 @@ function createFleetProxy({ auth, configStore, fetchImpl, log = () => {} }) {
     liveStreams.clear();
   }
 
+  // Home shows "Chat sẽ dùng được khi máy chủ cập nhật xong" while the server refuses chat (401/403).
   async function handle(request) {
+    const res = await forward(request);
+    const path0 = new URL(request.url).pathname;
+    if (isChatPath(path0)) {
+      const h = chatHealthFrom(res.status);
+      if (h) { try { onChatStatus({ ...h, path: path0 }); } catch {} }
+    }
+    return res;
+  }
+
+  async function forward(request) {
     const url = new URL(request.url);
     const isStream = url.pathname === "/fleet/stream";
     if (!auth.isSignedIn()) return jsonResponse(401, { error: "not_signed_in" });
@@ -338,6 +350,8 @@ function initJavisCompanionHost(deps) {
   const authLog = createAuthLog({ userDataDir, mirror: (line) => console.warn(`JAVIS ${line}`) });
   const fetchImpl = (url, init) => net.fetch(url, init);
   let win = null;
+  // Last answer of the gateway to a chat request (401/403 = chat refused for this machine for now).
+  let chatHealth = { ok: true, status: 0, at: 0 };
 
   const send = (channel, payload) => {
     if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -354,7 +368,7 @@ function initJavisCompanionHost(deps) {
     onChange: (s, { wasIn }) => {
       send("javis:auth", { ...status(), ...s });
       onAuthState(s);
-      if (s.signedIn && !wasIn) { if (proxy) proxy.reset(); onPairChange("paired"); }
+      if (s.signedIn && !wasIn) { if (proxy) proxy.reset(); chatHealth = { ok: true, status: 0, at: 0 }; onPairChange("paired"); }
       else if (!s.signedIn && wasIn) {
         if (proxy) proxy.abortStreams();
         if (gatewayClient) gatewayClient.abortStreams();
@@ -369,7 +383,14 @@ function initJavisCompanionHost(deps) {
     log: authLog,
   });
   auth.init();
-  proxy = createFleetProxy({ auth, configStore, fetchImpl, log: authLog });
+  proxy = createFleetProxy({
+    auth, configStore, fetchImpl, log: authLog,
+    onChatStatus: (h) => {
+      const changed = h.ok !== chatHealth.ok || h.status !== chatHealth.status;
+      chatHealth = { ok: h.ok, status: h.status, at: Date.now() };
+      if (changed) send("javis:chat-health", chatHealth);
+    },
+  });
   gatewayClient = createGatewayClient({ auth, configStore, fetchImpl });
   let emailEnabled = true;
 
@@ -405,6 +426,7 @@ function initJavisCompanionHost(deps) {
       defaultGateway: DEFAULT_GATEWAY,
       emailEnabled,
       encrypted: !!(safeStorage && safeStorage.isEncryptionAvailable()),
+      chatHealth,
     };
   }
 
@@ -506,6 +528,16 @@ function initJavisCompanionHost(deps) {
       return win;
     },
     openSettings: () => open("settings"),
+    // Trang chủ on one tab (chat, inbox, report, clip, english, web, sessions).
+    openHome: (tab) => {
+      const fresh = !win || win.isDestroyed();
+      const w = open(null);
+      if (!tab) return w;
+      if (fresh) w.webContents.once("did-finish-load", () => send("javis:show-tab", tab));
+      else send("javis:show-tab", tab);
+      return w;
+    },
+    isWindowSender: (event) => fromChat(event),
     getWindow: () => win,
     status,
     auth,

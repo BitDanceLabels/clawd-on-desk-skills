@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("javisTools", {
   openWeb: call("open-web"),
   login: call("login"),
   reportGet: call("report-get"),
+  reportFetch: call("report-fetch"),
   reportRead: call("report-read"),
   reportStop: call("report-stop"),
   onReport: on("report"),

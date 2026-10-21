@@ -71,7 +71,14 @@ function render(s) {
   $("btn-settings-login").hidden = s.signedIn;
   if (document.activeElement !== $("gateway")) $("gateway").value = s.gateway || "";
   $("gateway-note").textContent = s.encrypted ? "" : "Máy này không có keychain: phiên đăng nhập lưu ở tệp chỉ chủ máy đọc được.";
+  // Trang chủ tabs (javis-home-page.js) follow the same state.
+  // The Home script may load after this first state: it also reads window.javisAuthState.
+  window.javisAuthState = { ...s, view };
+  window.dispatchEvent(new CustomEvent("javis-auth", { detail: window.javisAuthState }));
 }
+
+// Back on the "Trò chuyện" tab: open the chat panel again if it was closed.
+window.javisReopenChat = () => { if (companion) void openPanel(companion); };
 
 async function act(promise) {
   const r = await promise;

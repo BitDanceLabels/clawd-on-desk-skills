@@ -51,9 +51,12 @@ function initDeskTools(deps) {
   let lastReport = null;
   let speech = { speaking: false, engine: null, text: "", seconds: 0 };
 
+  // Trang chủ JAVIS (the main window) shows the same tools in its tabs: it gets every update too.
+  const homeWin = () => (typeof host.getWindow === "function" ? host.getWindow() : null);
   const sendTo = (name, channel, payload) => {
-    const w = wins[name];
-    if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
+    for (const w of [wins[name], homeWin()]) {
+      if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
+    }
   };
 
   // ── Việc chờ anh ──
@@ -116,14 +119,24 @@ function initDeskTools(deps) {
     return buildReportSpeech({ morning: morning || {}, inbox: snap });
   }
 
-  async function readReport() {
-    openWindow("secretary");
+  // { window: false } = from the Home tab: the text shows there, no extra window.
+  async function readReport({ window: withWindow = true } = {}) {
+    if (withWindow) openWindow("secretary");
     sendTo("secretary", "javis-tools:report", { loading: true });
     const rep = await buildReport();
     lastReport = { ...rep, at: Date.now() };
     sendTo("secretary", "javis-tools:report", lastReport);
     const res = await speaker.speak(rep.text, { seconds: rep.seconds });
     return { ...lastReport, engine: res.engine || null, ok: res.ok };
+  }
+
+  // Home tab "Báo cáo hôm nay": the text only (🔊 reads it). Reuses a report < 10 min old.
+  async function fetchReport({ fresh = false } = {}) {
+    if (!fresh && lastReport && !lastReport.empty && Date.now() - lastReport.at < 10 * 60 * 1000) return lastReport;
+    sendTo("secretary", "javis-tools:report", { loading: true });
+    lastReport = { ...(await buildReport()), at: Date.now() };
+    sendTo("secretary", "javis-tools:report", lastReport);
+    return lastReport;
   }
 
   function stopReading() { return speaker.stop(); }
@@ -169,7 +182,7 @@ function initDeskTools(deps) {
     return w;
   }
 
-  const fromTool = (e) => Object.values(wins).some((w) => w && !w.isDestroyed() && e.sender === w.webContents);
+  const fromTool = (e) => [...Object.values(wins), homeWin()].some((w) => w && !w.isDestroyed() && e.sender === w.webContents);
   const handle = (ch, fn) => ipcMain.handle(ch, async (e, ...args) => (fromTool(e) ? fn(...args) : null));
 
   handle("javis-tools:inbox-get", async () => inbox.snapshot());
@@ -188,7 +201,8 @@ function initDeskTools(deps) {
   handle("javis-tools:login", async () => { openLogin({ start: true }); return { ok: true }; });
 
   handle("javis-tools:report-get", async () => ({ report: lastReport, speech }));
-  handle("javis-tools:report-read", async () => readReport());
+  handle("javis-tools:report-read", async (opts) => readReport({ window: !(opts && opts.window === false) }));
+  handle("javis-tools:report-fetch", async (opts) => fetchReport({ fresh: !!(opts && opts.fresh) }));
   handle("javis-tools:report-stop", async () => ({ stopped: stopReading() }));
 
   handle("javis-tools:clip-status", async () => clip.status());

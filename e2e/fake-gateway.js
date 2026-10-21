@@ -8,6 +8,7 @@
 //   POST /__revoke-all         → every device revoked (refresh answers relogin:true)
 //   POST /__revoke-legacy      → old jvk_ keys rejected
 //   POST /__rate-limit {n}     → the next n GET /fleet/desk/pending answer 429 (Retry-After: 60)
+//   POST /__chat-forbidden {on} → /fleet/chat* and /fleet/voice/chat answer 403 (gateway not deployed yet)
 // CONTRACT.md v1.1: machine tokens only READ GET /fleet/desk/pending; /fleet/home/tasks stays 401
 // for them and every approve route answers 403.
 "use strict";
@@ -20,6 +21,7 @@ const log = [];
 const streams = new Set();
 let seq = 0;
 let rateLimit = 0;
+let chatForbidden = false;
 
 const now = () => Date.now() / 1000;
 const tasks = [
@@ -123,6 +125,7 @@ http.createServer((req, res) => {
     }
     if (p === "/__mail") return json(auth.outbox);
     if (p === "/__rate-limit") { rateLimit = Number(b.n || 1); return json({ ok: true }); }
+    if (p === "/__chat-forbidden") { chatForbidden = b.on !== false; return json({ ok: true }); }
     if (p === "/__streams") return json({ open: streams.size });
     if (p === "/__auth-log") return json(auth.log);
     if (p === "/__expire-access") { auth.expireAccess(); return json({ ok: true }); }
@@ -170,6 +173,7 @@ http.createServer((req, res) => {
       res.end(wav);
       return;
     }
+    if (chatForbidden && (p === "/fleet/chat" || p.startsWith("/fleet/chat/") || p === "/fleet/voice/chat")) return json({ detail: "forbidden" }, 403);
     if (p === "/fleet/chat") return json({ active: "s-demo", sessions: [{ id: "s-demo", title: "Phiên chung với web", count: 2 }],
       session: { messages: [
         { id: "u1", role: "user", text: "JAVIS ơi, hôm nay còn việc gì chờ anh?" },

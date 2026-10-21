@@ -46,3 +46,55 @@ button.small{font-size:13px;height:auto;padding:4px 0;color:var(--fg2);text-deco
 .spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--gold);animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 #acct-line{margin:0 0 10px}
+/* Trang chủ JAVIS: thanh ô lớn + các tab */
+.home{padding:8px 12px 14px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 8px}
+.tile{position:relative;height:50px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:12px;background:var(--bg2);border:1px solid var(--line);color:var(--fg2);font-size:11.5px;line-height:1.15;text-align:center}
+.tile svg,.home button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.tile:hover{background:var(--bg3);color:var(--fg)}
+.tile.on{background:linear-gradient(180deg,rgba(245,184,61,.16),rgba(245,184,61,.05));border-color:rgba(245,184,61,.55);color:var(--fg)}
+.tile.on svg{color:var(--gold)}
+.tile.wide{grid-column:span 2;flex-direction:row;gap:8px;justify-content:flex-start;padding:0 12px;text-align:left}
+.tile.wide span{display:flex;flex-direction:column}.tile.wide small{color:var(--fg3);font-size:10px;margin-top:1px}
+.tile .badge{position:absolute;top:4px;right:5px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--gold);color:#1a1405;font:700 11px/18px system-ui,sans-serif}
+.tile .badge.soft{background:var(--violet);color:#fff}
+.tab-head{display:flex;align-items:center;gap:8px;margin:2px 0 10px}.tab-head h3{margin:0;font-size:15px}.tab-head .muted{margin:0}
+.sp{flex:1}
+.home button.small{height:28px;padding:0 10px;font-size:12.5px;text-decoration:none;color:var(--fg)}
+.home button.primary.small{color:#1a1405}
+button.grow{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+button.stop{background:#3a1820;border-color:#7a2f3c;color:#ffd0d6;font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+.wide-btn{width:100%;margin-top:6px}
+.note{color:var(--fg3);font-size:11.5px;margin:8px 2px}.note.top{margin:-4px 2px 10px}
+.banner{display:flex;flex-direction:column;gap:0;margin:0 0 6px;padding:4px 10px;border-radius:10px;border:1px solid rgba(255,207,122,.35);background:rgba(255,207,122,.08);font-size:11.5px;line-height:1.35;color:var(--fg2)}
+.banner b,.banner span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.banner b{color:#ffcf7a;font-size:12px}
+.items{list-style:none;margin:0;padding:0}
+.item{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:12px;background:var(--bg2);margin-bottom:7px}
+.item .t{flex:1;min-width:0}
+.item .t b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .t small{color:var(--fg3);font-size:11.5px}
+.item.urgent{border-color:rgba(245,184,61,.55)}
+.item .dot{width:9px;height:9px;border-radius:50%;background:var(--fg3);flex:none}
+.item .dot.working,.item .dot.juggling,.item .dot.thinking{background:#8fe3a8;box-shadow:0 0 8px #8fe3a8}
+.item .dot.notification,.item .dot.attention{background:var(--gold)}
+.tag{display:inline-block;padding:0 6px;border-radius:6px;background:var(--bg3);color:var(--fg2);font-size:11px;margin-right:4px}
+.speech{white-space:pre-wrap;font-size:14px;line-height:1.6;max-height:360px;overflow:auto}
+.voice{display:flex;align-items:center}
+.wave{display:inline-flex;gap:3px;align-items:flex-end;height:16px;margin-right:6px}
+.wave i{width:3px;background:var(--gold);border-radius:2px;animation:w .9s ease-in-out infinite}
+.wave i:nth-child(2){animation-delay:.15s}.wave i:nth-child(3){animation-delay:.3s}.wave i:nth-child(4){animation-delay:.45s}
+@keyframes w{0%,100%{height:4px}50%{height:16px}}
+textarea{width:100%;min-height:96px;margin:6px 0 2px;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit;resize:vertical}
+.msg{margin:8px 0 0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 10px}
+.stats div{padding:12px 8px;border:1px solid var(--line);border-radius:12px;background:var(--bg2);text-align:center}
+.stats b{display:block;font-size:24px;color:var(--gold)}.stats small{color:var(--fg3);font-size:11.5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.big-card{height:auto;min-height:74px;padding:11px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;border-radius:14px;background:var(--bg2)}
+.big-card:hover{background:var(--bg3);border-color:rgba(245,184,61,.45)}
+.big-card b{font-size:14px}.big-card small{color:var(--fg3);font-size:11.5px;line-height:1.35}
+.big-card .web{color:var(--gold);font-size:11px;font-weight:600;margin-top:auto}
+.home .card{padding:11px}
+/* Chat chưa dùng được: dòng báo thay chỗ credit trang (panel chat vẫn có credit Live2D riêng). */
+#tab-chat.blocked #credit{display:none!important}

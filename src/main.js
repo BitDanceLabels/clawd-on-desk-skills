@@ -2195,8 +2195,58 @@ function getJavisHost() {
 function openJavisChat() {
   const host = getJavisHost();
   if (!host) return;
+  registerHomeIpc(host);
   host.openChat();
   watchForVocabLayout(host.getWindow());
+}
+
+// ── Trang chủ JAVIS (main window tabs): local data only — vocab, hook sessions, web pages ──
+const javisHomeMod = require("./javis-home");
+let _homeIpc = false;
+function registerHomeIpc(host) {
+  if (_homeIpc || !host) return;
+  _homeIpc = true;
+  const { shell } = require("electron");
+  const handle = (ch, fn) => ipcMain.handle(`javis-home:${ch}`, async (e, ...args) => (host.isWindowSender(e) ? fn(...args) : null));
+  handle("vocab", () => {
+    const db = readVocabDb();
+    const words = (db.words || []).filter((w) => w && String(w.term || "").trim());
+    return { total: words.length, due: countDueVocab(db, Date.now()), mastered: words.filter((w) => w.mastered).length };
+  });
+  handle("open-vocab", (kind) => {
+    if (kind === "game") openVocabChallenge();
+    else if (kind === "profile") openVocabProfile();
+    else openVocabTinder();
+    return { ok: true };
+  });
+  handle("sessions", () => javisHomeMod.listMachineSessions(sessions).map(({ _id, ...row }) => row));
+  handle("focus-session", (key) => {
+    const k = String(key || "");
+    if (!k) return { ok: false };
+    for (const [id, s] of sessions) {
+      if (String(id).slice(-6) === k && s && s.sourcePid) {
+        focusTerminalWindow(s.sourcePid, s.cwd, s.editor, s.pidChain);
+        return { ok: true };
+      }
+    }
+    return { ok: false };
+  });
+  handle("web-pages", () => javisHomeMod.WEB_PAGES.map((p) => ({ ...p, url: javisHomeMod.webPageUrl(p.id) })));
+  handle("open-web-page", async (id) => {
+    const url = javisHomeMod.webPageUrl(String(id || "home"));
+    if (!url) return { ok: false };
+    await shell.openExternal(url);
+    return { ok: true, url };
+  });
+  handle("open-tool", (name) => {
+    const tools = getDeskTools();
+    if (!tools) return { ok: false };
+    if (name === "inbox") tools.openInbox();
+    else if (name === "clip") tools.openClipboard();
+    else if (name === "secretary") tools.openSecretary();
+    else return { ok: false };
+    return { ok: true };
+  });
 }
 
 // "Đăng nhập JAVIS…" (signed out) or the settings screen (signed in).
@@ -2204,6 +2254,7 @@ function openJavisChat() {
 function openJavisLogin(opts) {
   const host = getJavisHost();
   if (!host) return;
+  registerHomeIpc(host);
   host.openLogin(opts);
   watchForVocabLayout(host.getWindow());
 }

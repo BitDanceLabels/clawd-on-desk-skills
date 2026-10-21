@@ -16,13 +16,103 @@
     <button id="btn-settings" class="ib" title="Cài đặt">⚙︎</button>
   </header>
 
-  <section id="view-chat" class="view">
-    <p class="intro">Trò chuyện cùng trợ lý JAVIS — cùng phiên chat với JAVIS trên web.</p>
-    <p id="credit" class="credit" hidden>
-      <span lang="en">This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc.</span>
-      <span>Nhân vật mẫu © Live2D Inc.</span>
-    </p>
-    <div id="companion-host"></div>
+  <!-- Trang chủ JAVIS: thanh ô lớn ngay đầu, mỗi ô 1 chức năng. Trò chuyện = <javis-companion>, cùng phiên web. -->
+  <section id="view-chat" class="view home">
+    <nav id="tiles" class="tiles" role="tablist" aria-label="Chức năng JAVIS">
+      <button class="tile" role="tab" data-tab="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Trò chuyện</span></button>
+      <button class="tile" role="tab" data-tab="inbox"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 12l3 3 5-6"/></svg><span>Cần anh duyệt</span><b id="badge-inbox" class="badge" hidden>0</b></button>
+      <button class="tile" role="tab" data-tab="report"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6"/><path d="M19 6.5a8 8 0 0 1 0 11"/></svg><span>Báo cáo hôm nay</span></button>
+      <button class="tile" role="tab" data-tab="clip"><svg viewBox="0 0 24 24"><path d="M9 3h6v3H9z"/><path d="M7 4.5H5V21h14V4.5h-2"/><path d="M8.5 11h7M8.5 15h5"/></svg><span>AI Clipboard</span></button>
+      <button class="tile" role="tab" data-tab="english"><svg viewBox="0 0 24 24"><path d="M3 6.5 12 4l9 2.5v12L12 21l-9-2.5z"/><path d="M12 4v17"/></svg><span>Học tiếng Anh</span><b id="badge-english" class="badge" hidden>0</b></button>
+      <button class="tile" role="tab" data-tab="sessions"><svg viewBox="0 0 24 24"><path d="M3 5h18v11H3z"/><path d="M8 20h8M12 16v4"/><path d="m7 9 2 1.5L7 12M11 12h4"/></svg><span>Phiên trên máy</span><b id="badge-sessions" class="badge soft" hidden>0</b></button>
+      <button class="tile wide" role="tab" data-tab="web"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>JAVIS OS <small>Bàn làm việc · Kho · Phiên · Graph</small></span></button>
+    </nav>
+
+    <div id="tab-chat" class="tab">
+      <div id="chat-banner" class="banner" role="status" hidden>
+        <b id="chat-banner-title">Chat chưa dùng được trên máy này</b>
+        <span>Chat sẽ dùng được khi máy chủ cập nhật xong.</span>
+      </div>
+      <p id="credit" class="credit" hidden>
+        <span lang="en">This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc.</span>
+        <span>Nhân vật mẫu © Live2D Inc.</span>
+      </p>
+      <div id="companion-host"></div>
+    </div>
+
+    <div id="tab-inbox" class="tab" hidden>
+      <div class="tab-head"><h3>Cần anh duyệt</h3><span id="inbox-sub" class="muted"></span><span class="sp"></span><button id="inbox-refresh" class="small">Làm mới</button></div>
+      <p id="inbox-error" class="card warn" hidden></p>
+      <div id="inbox-empty" class="card" hidden><b>Không có việc nào chờ anh.</b><p class="muted">Có việc mới, cô bé sẽ báo nhẹ (trừ lúc đang ngủ).</p></div>
+      <ul id="inbox-list" class="items"></ul>
+      <p class="note">Máy này chỉ xem. Duyệt luôn trên JAVIS web: bấm <b>Mở để duyệt</b>.</p>
+      <button id="inbox-web" class="wide-btn">Mở JAVIS web ↗</button>
+    </div>
+
+    <div id="tab-report" class="tab" hidden>
+      <div class="tab-head"><h3>Báo cáo hôm nay</h3><span id="report-len" class="muted"></span><span class="sp"></span><button id="report-refresh" class="small">Làm mới</button></div>
+      <div class="card">
+        <p class="muted voice"><span id="report-wave" class="wave" hidden><i></i><i></i><i></i><i></i></span><span id="report-voice">Chưa đọc</span></p>
+        <div id="report-text" class="speech">Đang lấy báo cáo…</div>
+      </div>
+      <div class="row">
+        <button id="report-read" class="primary grow"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6"/><path d="M19 6.5a8 8 0 0 1 0 11"/></svg>Đọc bằng giọng</button>
+        <button id="report-stop" class="stop" disabled>Dừng</button>
+      </div>
+      <p class="note">Bản rút gọn dưới 90 giây. Giọng VieNeu trên máy, không có thì giọng JAVIS.</p>
+    </div>
+
+    <div id="tab-clip" class="tab" hidden>
+      <div class="tab-head"><h3>AI Clipboard</h3><span id="clip-sub" class="muted">Chép ở máy này, dán ở máy kia</span></div>
+      <div id="clip-setup" class="card" hidden>
+        <p id="clip-setup-text"></p>
+        <button id="clip-setup-btn" class="primary">Mở AI Clipboard để thiết lập</button>
+      </div>
+      <div id="clip-ready" hidden>
+        <div class="card">
+          <label class="muted" for="clip-quick">Ô dán nhanh, gửi sang mọi máy của anh (mã hoá đầu-cuối)</label>
+          <textarea id="clip-quick" placeholder="Dán hoặc gõ vào đây…"></textarea>
+          <div class="row">
+            <button id="clip-from-sys" class="small">Lấy chữ vừa chép</button>
+            <span class="sp"></span>
+            <button id="clip-send" class="primary">Gửi sang máy khác</button>
+          </div>
+          <p id="clip-msg" class="muted msg"></p>
+        </div>
+        <p class="muted">Mới nhất</p>
+        <ul id="clip-recent" class="items"></ul>
+        <button id="clip-full" class="wide-btn">Mở cửa sổ AI Clipboard đầy đủ</button>
+      </div>
+    </div>
+
+    <div id="tab-english" class="tab" hidden>
+      <div class="tab-head"><h3>Học tiếng Anh</h3></div>
+      <div class="stats">
+        <div><b id="eng-due">–</b><small>từ đến hạn ôn</small></div>
+        <div><b id="eng-total">–</b><small>từ trong kho</small></div>
+        <div><b id="eng-mastered">–</b><small>đã thuộc</small></div>
+      </div>
+      <div class="grid2">
+        <button class="big-card" data-vocab="cards"><b>Thẻ từ vựng</b><small>Lướt thẻ: biết · chưa biết</small></button>
+        <button class="big-card" data-vocab="game"><b>Chơi game từ vựng</b><small>Ôn đúng từ đến hạn</small></button>
+        <button class="big-card" data-vocab="profile"><b>Hồ sơ học</b><small>Tiến độ, cấp độ, chuỗi ngày</small></button>
+      </div>
+      <p class="note">Từ vựng lưu trên máy này.</p>
+    </div>
+
+    <div id="tab-sessions" class="tab" hidden>
+      <div class="tab-head"><h3>Phiên đang chạy trên máy này</h3><span class="sp"></span><button id="sessions-refresh" class="small">Làm mới</button></div>
+      <p id="sessions-empty" class="card muted" hidden>Chưa có phiên Claude/Codex nào đang chạy trên máy này.</p>
+      <ul id="sessions-list" class="items"></ul>
+      <p class="note">App theo dõi qua hook của Claude Code, Codex, Gemini, Cursor. Phiên của mọi máy xem ở JAVIS OS › Phiên làm việc.</p>
+    </div>
+
+    <div id="tab-web" class="tab" hidden>
+      <div class="tab-head"><h3>JAVIS OS</h3><span class="muted">mở trên web</span></div>
+      <p class="note top">Đây là khu của chủ nhân trên JAVIS OS web. Đăng nhập máy không có quyền chủ nhân (để an toàn), nên mỗi ô mở đúng trang trên trình duyệt.</p>
+      <div id="web-pages" class="grid2"></div>
+      <button id="web-home" class="wide-btn">Mở trang chủ JAVIS OS ↗</button>
+    </div>
   </section>
 
   <!-- Màn đầu: 1 dòng giải thích + 1 nút lớn + 1 liên kết nhỏ. Mọi chữ ở đây do 1 trạng thái quyết định. -->
@@ -92,5 +182,6 @@
   </section>
 
   <script src="javis-chat.js"></script>
+  <script src="javis-home-page.js"></script>
 </body>
 </html>
