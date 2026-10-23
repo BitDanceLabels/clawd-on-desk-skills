@@ -316,7 +316,7 @@ module.exports = function initIntelligentLayer(opts) {
   const proxycliApiKey = config.proxycliApiKey || "";
   const configuredProxycliModel = process.env.BUMBEE_DESK_DEFAULT_MODEL || "codex-cli-local";
   const proxycliFallbackModels = unique([
-    ...parseCsvList(process.env.BUMBEE_PROXYCLI_FALLBACK_MODELS || process.env.SMART_CHAT_FALLBACK_MODELS || "codex-cli-local,gpt-5-codex-nhutpm7777,codex-5.1-nhutpm7777,claude-3-5-haiku-20241022-default"),
+    ...parseCsvList(process.env.BUMBEE_PROXYCLI_FALLBACK_MODELS || process.env.SMART_CHAT_FALLBACK_MODELS || "codex-cli-local,gpt-5-codex-nhutpm7777,codex-5.1-nhutpm7777"),
     configuredProxycliModel,
   ]);
   const modelState = readModelState();
