@@ -1,221 +1,61 @@
-<p align="center">
-  <img src="assets/icons/128x128.png" width="128" alt="JAVIS">
-</p>
-<h1 align="center">JAVIS (desktop)</h1>
+<p align="center"><img src="assets/icons/128x128.png" width="96" alt="JAVIS"></p>
+<h1 align="center">JAVIS On Desk</h1>
 
-> **JAVIS** is the rebranded *Clawd on Desk / Bumbee On Desk* (BitDance Labels): Hiyori (Live2D sample
-> model) is the default character, chat is the shared JAVIS assistant (`<javis-companion>`, same
-> `/fleet/chat` session as JAVIS web, pairing in *Ghép đôi JAVIS*). Data folder, appId and update
-> channel are unchanged, so it updates in place. Builds: `scripts/build-mac.sh`, `scripts/build-win.ps1`.
-> Credits: see `LICENSES.md` — This content uses sample data owned and copyrighted by Live2D Inc.
+Bé trợ lý JAVIS nổi trên màn hình: một cô gái hologram bằng hạt sáng (tim cam ở ngực).
+Anh nói hoặc gõ, JAVIS **hiển hoá** câu trả lời thành thẻ ngay cạnh bé — không menu, không màn phụ.
 
-<h2 align="center">Clawd on Desk (original README)</h2>
-<p align="center">
-  <a href="README.zh-CN.md">中文版</a>
-</p>
+## Dùng
 
-A desktop pet that reacts to your AI coding agent sessions in real-time. Clawd lives on your screen — thinking when you prompt, typing when tools run, juggling subagents, reviewing permissions, celebrating when tasks complete, and sleeping when you're away.
+- **Bấm vào bé** → mở bảng; **kéo** để dời chỗ; **chuột phải** → menu. Phím tắt hiện/ẩn: `Ctrl/Cmd+Shift+J`.
+- Ô dưới bảng: bấm **mic** để nói (tự dừng khi anh ngưng nói) hoặc gõ rồi Enter. Có dấu hay không đều hiểu.
+- Hỏi gì hiện nấy (lấy thẳng từ API JAVIS, không tốn lượt AI):
 
-> Supports Windows 11, macOS, and Ubuntu/Linux. Requires Node.js. Works with **Claude Code**, **Codex CLI**, **Copilot CLI**, **Gemini CLI**, and **Cursor Agent**.
-
-## Features
-
-### Multi-Agent Support
-- **Claude Code** — full integration via command hooks + HTTP permission hooks
-- **Codex CLI** — automatic JSONL log polling (`~/.codex/sessions/`), no configuration needed
-- **Copilot CLI** — command hooks via `~/.copilot/hooks/hooks.json`
-- **Gemini CLI** — command hooks via `~/.gemini/settings.json` (registered automatically when Clawd starts, or run `npm run install:gemini-hooks`)
-- **Cursor Agent** — [Cursor IDE hooks](https://cursor.com/docs/agent/hooks) in `~/.cursor/hooks.json` (registered automatically when Clawd starts, or run `npm run install:cursor-hooks`)
-- **Multi-agent coexistence** — run all agents simultaneously; Clawd tracks each session independently
-
-### Animations & Interaction
-- **Real-time state awareness** — agent hooks and log polling drive Clawd's animations automatically
-- **12 animated states** — idle, thinking, typing, building, juggling, conducting, error, happy, notification, sweeping, carrying, sleeping
-- **Eye tracking** — Clawd follows your cursor in idle state, with body lean and shadow stretch
-- **Sleep sequence** — yawning, dozing, collapsing, sleeping after 60s idle; mouse movement triggers a startled wake-up animation
-- **Click reactions** — double-click for a poke, 4 clicks for a flail
-- **Drag from any state** — grab Clawd anytime (Pointer Capture prevents fast-flick drops), release to resume
-- **Mini mode** — drag to right edge or right-click "Mini Mode"; Clawd hides at screen edge with peek-on-hover, mini alerts/celebrations, and parabolic jump transitions
-
-### Permission Bubble
-- **In-app permission review** — when Claude Code requests tool permissions, Clawd pops a floating bubble card instead of waiting in the terminal
-- **Allow / Deny / Suggestions** — one-click approve, reject, or apply permission rules (e.g. "Always allow Read")
-- **Stacking layout** — multiple permission requests stack upward from the bottom-right corner
-- **Auto-dismiss** — if you answer in the terminal first, the bubble disappears automatically
-
-### Session Intelligence
-- **Multi-session tracking** — sessions across all agents resolve to the highest-priority state
-- **Subagent awareness** — juggling for 1 subagent, conducting for 2+
-- **Terminal focus** — right-click Clawd → Sessions menu to jump to a specific session's terminal window; notification/attention states auto-focus the relevant terminal
-- **Process liveness detection** — detects crashed/exited agent processes (Claude Code, Codex, Copilot) and cleans up orphan sessions
-- **Startup recovery** — if Clawd restarts while any agent is running, it stays awake instead of falling asleep
-
-### System
-- **Click-through** — transparent areas pass clicks to windows below; only Clawd's body is interactive
-- **Position memory** — Clawd remembers where you left it across restarts (including mini mode)
-- **Single instance lock** — prevents duplicate Clawd windows
-- **Auto-start** — Claude Code's SessionStart hook can launch Clawd automatically if it's not running
-- **Do Not Disturb** — right-click or tray menu to enter sleep mode; all hook events are silenced until you wake Clawd
-- **System tray** — resize (S/M/L), DND mode, language switch, auto-start, check for updates
-- **i18n** — English and Chinese UI; switch via right-click menu or tray
-- **Auto-update** — checks GitHub releases; Windows installs NSIS updates on quit, macOS opens the release page, Linux requires manual download
-
-## State Mapping
-
-Events from all agents (Claude Code hooks, Codex JSONL, Copilot hooks) map to the same animation states:
-
-| Agent Event | Clawd State | Animation | |
-|---|---|---|---|
-| Idle (no activity) | idle | Eye-tracking follow | <img src="assets/gif/clawd-idle.gif" width="200"> |
-| Idle (random) | idle | Reading a book | <img src="assets/gif/clawd-idle-reading.gif" width="200"> |
-| Idle (random) | idle | Debugger patrol | <img src="assets/gif/clawd-debugger.gif" width="200"> |
-| UserPromptSubmit | thinking | Thought bubble | <img src="assets/gif/clawd-thinking.gif" width="200"> |
-| PreToolUse / PostToolUse | working (typing) | Typing | <img src="assets/gif/clawd-typing.gif" width="200"> |
-| PreToolUse (3+ sessions) | working (building) | Building | <img src="assets/gif/clawd-building.gif" width="200"> |
-| SubagentStart (1) | juggling | Juggling | <img src="assets/gif/clawd-juggling.gif" width="200"> |
-| SubagentStart (2+) | conducting | Conducting | <img src="assets/gif/clawd-conducting.gif" width="200"> |
-| PostToolUseFailure / StopFailure | error | ERROR + smoke | <img src="assets/gif/clawd-error.gif" width="200"> |
-| Stop / PostCompact | attention | Happy bounce | <img src="assets/gif/clawd-happy.gif" width="200"> |
-| PermissionRequest / Notification | notification | Alert jump | <img src="assets/gif/clawd-notification.gif" width="200"> |
-| PreCompact | sweeping | Broom sweep | <img src="assets/gif/clawd-sweeping.gif" width="200"> |
-| WorktreeCreate | carrying | Carrying box | <img src="assets/gif/clawd-carrying.gif" width="200"> |
-| 60s no events | sleeping | Sleep sequence | <img src="assets/gif/clawd-sleeping.gif" width="200"> |
-
-### Mini Mode
-
-Drag Clawd to the right screen edge (or right-click → "Mini Mode") to enter mini mode. Clawd hides behind the screen edge with half-body visible, peeking out when you hover.
-
-| Trigger | Mini Reaction | |
+| Anh nói | Thẻ | Nguồn |
 |---|---|---|
-| Default | Breathing + blinking + occasional arm wobble + eye tracking | <img src="assets/gif/clawd-mini-idle.gif" width="120"> |
-| Hover | Peek out + wave (slides 25px into screen) | <img src="assets/gif/clawd-mini-peek.gif" width="120"> |
-| Notification / PermissionRequest | Exclamation mark pop + >< squint eyes | <img src="assets/gif/clawd-mini-alert.gif" width="120"> |
-| Stop / PostCompact | Flower + ^^ happy eyes + sparkles | <img src="assets/gif/clawd-mini-happy.gif" width="120"> |
-| Click during peek | Exit mini mode (parabolic jump back) | |
+| việc hôm nay, việc cần anh | việc chờ anh quyết + việc quan trọng | `/fleet/home/tasks` |
+| các máy sao rồi, RAM/GPU | máy online, RAM/CPU/GPU, việc nặng | `/fleet/load` |
+| kho, video mới, nghe nhạc mới, ảnh gần đây | lưới media, bấm là phát | `/fleet/assets` + `/asset-files/…` |
+| cảnh báo | cảnh báo đang mở theo mức | `/fleet/alerts` |
+| số liệu kênh, lượt xem, sub | chỉ số + biểu đồ nhỏ | `/fleet/exec/overview`, `/fleet/results` |
+| dòng tiền, doanh thu, chi phí | lãi ròng, tiền vào/ra, hoà vốn | `/fleet/exec/overview`, `/fleet/spend/summary` |
+| kết quả vừa làm | việc chờ nghiệm thu, sản phẩm mới | `/fleet/results` |
+| kiểm tra hệ thống | vòng tình trạng + tóm tắt | `/fleet/load` + `/fleet/alerts` |
+| claude đang làm gì | phiên Claude/Codex trên máy này | hook cục bộ |
+| mở youtube / mở bumbee.asia | mở trình duyệt | — |
+| còn lại | bộ não JAVIS trả lời (cùng phiên chat với JAVIS web) | `/fleet/voice/chat` |
 
-### Click Reactions
+- **Bong bóng nổi** khi có việc cần anh: việc mới chờ quyết, cảnh báo mức cao, Claude/Codex chờ trả lời hoặc xin quyền
+  (Cho phép / Luôn cho phép / Từ chối ngay trên bong bóng). Chạy theo sự kiện của gateway, không quét định kỳ.
+- Menu khay: Không làm phiền · Đọc to câu trả lời · Mở cùng máy · Ghép đôi JAVIS · Kiểm tra cập nhật.
 
-Easter eggs — try double-clicking, rapid 4-clicks, or poking Clawd repeatedly to discover hidden reactions.
+## Ghép đôi
 
-## Quick Start
+Lần đầu bé nhắc **Ghép đôi**: quét QR hoặc mở link, bấm Duyệt trên JAVIS web. Khoá thiết bị lưu mã hoá
+(Keychain / DPAPI), chỉ tiến trình chính dùng để gọi gateway; trang không bao giờ thấy khoá.
+Bản 0.11 đã ghép đôi thì giữ nguyên (cùng thư mục dữ liệu).
+
+## Nhẹ máy
+
+Rảnh 20 giây: chỉ vẽ ~45% hạt ở ~20 khung/giây; ẩn cửa sổ thì dừng vẽ. Máy không có WebGL thì hiện ảnh tĩnh phát sáng.
+Kết nối lỗi thì thử tối đa 3 lần, giãn cách, rồi dừng.
+
+## Dev
 
 ```bash
-# Clone the repo
-git clone https://github.com/rullerzhou-afk/clawd-on-desk.git
-cd clawd-on-desk
-
-# Install dependencies
 npm install
-
-# Start Clawd (auto-registers Claude Code hooks on launch)
-npm start
+npm start            # build desk.bundle.js rồi mở app
+npm test             # node --test test/*.test.js
+npm run build:mac    # / build / build:linux — chạy trên CI (build.yml) khi đẩy tag v*
 ```
 
-Environment sample: copy `.env.example` only if you need to document/export hook-related variables such as `CLAWD_REMOTE`. Clawd itself does not auto-load `.env`.
+Cấu trúc:
 
-### Agent Setup
-
-**Claude Code** — works out of the box. Hooks are auto-registered on launch. Versioned hooks (`PreCompact`, `PostCompact`, `StopFailure`) are registered only when Clawd can positively detect a compatible Claude Code version; if detection fails (common for packaged macOS launches), Clawd falls back to core hooks and removes stale incompatible versioned hooks automatically.
-
-**Codex CLI** — works out of the box. Clawd polls `~/.codex/sessions/` for JSONL logs automatically.
-
-**Copilot CLI** — requires manual hook setup. See [docs/copilot-setup.md](docs/copilot-setup.md) for instructions.
-
-### Remote SSH (Claude Code & Codex CLI)
-
-<img src="assets/screenshot-remote-ssh.png" width="560" alt="Remote SSH — permission bubble from Raspberry Pi">
-
-Clawd can sense AI agent activity on remote servers via SSH reverse port forwarding. Hook events and permission requests travel through the SSH tunnel back to your local Clawd — no code changes needed on the Clawd side.
-
-**One-click deploy:**
-
-```bash
-bash scripts/remote-deploy.sh user@remote-host
-```
-
-This copies hook files to the remote server, registers Claude Code hooks in remote mode, and prints SSH configuration instructions.
-
-**SSH configuration** (add to your local `~/.ssh/config`):
-
-```
-Host my-server
-    HostName remote-host
-    User user
-    RemoteForward 127.0.0.1:23333 127.0.0.1:23333
-    ServerAliveInterval 30
-    ServerAliveCountMax 3
-```
-
-**How it works:**
-- **Claude Code** — command hooks on the remote server POST state changes to `localhost:23333`, which the SSH tunnel forwards back to your local Clawd. Permission bubbles work too — the HTTP round-trip goes through the tunnel.
-- **Codex CLI** — a standalone log monitor (`codex-remote-monitor.js`) polls JSONL files on the remote server and POSTs state changes through the same tunnel. Start it on the remote: `node ~/.claude/hooks/codex-remote-monitor.js --port 23333`
-
-Remote hooks run in `CLAWD_REMOTE` mode which skips PID collection (remote PIDs are meaningless locally). Terminal focus is not available for remote sessions.
-
-> Thanks to [@Magic-Bytes](https://github.com/Magic-Bytes) for the original SSH tunneling idea ([#9](https://github.com/rullerzhou-afk/clawd-on-desk/issues/9)).
-
-### macOS Notes
-
-- **From source** (`npm start`): works out of the box on Intel and Apple Silicon.
-- **DMG installer**: the app is not signed with an Apple Developer certificate, so macOS Gatekeeper will block it. To open:
-  - Right-click the app → **Open** → click **Open** in the dialog, or
-  - Run `xattr -cr /Applications/Clawd\ on\ Desk.app` in Terminal.
-
-### Linux Notes
-
-- **From source** (`npm start`): `--no-sandbox` is passed automatically to work around chrome-sandbox SUID requirements in dev mode.
-- **Packages**: AppImage and `.deb` are available from [GitHub Releases](https://github.com/rullerzhou-afk/clawd-on-desk/releases). After deb install, the app icon appears in GNOME's app menu.
-- **Terminal focus**: uses `wmctrl` or `xdotool` (whichever is available). Install one for session terminal jumping to work: `sudo apt install wmctrl` or `sudo apt install xdotool`.
-- **Auto-update**: not available on Linux — download new versions manually from GitHub Releases.
-
-## Known Limitations
-
-| Limitation | Details |
+| File | Việc |
 |---|---|
-| **Codex CLI: no terminal focus** | Codex sessions use JSONL log polling which doesn't carry terminal PID info. Clicking Clawd won't jump to the Codex terminal. Claude Code and Copilot CLI work fine. |
-| **Codex CLI: Windows hooks disabled** | Codex hardcodes hooks off on Windows, so we poll log files instead. This means ~1.5s latency vs near-instant for hook-based agents. |
-| **Copilot CLI: manual hook setup** | Copilot hooks require manually creating `~/.copilot/hooks/hooks.json`. Claude Code and Codex work out of the box. |
-| **Copilot CLI: no permission bubble** | Copilot's `preToolUse` hook only supports deny, not the full allow/deny flow. Permission bubbles only work with Claude Code. |
-| **macOS/Linux auto-update** | No Apple code signing on macOS, no auto-update on Linux — download updates manually from GitHub Releases. |
-| **No test framework for Electron** | Unit tests cover agents and log polling, but the Electron main process (state machine, windows, tray) has no automated tests. |
-
-### Roadmap
-
-Some things we'd like to explore in the future:
-
-- Codex terminal focus via process tree lookup from `codex.exe` PID
-- Auto-registration of Copilot CLI hooks (like we do for Claude Code)
-- Sound effects for state transitions (blocked by Electron autoplay policy)
-- Custom character skins / animations
-- Hook uninstall script for clean app removal
-
-## Contributing
-
-Clawd on Desk is a community-driven project. Bug reports, feature ideas, and pull requests are all welcome — open an [issue](https://github.com/rullerzhou-afk/clawd-on-desk/issues) to discuss or submit a PR directly.
-
-### Contributors
-
-Thanks to everyone who has helped make Clawd better:
-
-<a href="https://github.com/PixelCookie-zyf"><img src="https://github.com/PixelCookie-zyf.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/yujiachen-y"><img src="https://github.com/yujiachen-y.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/AooooooZzzz"><img src="https://github.com/AooooooZzzz.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/purefkh"><img src="https://github.com/purefkh.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/Tobeabellwether"><img src="https://github.com/Tobeabellwether.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/Jasonhonghh"><img src="https://github.com/Jasonhonghh.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/crashchen"><img src="https://github.com/crashchen.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/hongbigtou"><img src="https://github.com/hongbigtou.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/InTimmyDate"><img src="https://github.com/InTimmyDate.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/NeizhiTouhu"><img src="https://github.com/NeizhiTouhu.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/xu3stones-cmd"><img src="https://github.com/xu3stones-cmd.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/androidZzT"><img src="https://github.com/androidZzT.png" width="50" style="border-radius:50%" /></a>
-<a href="https://github.com/Ye-0413"><img src="https://github.com/Ye-0413.png" width="50" style="border-radius:50%" /></a>
-
-## Acknowledgments
-
-- Clawd pixel art reference from [clawd-tank](https://github.com/marciogranzotto/clawd-tank) by [@marciogranzotto](https://github.com/marciogranzotto)
-- The Clawd character is the property of [Anthropic](https://www.anthropic.com). This is a community project, not officially affiliated with or endorsed by Anthropic.
-
-## License
-
-MIT
+| `src/main.js` | cửa sổ trong suốt (thu gọn / bong bóng / bảng), khay, IPC, cập nhật |
+| `src/javis-desk-host.js` | scheme `javis-desk://app`, proxy `/fleet/*` + `/asset-files/*` kèm khoá thiết bị, ghép đôi |
+| `src/hook-server.js`, `src/sessions.js` | nhận hook Claude Code/Gemini/Cursor (127.0.0.1:23333), theo dõi phiên, thẻ xin quyền |
+| `src/voice-stt.js` | giọng nói → chữ (1 lần/câu) |
+| `src/desk/` | trang: `desk.js`, `hologram-desk.js`, `intent.js` (ý định → thẻ), `cards.js`, `voice-input.js` |
+| `hooks/`, `agents/` | hook Claude/Codex/Gemini/Cursor (giữ từ Clawd on Desk; không đăng ký WorktreeCreate) |
+| `archive/` | toàn bộ chức năng cũ đã gỡ (vocab, english game, rabbit, phase hub, Bumbee OS, wiki, donation, Live2D/VRM…) — chỉ để tra cứu, không đóng gói |
