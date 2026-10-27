@@ -222,7 +222,21 @@ function renderAssets(d, ctx, params = {}) {
     const file = assetUrl(a.file_url);
     const thumb = assetUrl(a.thumb_url || (a.kind === "image" ? a.file_url : ""));
     const media = h("div", { class: `asset-media ${a.kind}` });
-    if (a.kind === "image" && thumb) media.append(h("img", { src: thumb, alt: "", loading: "lazy" }));
+    const external = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|facebook\.com|tiktok\.com)\//.test(a.file_url || "");
+    if (external) {
+      // Published on a platform: open it there.
+      media.classList.add("external");
+      const yt = (a.file_url.match(/(?:shorts\/|watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/) || [])[1];
+      if (yt) {
+        const img = h("img", { src: `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`, alt: "", loading: "lazy" });
+        // YouTube answers unknown/private ids with a 120×90 grey placeholder: drop it.
+        img.addEventListener("load", () => { if (img.naturalWidth <= 120) img.remove(); });
+        img.addEventListener("error", () => img.remove());
+        media.append(img);
+      }
+      media.append(h("span", { class: "play" }, "▶"), h("small", { class: "kind-sub" }, new URL(a.file_url).hostname.replace(/^www\./, "")));
+      media.addEventListener("click", () => ctx.openUrl(a.file_url));
+    } else if (a.kind === "image" && thumb) media.append(h("img", { src: thumb, alt: "", loading: "lazy" }));
     else if (a.kind === "video" && file) {
       const v = h("video", { src: file, muted: true, playsinline: true, preload: "metadata" });
       media.append(v, h("span", { class: "play" }, "▶"));
@@ -241,8 +255,9 @@ function renderAssets(d, ctx, params = {}) {
       audioEl.addEventListener("ended", () => { btn.textContent = "▶"; });
       media.append(audioEl, btn, h("span", { class: "wave" }, "∿∿∿"));
     } else {
-      const ext = (String(a.file_url || a.title || "").match(/\.([a-z0-9]{2,5})(?:$|\?)/i) || [])[1];
-      media.append(h("span", { class: "kind" }, ext ? ext.toUpperCase() : KIND_LABEL[a.kind] || "Tệp"), h("small", { class: "kind-sub" }, KIND_LABEL[a.kind] || ""));
+      const ext = (String(a.file_url || "").match(/\.([a-z0-9]{2,5})(?:$|\?)/i) || [])[1];
+      // No preview: a document glyph plus the real extension when there is one.
+      media.append(h("span", { class: "kind" }, ext ? ext.toUpperCase() : "▤"), ext ? h("small", { class: "kind-sub" }, KIND_LABEL[a.kind] || "") : null);
     }
     return h("figure", { class: "asset" }, media,
       h("figcaption", {}, h("b", { title: a.title }, short(a.title, 48)), h("small", {}, [a.team, ago(a.updated_at || a.created_at)].filter(Boolean).join(" · "))));

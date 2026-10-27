@@ -208,6 +208,8 @@ body[data-side="left"] .board { left: calc(var(--fig-w) - 4px); right: 0; }
   background: repeating-linear-gradient(0deg, rgba(95, 231, 255, 0.025) 0 1px, transparent 1px 4px);
   pointer-events: none;
 }
+/* Fixed rows of the board never shrink; only the card list scrolls. */
+.board-head, .quick, .ask { flex: none; }
 .board-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 8px 18px; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand b { font-size: 15px; letter-spacing: 0.22em; }
@@ -309,6 +311,7 @@ body[data-side="left"] .board { left: calc(var(--fig-w) - 4px); right: 0; }
 .asset-media.playing video { object-fit: contain; background: #000; }
 .asset-media .play { position: absolute; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: rgba(5, 7, 19, 0.7); border: 1px solid var(--line-strong); color: var(--cyan); font-size: 13px; }
 .asset-media.playing .play { display: none; }
+.asset-media.external { background: radial-gradient(circle at 50% 40%, rgba(95, 231, 255, 0.12), rgba(255, 255, 255, 0.03) 70%); }
 .asset-media.audio .wave { position: absolute; bottom: 10px; color: rgba(95, 231, 255, 0.5); letter-spacing: 2px; }
 .asset-media .kind { color: var(--text-2); font-size: 20px; font-weight: 700; letter-spacing: 0.08em; }
 .asset-media .kind-sub { position: absolute; bottom: 10px; color: var(--text-3); font-size: 11px; }
@@ -332,7 +335,7 @@ body[data-side="left"] .board { left: calc(var(--fig-w) - 4px); right: 0; }
 .sessions small { color: var(--text-3); }
 
 /* numbers */
-.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
 .stat { padding: 9px 11px; border-radius: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 .stat-label { color: var(--text-3); font-size: 11.5px; }
 .stat-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
