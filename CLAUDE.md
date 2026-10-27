@@ -105,7 +105,7 @@ Codex CLI 状态同步（JSONL 日志轮询，~1.5s 延迟）：
 | `src/state.js` | 状态机核心：setState/applyState、多会话追踪、resolveDisplayState、DND、wake poll、进程存活检测、session submenu |
 | `src/server.js` | HTTP 服务：/state（GET 健康检查 + POST 状态更新）、/permission（权限 hook）、端口发现、hook 注册 |
 | `src/permission.js` | 权限气泡：BrowserWindow 创建/堆叠/销毁、allow/deny/suggestion 决策、PASSTHROUGH_TOOLS |
-| `src/updater.js` | 自动更新：electron-updater 懒加载、GitHub API 版本检查、更新对话框、菜单状态标签 |
+| `src/javis-updater.js` | 自动更新（JAVIS gateway）：`GET /fleet/desk/app/latest?platform=` → 下载到 userData/updates + sha256/size 校验；Mac 校验签名/bundle id 后由辅助脚本替换 JAVIS.app（旧版留在 updates/prev）+ `open -g`；Windows NSIS `/S --force-run`；空闲 ≥30s 或退出时安装；`JAVIS_AUTO_UPDATE=0` 关闭。发布：`scripts/publish-desk-release.sh`，Mac 固定签名：`scripts/sign-mac.sh` |
 | `src/focus.js` | 终端聚焦：持久 PowerShell 进程 + C# FFI（Windows）、osascript 序列化（macOS）、VS Code tab 聚焦 |
 | `src/mini.js` | 极简模式：边缘吸附、螃蟹步入场、抛物线跳跃、peek hover、窗口滑动动画 |
 | `src/menu.js` | 菜单系统：i18n（en/zh）、右键菜单、系统托盘、contextMenuOwner、语言切换、窗口缩放 |
@@ -169,8 +169,8 @@ Codex CLI 状态同步（JSONL 日志轮询，~1.5s 延迟）：
 
 ### 自动更新
 
-- 使用 `electron-updater`，Windows 下载安装 NSIS 更新包，macOS 打开 GitHub release 页面
-- 托盘菜单"Check for Updates"手动触发，`autoInstallOnAppQuit = true`
+- `src/javis-updater.js`（不再用 electron-updater/GitHub）：启动 30s 后 + 每 24h 检查 JAVIS gateway，见核心文件表
+- 菜单「Kiểm tra bản mới」手动触发；设置页显示版本行
 
 ### 眼球追踪系统（tick.js 计算 → renderer.js 渲染）
 

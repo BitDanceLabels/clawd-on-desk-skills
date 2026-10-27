@@ -399,8 +399,6 @@ function initJavisCompanionHost(deps) {
     log: authLog,
   });
   auth.init();
-  // Máy của anh trong tailnet: tự đăng nhập im lặng, không bắt ghép đôi tay.
-  void auth.autoSignIn("start");
   proxy = createFleetProxy({
     auth, configStore, fetchImpl, log: authLog,
     onChatStatus: (h) => {
@@ -541,6 +539,9 @@ function initJavisCompanionHost(deps) {
     win.on("closed", () => { win = null; });
     return win;
   }
+
+  // Máy của anh trong tailnet: tự đăng nhập im lặng, không bắt ghép đôi tay (sau khi host dựng xong).
+  void auth.autoSignIn("start");
 
   return {
     // { inactive: true } = hiện mà không giành con trỏ (lúc app tự khởi động, anh có thể đang gõ).

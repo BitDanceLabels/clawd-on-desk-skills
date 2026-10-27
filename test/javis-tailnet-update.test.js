@@ -135,6 +135,15 @@ describe("Tự đăng nhập trong tailnet", () => {
     assert.ok(!env.timers.some((t) => t.ms === 10 * 1000), "hẹn thử lại đã huỷ (chỉ còn hẹn làm mới token)");
   });
 
+  it("đang chờ hẹn thử lại: mở màn đăng nhập không đốt thêm lượt", async () => {
+    const env = setupAuth({ answers: ["offline", OK_TOKENS] });
+    await env.auth.autoSignIn("start");
+    const r = await env.auth.autoSignIn("login-view");
+    assert.strictEqual(r.waiting, true);
+    assert.strictEqual(env.calls.length, 1);
+    assert.strictEqual(env.timers.length, 1);
+  });
+
   it("gateway không phải .ts.net → không gọi", async () => {
     const env = setupAuth({ gateway: "https://bumbee.asia", answers: [OK_TOKENS] });
     assert.strictEqual((await env.auth.autoSignIn("start")).skipped, true);

@@ -571,9 +571,13 @@ function createAuth(deps) {
     return st.state === "signed_out" && !tn.stopped && tn.tries < TAILNET_MAX_TRIES && isTailnetGateway(getGateway());
   }
 
+  // Máy dậy / mở khoá (mạng vừa đổi) được thử ngay; lý do khác chờ hẹn giãn cách đang có.
+  const WAKE_REASONS = new Set(["resume", "unlock-screen", "retry"]);
+
   function autoSignIn(reason = "start") {
     if (tn.running) return tn.running;
     if (!tailnetEligible()) return Promise.resolve({ ok: false, skipped: true });
+    if (tn.timer && !WAKE_REASONS.has(reason)) return Promise.resolve({ ok: false, skipped: true, waiting: true });
     if (tn.timer) { clearTimer(tn.timer); tn.timer = null; }
     tn.running = (async () => {
       tn.tries += 1;
