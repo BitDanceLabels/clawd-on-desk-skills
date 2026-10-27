@@ -107,4 +107,11 @@ describe("Trang chủ · chat 401/403 không bế tắc", () => {
     assert.strictEqual(resolveStaticPath("/javis-home-page.js", roots), path.join("/src", "javis-home-page.js"));
     assert.strictEqual(resolveStaticPath("/javis-home.js", roots), null);
   });
+
+  it("serves the shared 'Cần anh duyệt' card (ui/javis-ask-box.js) and nothing else under ui/", () => {
+    const roots = { src: "/src", assets: "/assets" };
+    assert.strictEqual(resolveStaticPath("/ui/javis-ask-box.js", roots), path.join("/assets", "javis-companion", "ui", "javis-ask-box.js"));
+    assert.strictEqual(resolveStaticPath("/ui/javis-ask-box2.js", roots), null);
+    assert.strictEqual(resolveStaticPath("/ui/../package.json", roots), null);
+  });
 });

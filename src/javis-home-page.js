@@ -108,7 +108,37 @@
     }
   }
 
+  // ── Cần anh duyệt: <javis-ask-box> (cùng component web) — trả lời ngay trong app, không văng ra web ──
+  const WEB = "https://javis.bumbee.asia";
+  let askbox = null;
+  function mountAskbox() {
+    if (askbox) return askbox;
+    if (!document.querySelector("script[data-javis-askbox]")) {
+      const s = document.createElement("script");
+      s.type = "module";
+      s.src = "ui/javis-ask-box.js";
+      s.dataset.javisAskbox = "1";
+      document.head.appendChild(s);
+    }
+    askbox = document.createElement("javis-ask-box");
+    askbox.setAttribute("fleet", ""); // cùng origin javis-desk://app → proxy của app tự gắn token máy
+    askbox.setAttribute("via", "desk");
+    askbox.setAttribute("heading", "");
+    // Thẻ gộp / phiếu: link sâu tới đúng thẻ trên web (mở sẵn hộp trả lời), mở bằng trình duyệt hệ thống.
+    askbox.addEventListener("javis-ask-open-link", (e) => {
+      e.preventDefault();
+      const u = String((e.detail && e.detail.url) || "");
+      void tools.openWeb(/^https?:\/\//.test(u) ? u : WEB + (u.startsWith("/") ? u : "/" + u));
+    });
+    askbox.addEventListener("javis-ask-count", (e) => badge("badge-inbox", (e.detail && e.detail.n) || 0));
+    askbox.addEventListener("javis-ask-answered", () => { void tools.inboxRefresh().then(renderInbox); });
+    $("askbox-host").appendChild(askbox);
+    return askbox;
+  }
+
   async function loadInbox() {
+    const box = mountAskbox();
+    if (box && typeof box.refresh === "function") box.refresh();
     renderInbox(await tools.inboxGet());
     // Opening the tab is a real user action; main keeps it to ≤ 1 call / minute.
     renderInbox(await tools.inboxRefresh());
@@ -253,7 +283,10 @@
 
   // ── Wiring ──
   for (const b of document.querySelectorAll(".tile")) b.onclick = () => select(b.dataset.tab);
-  $("inbox-refresh").onclick = async () => renderInbox(await tools.inboxRefresh());
+  $("inbox-refresh").onclick = async () => {
+    if (askbox && typeof askbox.refresh === "function") askbox.refresh();
+    renderInbox(await tools.inboxRefresh());
+  };
   $("inbox-web").onclick = () => home.openWebPage("home");
   $("report-refresh").onclick = () => loadReport(true);
   $("report-read").onclick = async () => {

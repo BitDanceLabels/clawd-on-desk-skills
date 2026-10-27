@@ -153,9 +153,9 @@ function o(e) {
 var s = 0;
 function c(e = r()) {
 	return i || (s >= 3 ? Promise.reject(/* @__PURE__ */ Error("Live2D: đã thử 3 lần, dừng")) : (s++, a = e, i = o(e).then(() => Promise.all([
-		import("./javis-companion-lazy-lib-FoDFHkt2.js").then((e) => e.t),
-		import("./javis-companion-lazy-lib-hCuWBK0s.js"),
-		import("./javis-companion-lazy-cubism4.es-CJVJGiPw.js")
+		import("./javis-companion-lazy-lib-Co4S4pq5.js").then((e) => e.t),
+		import("./javis-companion-lazy-lib-DWqQpnYj.js"),
+		import("./javis-companion-lazy-cubism4.es-P8CwtBEm.js")
 	])).then(([e, t, n]) => ({
 		core: e,
 		display: t,

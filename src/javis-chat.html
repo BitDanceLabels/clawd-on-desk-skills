@@ -44,8 +44,9 @@
       <div class="tab-head"><h3>Cần anh duyệt</h3><span id="inbox-sub" class="muted"></span><span class="sp"></span><button id="inbox-refresh" class="small">Làm mới</button></div>
       <p id="inbox-error" class="card warn" hidden></p>
       <div id="inbox-empty" class="card" hidden><b>Không có việc nào chờ anh.</b><p class="muted">Có việc mới, cô bé sẽ báo nhẹ (trừ lúc đang ngủ).</p></div>
-      <ul id="inbox-list" class="items"></ul>
-      <p class="note">Máy này chỉ xem. Duyệt luôn trên JAVIS web: bấm <b>Mở để duyệt</b>.</p>
+      <!-- Thẻ "Cần anh duyệt" dùng chung với web (<javis-ask-box>, vendored ui/javis-ask-box.js): bấm thẻ → tóm tắt + nút + ô nhắn, trả lời ngay tại đây. -->
+      <div id="askbox-host"></div>
+      <ul id="inbox-list" class="items" hidden></ul>
       <button id="inbox-web" class="wide-btn">Mở JAVIS web ↗</button>
     </div>
 

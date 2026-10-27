@@ -76,7 +76,7 @@ function resolveStaticPath(pathname, roots) {
   if (t) return path.join(roots.src, `javis-${t[1]}.html`);
   t = rel.match(/^\/(javis-(?:inbox|secretary|clip)-page\.js|javis-tools\.css)$/);
   if (t) return path.join(roots.src, t[1]);
-  let m = rel.match(/^\/ui\/(javis-companion[A-Za-z0-9_.-]*\.js)$/);
+  let m = rel.match(/^\/ui\/(javis-companion[A-Za-z0-9_.-]*\.js|javis-ask-box\.js)$/);
   if (m) return path.join(roots.assets, "javis-companion", "ui", m[1]);
   if (rel === "/live2d/live2dcubismcore.min.js") return path.join(roots.assets, "live2d", "runtime", "live2dcubismcore.min.js");
   // Only the Hiyori sample (used by <javis-companion>); files are read in place, never written out.

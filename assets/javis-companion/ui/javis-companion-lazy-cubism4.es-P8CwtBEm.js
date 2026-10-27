@@ -1,6 +1,6 @@
-import { S as e, c as t, f as n, i as r, l as i, s as a, y as o } from "./javis-companion-lazy-lib-FoDFHkt2.js";
-import { Container as s } from "./javis-companion-lazy-lib-hCuWBK0s.js";
-//#region node_modules/pixi-live2d-display/dist/cubism4.es.js
+import { S as e, c as t, f as n, i as r, l as i, s as a, y as o } from "./javis-companion-lazy-lib-Co4S4pq5.js";
+import { Container as s } from "./javis-companion-lazy-lib-DWqQpnYj.js";
+//#region ../../../cfix/apps/web/node_modules/pixi-live2d-display/dist/cubism4.es.js
 var c = Object.defineProperty, l = Math.pow, u = (e, t, n) => t in e ? c(e, t, {
 	enumerable: !0,
 	configurable: !0,
