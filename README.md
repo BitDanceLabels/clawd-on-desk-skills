@@ -32,7 +32,7 @@ Anh nói hoặc gõ, JAVIS **hiển hoá** câu trả lời thành thẻ ngay c�
 
 Lần đầu bé nhắc **Ghép đôi**: quét QR hoặc mở link, bấm Duyệt trên JAVIS web. Khoá thiết bị lưu mã hoá
 (Keychain / DPAPI), chỉ tiến trình chính dùng để gọi gateway; trang không bao giờ thấy khoá.
-Bản 0.11 đã ghép đôi thì giữ nguyên (cùng thư mục dữ liệu).
+Bản 0.11/0.12 đã ghép đôi thì giữ nguyên (cùng thư mục dữ liệu).
 
 ## Nhẹ máy
 

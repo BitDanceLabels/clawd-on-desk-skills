@@ -11,7 +11,7 @@
 - `assets/hologram/character.jpg` — JAVIS hologram character chosen by the owner (from
   `bumbee-be-den/public/hologram/character.jpg`). BitDance Labels asset; the app only samples it
   into a particle cloud.
-- v0.12.0 no longer ships the Live2D Inc. sample models (Hiyori/Haru) or the Cubism runtime;
+- v0.13.0 no longer ships the Live2D Inc. sample models (Hiyori/Haru) or the Cubism runtime;
   their old credits and terms are kept in `archive/LICENSES.legacy.md` for history.
 
 ## Icons
