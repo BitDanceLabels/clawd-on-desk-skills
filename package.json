@@ -1,21 +1,17 @@
 {
   "name": "clawd-on-desk",
   "productName": "JAVIS",
-  "version": "0.11.0",
-  "description": "JAVIS — trợ lý AI trên máy tính (nhân vật Hiyori), phản ứng theo phiên Claude Code / Codex / Gemini / Cursor và chat chung với JAVIS web.",
+  "version": "0.13.0",
+  "description": "JAVIS — bé trợ lý hologram trên máy tính: nói hoặc gõ, JAVIS hiện việc, máy, kho tài sản, cảnh báo, số liệu kênh, dòng tiền ngay cạnh; báo khi có việc cần anh.",
   "main": "src/main.js",
   "scripts": {
-    "start": "node launch.js",
-    "dev": "cross-env CLAWD_DEVTOOLS=1 ELECTRON_ENABLE_LOGGING=1 node launch.js",
-    "dev:quiet": "cross-env CLAWD_DEVTOOLS=0 node launch.js",
+    "start": "npm run build:renderer && node launch.js",
+    "dev": "npm run build:renderer && cross-env CLAWD_DEVTOOLS=1 ELECTRON_ENABLE_LOGGING=1 node launch.js",
     "build:renderer": "node scripts/build-renderer-bundles.js",
     "build": "npm run build:renderer && electron-builder --win --publish never",
     "build:mac": "npm run build:renderer && electron-builder --mac --publish never",
     "build:linux": "npm run build:renderer && electron-builder --linux --publish never",
     "build:all": "npm run build:renderer && electron-builder --win --mac --linux --publish never",
-    "setup:live2d": "node scripts/setup-live2d.js",
-    "setup:demo-models": "node scripts/setup-demo-models.js",
-    "setup:all": "node scripts/setup-live2d.js --yes && node scripts/setup-demo-models.js --yes",
     "test": "node --test test/*.test.js",
     "install:gemini-hooks": "node hooks/gemini-install.js",
     "install:cursor-hooks": "node hooks/cursor-install.js",
@@ -23,7 +19,8 @@
   },
   "keywords": [
     "javis",
-    "desktop-pet",
+    "desktop-assistant",
+    "hologram",
     "electron",
     "claude-code"
   ],
@@ -52,15 +49,13 @@
           ]
         }
       ],
-      "category": "public.app-category.entertainment",
+      "category": "public.app-category.productivity",
       "identity": null,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "LSUIElement": true,
-        "NSCameraUsageDescription": "JAVIS uses the camera when you choose to attach a snapshot to a message.",
-        "NSMicrophoneUsageDescription": "JAVIS uses the microphone when you turn on voice input.",
-        "NSSpeechRecognitionUsageDescription": "JAVIS uses speech recognition when you turn on voice input."
+        "NSMicrophoneUsageDescription": "JAVIS dùng micro khi anh bấm nút mic để nói lệnh."
       }
     },
     "win": {
@@ -113,23 +108,18 @@
     },
     "files": [
       "src/**/*",
-      "assets/svg/**/*",
-      "assets/tray-icon*.png",
-      "assets/live2d/**/*",
-      "assets/vrm/**/*",
+      "!src/desk/*.js",
+      "src/desk/index.html",
+      "src/desk/desk.css",
       "hooks/**/*",
-      "extensions/**/*",
       "agents/**/*",
-      "assets/javis-companion/**/*",
+      "assets/hologram/**/*",
+      "assets/tray-icon*.png",
       "assets/icons/**/*",
-      "assets/live2d/NOTICE.txt",
       "LICENSES.md"
     ],
     "asarUnpack": [
-      "hooks/**/*",
-      "extensions/**/*",
-      "assets/live2d/**/*",
-      "assets/vrm/**/*"
+      "hooks/**/*"
     ],
     "extraResources": [
       {
@@ -151,15 +141,11 @@
     "cross-env": "^10.1.0",
     "electron": "^41.0.2",
     "electron-builder": "^26.8.1",
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "three": "^0.184.0"
   },
   "dependencies": {
-    "@pixiv/three-vrm": "^3.5.2",
     "electron-updater": "^6.8.3",
-    "koffi": "^2.15.2",
-    "pixi-live2d-display-lipsyncpatch": "^0.5.0-ls-8",
-    "pixi.js": "^7.4.3",
-    "qrcode": "^1.5.4",
-    "three": "^0.184.0"
+    "qrcode": "^1.5.4"
   }
 }

@@ -69,6 +69,6 @@ describe("JAVIS userData path", () => {
     const pin = src.indexOf('require("./user-data-path").pinUserDataPath(app)');
     assert.ok(pin > 0);
     assert.ok(pin < src.indexOf('getPath("userData")'));
-    assert.ok(pin < src.indexOf('require("./bumbee-system-bootstrap")'));
+    assert.ok(pin < src.indexOf('require("./javis-desk-host")'));
   });
 });
