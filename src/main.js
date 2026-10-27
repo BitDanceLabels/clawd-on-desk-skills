@@ -2175,6 +2175,9 @@ function getJavisHost() {
   _javisHost = require("./javis-companion-host").initJavisCompanionHost({
     app, BrowserWindow, ipcMain, session, net, safeStorage, shell,
     getBounds: (w, h) => getChatBoundsNearPet(w, h),
+    getUpdateStatus: () => deskUpdateStatus(),
+    checkUpdate: () => { const u = getDeskUpdater(); return u ? u.check({ manual: true }) : null; },
+    installUpdate: () => installDeskUpdate(),
     onPairChange: (kind) => {
       if (_deskTools) _deskTools.onPairChange(kind);
       rebuildAllMenus();
@@ -4063,14 +4066,70 @@ const { t, buildContextMenu, buildTrayMenu, rebuildAllMenus, createTray,
         showPetContextMenu, popupMenuAt, ensureContextMenuOwner,
         requestAppQuit, resizeWindow, applyDockVisibility } = _menu;
 
-// ── Auto-updater — delegated to src/updater.js ──
-const _updaterCtx = {
-  get doNotDisturb() { return doNotDisturb; },
-  get miniMode() { return _mini.getMiniMode(); },
-  t, rebuildAllMenus, updateLog,
-};
-const _updater = require("./updater")(_updaterCtx);
-const { setupAutoUpdater, checkForUpdates, getUpdateMenuItem, getUpdateMenuLabel } = _updater;
+// ── Tự cập nhật từ gateway JAVIS — src/javis-updater.js (thay electron-updater/GitHub cũ) ──
+let _deskUpdater = null;
+function getDeskUpdater() {
+  if (_deskUpdater || !app.isReady()) return _deskUpdater;
+  const { net } = require("electron");
+  const host = getJavisHost();
+  _deskUpdater = require("./javis-updater").createUpdater({
+    currentVersion: app.getVersion(),
+    userDataDir: app.getPath("userData"),
+    getGateway: () => (host ? host.configStore.getGateway() : require("./javis-companion-host").DEFAULT_GATEWAY),
+    getToken: async () => (host && host.auth.isSignedIn() ? host.auth.token() : null),
+    fetchImpl: (url, init) => net.fetch(url, init),
+    isUserBusy: () => _focusGuard.isUserBusy(),
+    quitApp: () => requestAppQuit(),
+    onChange: () => { scheduleMenuRebuild(); if (host) host.notifyStatus(); },
+    log: (line) => updateLog(line),
+    // Chỉ bản đóng gói mới tự thay mình; chạy dev (npm start) không đụng tới.
+    enabled: app.isPackaged && process.env.JAVIS_AUTO_UPDATE !== "0",
+  });
+  return _deskUpdater;
+}
+
+function deskUpdateStatus() {
+  return _deskUpdater ? _deskUpdater.getStatus() : { state: "idle", currentVersion: app.getVersion() };
+}
+
+async function checkForUpdates(manual = false) {
+  const u = getDeskUpdater();
+  if (!u) return null;
+  const s = await u.check({ manual });
+  if (!manual) return s;
+  const msg = {
+    latest: `Anh đang dùng bản mới nhất (${app.getVersion()}).`,
+    error: s.message || "Chưa kiểm được bản mới, thử lại sau nhé.",
+    unsupported: s.message,
+  }[s.state];
+  if (msg) dialog.showMessageBox({ type: "info", title: "JAVIS", message: msg, noLink: true }).catch(() => {});
+  return s;
+}
+
+function installDeskUpdate() {
+  const u = getDeskUpdater();
+  if (!u) return;
+  const s = u.getStatus();
+  if (s.state === "ready") { u.installNow({ reason: "menu" }); return; }
+  if (s.state === "manual" && u.stagedApp()) {
+    // /Applications không ghi được: mở Finder ở bản mới để anh kéo vào Applications.
+    require("electron").shell.showItemInFolder(u.stagedApp());
+    dialog.showMessageBox({
+      type: "info", title: "JAVIS",
+      message: `Bản ${s.version} đã tải và kiểm chữ ký xong. Anh thoát JAVIS rồi kéo JAVIS.app vừa mở vào thư mục Applications (thay bản cũ) nhé.`,
+      noLink: true,
+    }).catch(() => {});
+  }
+}
+
+function getUpdateMenuItem() {
+  const s = deskUpdateStatus();
+  if (s.state === "checking") return { label: "Đang kiểm bản mới…", enabled: false };
+  if (s.state === "downloading") return { label: `Đang tải bản ${s.version}…`, enabled: false };
+  if (s.state === "installing") return { label: "Đang cài bản mới…", enabled: false };
+  if (s.state === "ready" || s.state === "manual") return { label: `Có bản mới ${s.version} — bấm để cài`, click: () => installDeskUpdate() };
+  return { label: `Kiểm tra bản mới (đang dùng ${app.getVersion()})`, click: () => { void checkForUpdates(true); } };
+}
 
 // ── Rabbit periodic popup — delegated to src/rabbit.js ──
 const _rabbitCtx = {
@@ -5090,9 +5149,8 @@ if (!gotTheLock) {
       console.warn("Clawd: failed to auto-install terminal-focus extension:", err.message);
     }
 
-    // Auto-updater: setup event handlers + silent check after 5s
-    setupAutoUpdater();
-    setTimeout(() => checkForUpdates(false), 5000);
+    // Tự cập nhật: kiểm 30s sau khi mở + mỗi 24h (tắt bằng JAVIS_AUTO_UPDATE=0).
+    try { getDeskUpdater().start(); } catch (err) { updateLog(`update: start failed: ${err && err.message}`); }
     setTimeout(() => {
       _bumbeeSystemBootstrap.sync({ reason: "app-startup" })
         .then((result) => {
@@ -5156,6 +5214,8 @@ if (!gotTheLock) {
 
   app.on("before-quit", () => {
     isQuitting = true;
+    // Bản mới đã tải + kiểm xong: cài trong lúc app đóng, rồi tự mở lại.
+    if (_deskUpdater) { try { _deskUpdater.onQuit(); _deskUpdater.stop(); } catch {} }
     if (coachReminderTimer) clearTimeout(coachReminderTimer);
     savePrefs();
     unregisterToggleShortcut();

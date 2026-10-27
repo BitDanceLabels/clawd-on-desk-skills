@@ -340,6 +340,7 @@ function initJavisCompanionHost(deps) {
   const {
     app, BrowserWindow, ipcMain, session, net, safeStorage, shell, getBounds, onOpen,
     onPairChange = () => {}, onAuthState = () => {}, onSessionExpired = () => {},
+    getUpdateStatus = () => null, checkUpdate = async () => null, installUpdate = () => {},
   } = deps;
   const roots = { src: __dirname, assets: path.resolve(__dirname, "..", "assets") };
   const userDataDir = app.getPath("userData");
@@ -357,7 +358,11 @@ function initJavisCompanionHost(deps) {
   // Máy ngủ dậy / mở khoá: bỏ kết nối cũ trước khi app gọi lại máy chủ.
   try {
     const { powerMonitor } = require("electron");
-    for (const ev of ["resume", "unlock-screen"]) powerMonitor.on(ev, () => { void netRecover.reset(ev); });
+    for (const ev of ["resume", "unlock-screen"]) {
+      powerMonitor.on(ev, () => {
+        void netRecover.reset(ev).then(() => { if (auth) void auth.autoSignIn(ev); });
+      });
+    }
   } catch {}
   let win = null;
   // Last answer of the gateway to a chat request (401/403 = chat refused for this machine for now).
@@ -368,7 +373,8 @@ function initJavisCompanionHost(deps) {
   };
   let proxy = null;
   let gatewayClient = null;
-  const auth = createAuth({
+  let auth = null;
+  auth = createAuth({
     fetchImpl,
     getGateway: () => configStore.getGateway(),
     sessionStore,
@@ -393,6 +399,8 @@ function initJavisCompanionHost(deps) {
     log: authLog,
   });
   auth.init();
+  // Máy của anh trong tailnet: tự đăng nhập im lặng, không bắt ghép đôi tay.
+  void auth.autoSignIn("start");
   proxy = createFleetProxy({
     auth, configStore, fetchImpl, log: authLog,
     onChatStatus: (h) => {
@@ -437,6 +445,8 @@ function initJavisCompanionHost(deps) {
       emailEnabled,
       encrypted: !!(safeStorage && safeStorage.isEncryptionAvailable()),
       chatHealth,
+      appVersion: app.getVersion(),
+      update: getUpdateStatus(),
     };
   }
 
@@ -451,6 +461,8 @@ function initJavisCompanionHost(deps) {
     // Hide "Hoặc nhận mã qua email" only when the gateway says mail is off.
     if (!auth.isSignedIn()) {
       try { emailEnabled = (await auth.config()).emailEnabled; } catch {}
+      // Màn đăng nhập đang mở (vd. mạng vừa đổi): thử tự đăng nhập nếu còn lượt.
+      void auth.autoSignIn("login-view");
     }
     return status();
   });
@@ -462,6 +474,8 @@ function initJavisCompanionHost(deps) {
   guarded("javis:email-resend", () => auth.emailResend());
   guarded("javis:logout", () => auth.logout());
   guarded("javis:use-key", (key) => auth.useLegacyKey(key));
+  guarded("javis:check-update", async () => { await checkUpdate(); return { ok: true }; });
+  guarded("javis:install-update", () => { installUpdate(); return { ok: true }; });
   guarded("javis:set-gateway", (url) => {
     try {
       configStore.setGateway(url);
@@ -548,6 +562,8 @@ function initJavisCompanionHost(deps) {
       else send("javis:show-tab", tab);
       return w;
     },
+    // Updater state changed: the settings line re-renders.
+    notifyStatus: () => send("javis:auth", status()),
     isWindowSender: (event) => fromChat(event),
     getWindow: () => win,
     status,

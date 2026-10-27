@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld("javisDesk", {
   logout: () => ipcRenderer.invoke("javis:logout"),
   useKey: (key) => ipcRenderer.invoke("javis:use-key", key),
   setGateway: (url) => ipcRenderer.invoke("javis:set-gateway", url),
+  checkUpdate: () => ipcRenderer.invoke("javis:check-update"),
+  installUpdate: () => ipcRenderer.invoke("javis:install-update"),
   onAuth: (cb) => ipcRenderer.on("javis:auth", (_e, s) => cb(s)),
   onShowView: (cb) => ipcRenderer.on("javis:show-view", (_e, v) => cb(v)),
   onShowTab: (cb) => ipcRenderer.on("javis:show-tab", (_e, v) => cb(v)),

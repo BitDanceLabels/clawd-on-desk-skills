@@ -57,6 +57,7 @@ function render(s) {
   $("pane-code").hidden = s.state !== "waiting_code";
   $("btn-email-link").hidden = s.emailEnabled === false;
   const lead = s.notice
+    || (out && s.autoSigningIn ? "Đang tự đăng nhập máy của anh…" : "")
     || (s.state === "waiting_code" ? `Em đã gửi mã 6 số tới ${s.pendingEmail}. Anh mở email rồi nhập vào đây.` : "")
     || (out && emailForm ? LEAD.email : LEAD[s.state] || LEAD.signed_out);
   $("login-line").textContent = lead;
@@ -70,11 +71,30 @@ function render(s) {
   $("btn-logout").hidden = !s.signedIn;
   $("btn-settings-login").hidden = s.signedIn;
   if (document.activeElement !== $("gateway")) $("gateway").value = s.gateway || "";
+  renderVersion(s);
   $("gateway-note").textContent = s.encrypted ? "" : "Máy này không có keychain: phiên đăng nhập lưu ở tệp chỉ chủ máy đọc được.";
   // Trang chủ tabs (javis-home-page.js) follow the same state.
   // The Home script may load after this first state: it also reads window.javisAuthState.
   window.javisAuthState = { ...s, view };
   window.dispatchEvent(new CustomEvent("javis-auth", { detail: window.javisAuthState }));
+}
+
+// Settings: "Phiên bản 0.12.3 · <trạng thái cập nhật>".
+function renderVersion(s) {
+  const u = s.update || {};
+  const extra = {
+    checking: "đang kiểm bản mới…",
+    downloading: `đang tải bản ${u.version}…`,
+    ready: `bản ${u.version} đã sẵn sàng, em tự cài lúc anh rảnh tay`,
+    manual: `bản ${u.version} đã tải, bấm Cài bản mới`,
+    installing: "đang cài bản mới…",
+    latest: "đã là bản mới nhất",
+    error: u.message || "",
+    unsupported: u.message || "",
+  }[u.state] || "";
+  $("version-line").textContent = `Phiên bản ${s.appVersion || ""}${extra ? ` · ${extra}` : ""}`;
+  $("btn-install-update").hidden = !(u.state === "ready" || u.state === "manual");
+  $("btn-check-update").disabled = u.state === "checking" || u.state === "downloading" || u.state === "installing";
 }
 
 // Back on the "Trò chuyện" tab: open the chat panel again if it was closed.
@@ -181,6 +201,8 @@ function wire() {
     unmountCompanion();
     render(auth);
   };
+  $("btn-check-update").onclick = () => act(api.checkUpdate());
+  $("btn-install-update").onclick = () => act(api.installUpdate());
   api.onAuth(render);
   api.onShowView((v) => { settingsOpen = v === "settings"; render(auth); });
   setInterval(updateCredit, 2000);

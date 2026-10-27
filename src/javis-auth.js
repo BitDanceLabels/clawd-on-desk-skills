@@ -7,6 +7,7 @@
 //        │                        └─ cancel / 5 min ─▶ signed_out
 //        └──emailStart()──▶ waiting_code ──emailVerify()──▶ signed_in
 //   signed_in ──refresh says relogin/401, or whoami rejects the token──▶ expired ──login()──▶ …
+//   signed_out ──autoSignIn() (gateway *.ts.net: the owner's own machine)──▶ signed_in
 //
 // A 401 from ONE feature (chat, voice, report, clipboard…) is not "session over" (FIX 21/10:
 // the app signed in, then a feature answered 401 and the app wiped the session). The session
@@ -37,6 +38,10 @@ const OFFLINE_COOLDOWN_MS = 60 * 1000;
 const VERIFY_TTL_MS = 60 * 1000;
 const AUTH_LOG_FILE = "javis-auth.log";
 const AUTH_LOG_MAX_BYTES = 256 * 1024;
+// Silent sign-in over Tailscale: at most 3 tries per app run (open, wake, network change),
+// growing gaps; 403/404 = this machine can't use it → stop until the next start.
+const TAILNET_MAX_TRIES = 3;
+const TAILNET_RETRY_MS = 10 * 1000;
 
 const STATES = ["signed_out", "waiting_browser", "waiting_code", "signed_in", "expired"];
 
@@ -54,6 +59,10 @@ const TEXT = {
   codeFormat: "Mã gồm 6 chữ số.",
   resent: "Em gửi lại mã rồi, anh xem email nhé.",
 };
+
+function isTailnetGateway(url) {
+  try { return /\.ts\.net$/i.test(new URL(url).hostname); } catch { return false; }
+}
 
 const b64u = (buf) => Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
@@ -162,7 +171,7 @@ function createAuth(deps) {
     createServer = http.createServer, log = () => {},
   } = deps;
 
-  let st = { state: "signed_out", kind: null, email: "", name: "", notice: "", pendingEmail: "" };
+  let st = { state: "signed_out", kind: null, email: "", name: "", notice: "", pendingEmail: "", autoSigningIn: false };
   let access = null; // { token, expiresAt }
   let refreshing = null;
   let refreshTimer = null;
@@ -552,24 +561,79 @@ function createAuth(deps) {
     return snapshot();
   }
 
+  // ── Silent sign-in over Tailscale ──
+  // POST /fleet/auth/desktop/tailnet {client_id, device_name}: the gateway knows the machine by
+  // its tailnet identity. Same tokens as the code exchange. 403/404/429 = not available: stay on
+  // the "Đăng nhập JAVIS" button, no red notice.
+  const tn = { tries: 0, stopped: false, running: null, timer: null };
+
+  function tailnetEligible() {
+    return st.state === "signed_out" && !tn.stopped && tn.tries < TAILNET_MAX_TRIES && isTailnetGateway(getGateway());
+  }
+
+  function autoSignIn(reason = "start") {
+    if (tn.running) return tn.running;
+    if (!tailnetEligible()) return Promise.resolve({ ok: false, skipped: true });
+    if (tn.timer) { clearTimer(tn.timer); tn.timer = null; }
+    tn.running = (async () => {
+      tn.tries += 1;
+      const n = tn.tries;
+      set({ autoSigningIn: true, notice: st.notice });
+      let r = null;
+      try {
+        r = await postJson("/fleet/auth/desktop/tailnet", { client_id: CLIENT_ID, device_name: deviceName });
+      } catch (err) {
+        log(`auth: tailnet sign-in unreachable (${reason}, ${n}/${TAILNET_MAX_TRIES}): ${err && err.message}`);
+      }
+      const data = r && r.data;
+      if (r && r.ok && data && typeof data.access_token === "string") {
+        stopPending();
+        const user = data.user || { email: data.email || "", name: data.name || "" };
+        if (applyTokens({ ...data, user })) {
+          log(`auth: tailnet sign-in ok (${reason})`);
+          return { ok: true };
+        }
+      }
+      const status = r ? r.status : 0;
+      if (status === 403 || status === 404 || (status >= 400 && status < 500 && status !== 429)) {
+        tn.stopped = true;
+        log(`auth: tailnet sign-in not available (${status}), button login only until next start`);
+      } else if (n >= TAILNET_MAX_TRIES) {
+        log(`auth: tailnet sign-in failed ${status || "offline"} (${n}/${TAILNET_MAX_TRIES}), stop until next start`);
+      } else {
+        // 429 / 5xx / offline: one more try after a growing gap (10 s, 30 s).
+        const wait = TAILNET_RETRY_MS * 3 ** (n - 1);
+        log(`auth: tailnet sign-in failed ${status || "offline"} (${n}/${TAILNET_MAX_TRIES}), retry in ${wait / 1000}s`);
+        tn.timer = setTimer(() => { tn.timer = null; void autoSignIn("retry"); }, wait);
+        if (tn.timer && tn.timer.unref) tn.timer.unref();
+      }
+      return { ok: false, status };
+    })().finally(() => {
+      tn.running = null;
+      if (st.autoSigningIn) set({ autoSigningIn: false, notice: st.notice });
+    });
+    return tn.running;
+  }
+
   // Gateway URL changed: the old session belongs to the old gateway.
   function resetConfig() { cfgCache = null; }
 
   function dispose() {
     stopPending();
+    if (tn.timer) { clearTimer(tn.timer); tn.timer = null; }
     if (refreshTimer) { clearTimer(refreshTimer); refreshTimer = null; }
   }
 
   return {
     init, getState: snapshot, config, resetConfig, token, refresh, onUnauthorized,
     login, reopenBrowser, cancel, emailStart, emailVerify, emailResend,
-    useLegacyKey, logout, dispose,
+    useLegacyKey, logout, dispose, autoSignIn,
     isSignedIn: () => st.state === "signed_in",
     _pending: () => pending,
   };
 }
 
 module.exports = {
-  CLIENT_ID, STATES, TEXT, BROWSER_WAIT_MS, REFRESH_EARLY_MS, MAX_TRIES, VERIFY_TTL_MS, AUTH_LOG_FILE,
+  CLIENT_ID, STATES, TEXT, BROWSER_WAIT_MS, TAILNET_MAX_TRIES, TAILNET_RETRY_MS, isTailnetGateway, REFRESH_EARLY_MS, MAX_TRIES, VERIFY_TTL_MS, AUTH_LOG_FILE,
   createAuth, createSessionStore, createAuthLog, redact, createPkce, isEmail, isPlausibleDeviceKey, b64u,
 };
