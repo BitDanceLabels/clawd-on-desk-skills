@@ -38,6 +38,8 @@ const state = {
   bubbleTimer: null,
   bubbleSticky: false,
   speakingAudio: null,
+  autoSigningIn: false,
+  pairPromptPending: false,
 };
 
 // ── hologram ──
@@ -169,7 +171,8 @@ desk.onCommand((cmd) => {
   else if (cmd.type === "pair") { openBoard(); showPairCard(); }
   else if (cmd.type === "blur") {
     const playing = [...document.querySelectorAll("video,audio")].some((m) => !m.paused);
-    if (!ui.input.value.trim() && !state.recorder && !playing && !state.permissions.size) closeBoard();
+    const answering = document.documentElement.hasAttribute("data-javis-asking");
+    if (!ui.input.value.trim() && !state.recorder && !playing && !state.permissions.size && !answering) closeBoard();
   }
 });
 desk.onPrefs((p) => { state.prefs = { ...state.prefs, ...p }; });
@@ -187,6 +190,31 @@ function showBubble(text, { actions = [], warm = false, sticky = false, ttl = 12
   clearTimeout(state.bubbleTimer);
   if (!sticky) state.bubbleTimer = setTimeout(hideBubble, ttl);
 }
+// Bubbles JAVIS shows by itself (new work, alerts, session notices, greetings) wait while
+// the owner is typing or using the mouse (idle < 30 s, focus-guard in main) so they never
+// pop up under the pointer mid-work. Only the latest waits; re-checked every 30 s for up
+// to 10 minutes, then dropped (the badge still counts it).
+const NOTIFY_RECHECK_MS = 30000;
+const NOTIFY_MAX_WAIT_MS = 10 * 60 * 1000;
+let pendingNotice = null;
+let pendingTimer = null;
+async function notify(text, opts = {}) {
+  if (state.mode === "open") return;
+  pendingNotice = { text, opts, since: (pendingNotice && pendingNotice.since) || Date.now() };
+  clearTimeout(pendingTimer);
+  let busy = false;
+  try { busy = await desk.userBusy(); } catch {}
+  const n = pendingNotice;
+  if (!n) return;
+  if (!busy) {
+    pendingNotice = null;
+    showBubble(n.text, n.opts);
+    return;
+  }
+  if (Date.now() - n.since > NOTIFY_MAX_WAIT_MS) { pendingNotice = null; return; }
+  pendingTimer = setTimeout(() => { if (pendingNotice) notify(pendingNotice.text, pendingNotice.opts); }, NOTIFY_RECHECK_MS);
+}
+
 function hideBubble() {
   clearTimeout(state.bubbleTimer);
   ui.bubble.hidden = true;
@@ -213,6 +241,7 @@ function addCard({ type, title, icon, question, warm = false }) {
 
 const ctx = {
   openUrl: (url) => desk.openUrl(url),
+  openAsk: (id) => showAskCard(id),
   localSessions: () => state.sessions,
   playAudio: (el) => {
     for (const m of document.querySelectorAll("audio,video")) if (m !== el) m.pause();
@@ -221,11 +250,15 @@ const ctx = {
 };
 
 function errorView(err, retry) {
-  if (err instanceof GatewayError && (err.status === 401 || err.status === 403)) {
+  if (err instanceof GatewayError && err.status === 401) {
     state.paired = false;
     updateLinkState();
-    return h("div", {}, h("p", { class: "empty" }, err.code === "pairing_rejected" ? "JAVIS từ chối khoá của máy này — cần ghép đôi lại." : "Máy này chưa ghép đôi với JAVIS."),
-      h("div", { class: "card-foot" }, h("button", { class: "btn primary", type: "button", onclick: showPairCard }, "Ghép đôi ngay")));
+    return h("div", {}, h("p", { class: "empty" }, err.code === "pairing_rejected" ? "JAVIS không nhận phiên của máy này nữa — cần kết nối lại." : "Máy này chưa kết nối JAVIS."),
+      h("div", { class: "card-foot" }, h("button", { class: "btn primary", type: "button", onclick: showPairCard }, "Kết nối")));
+  }
+  if (err instanceof GatewayError && err.status === 403) {
+    return h("div", {}, h("p", { class: "empty" }, err.code === "feature_denied" ? "Mục này chưa có quyền với tài khoản trên máy. Anh vẫn đang kết nối, thử lại sau nhé." : "Mục này chỉ chủ nhân xem được."),
+      retry ? h("div", { class: "card-foot" }, h("button", { class: "btn", type: "button", onclick: retry }, "Thử lại")) : null);
   }
   const text = err instanceof GatewayError && err.status === 502
     ? "Chưa tới được gateway JAVIS (Tailscale tắt hoặc server đang bận)."
@@ -255,6 +288,83 @@ async function showDataCard(type, params, question) {
     }
   };
   await run();
+}
+
+// ── "Cần anh duyệt": the shared <javis-ask-box> web component (same as JAVIS web) ──
+// Tap a card → summary (việc gì, vì sao cần anh, đề xuất, hạn, nếu trễ, link nghe/xem) +
+// choice buttons + message box + Gửi, answered via POST /fleet/tasklife/<id>/answer through
+// the same-origin proxy. Only merged cards (group_ids) / approval slips open a deep link.
+const ASKBOX_SRC = "ui/javis-ask-box.js";
+function loadAskbox() {
+  if (!document.querySelector("script[data-javis-askbox]")) {
+    document.head.append(h("script", { type: "module", src: ASKBOX_SRC, "data-javis-askbox": "1" }));
+  }
+  return customElements.whenDefined("javis-ask-box");
+}
+
+// Open the card for `focusId` inside the component (it opens the first one by default).
+function focusAsk(box, focusId) {
+  if (!focusId) return;
+  let done = false;
+  const tryFocus = () => {
+    const root = box.shadowRoot;
+    const li = root && root.querySelector(`li[data-ask-id="${CSS.escape(String(focusId))}"]`);
+    if (!li) return false;
+    done = true;
+    if (!li.classList.contains("open")) li.querySelector(".jab-head").click();
+    setTimeout(() => {
+      li.scrollIntoView({ block: "nearest" });
+      const ta = li.querySelector("textarea");
+      if (ta) ta.focus({ preventScroll: true });
+    }, 60);
+    return true;
+  };
+  const obs = new MutationObserver(() => { if (!done && tryFocus()) obs.disconnect(); });
+  const watch = () => {
+    if (tryFocus()) return;
+    obs.observe(box.shadowRoot, { childList: true, subtree: true });
+    setTimeout(() => obs.disconnect(), 10000);
+  };
+  if (box.shadowRoot) watch();
+  else setTimeout(watch, 0);
+}
+
+let askCard = null;
+function showAskCard(focusId) {
+  if (state.mode !== "open") openBoard();
+  if (askCard && askCard.card.isConnected) {
+    // Already on the board: bring it to the top and open the asked card.
+    ui.cards.prepend(askCard.card);
+    ui.cards.scrollTop = 0;
+    askCard.box.refresh();
+    focusAsk(askCard.box, focusId);
+    return askCard;
+  }
+  const { card, fill } = addCard({ type: "ask", title: "Trả lời ngay", icon: "✎", warm: true });
+  const box = document.createElement("javis-ask-box");
+  box.setAttribute("fleet", ""); // same origin javis-desk://app → the main process adds the token
+  box.setAttribute("via", "desk");
+  box.addEventListener("javis-ask-open-link", (e) => {
+    // Merged cards / approval slips / "nghe · xem" links: system browser, never in-window.
+    e.preventDefault();
+    const u = String((e.detail && e.detail.url) || "");
+    desk.openUrl(/^https?:\/\//.test(u) ? u : "https://javis.bumbee.asia" + (u.startsWith("/") ? u : "/" + u));
+  });
+  box.addEventListener("javis-ask-count", (e) => {
+    state.waitingOwner = Number((e.detail && e.detail.n) || 0);
+    refreshPhase();
+  });
+  box.addEventListener("javis-ask-answered", (e) => {
+    const d = e.detail || {};
+    say(`Dạ, em gửi rồi: ${d.label || "đã trả lời"}${d.text ? " (kèm lời nhắn)" : ""}.`, { quiet: true });
+  });
+  fill(box);
+  askCard = { card, box };
+  loadAskbox().then(() => focusAsk(box, focusId)).catch(() => {
+    fill(h("p", { class: "empty" }, "Chưa mở được hộp trả lời — anh mở JAVIS web giúp em."),
+      h("div", { class: "card-foot" }, h("button", { class: "chip-btn", type: "button", onclick: () => desk.openUrl("https://javis.bumbee.asia") }, "JAVIS web ↗")));
+  });
+  return askCard;
 }
 
 function showHelpCard(question) {
@@ -437,15 +547,15 @@ async function speak(text) {
   }
 }
 
-// ── pairing ──
+// ── connection: silent tailnet sign-in, pairing (QR / key) as the fallback ──
 function updateLinkState() {
   ui.linkState.className = `link-state ${state.paired === true ? "ok" : state.paired === false ? "warn" : ""}`;
-  ui.linkState.title = state.paired === true ? "Đã kết nối JAVIS" : state.paired === false ? "Chưa ghép đôi JAVIS" : "Đang kiểm tra kết nối";
+  ui.linkState.title = state.paired === true ? "Đã kết nối JAVIS" : state.autoSigningIn ? "Đang tự kết nối JAVIS…" : state.paired === false ? "Chưa kết nối JAVIS" : "Đang kiểm tra kết nối";
 }
 
 const PAIR_TEXT = {
   pending: "Đang chờ anh duyệt trên JAVIS web…",
-  approved: "Ghép đôi xong. Em sẵn sàng!",
+  approved: "Kết nối xong. Em sẵn sàng!",
   denied: "Yêu cầu ghép đôi bị từ chối.",
   expired: "Mã hết hạn — bấm bắt đầu lại.",
   error: "Không tới được gateway JAVIS (đã thử 3 lần, dừng). Kiểm tra Tailscale rồi thử lại.",
@@ -453,12 +563,25 @@ const PAIR_TEXT = {
 let pairCard = null;
 async function showPairCard() {
   if (pairCard && pairCard.card.isConnected) pairCard.card.remove();
-  pairCard = addCard({ type: "pair", title: "Ghép đôi máy này với JAVIS", icon: "⌁", warm: true });
+  pairCard = addCard({ type: "pair", title: "Kết nối máy này với JAVIS", icon: "⌁", warm: true });
   const status = await desk.status();
-  const line = h("p", {}, status && status.paired && !status.authError ? `Máy đã ghép đôi${status.email ? ` với ${status.email}` : ""}.` : "Bấm bắt đầu, quét mã bằng điện thoại hoặc mở link rồi bấm Duyệt.");
-  const start = h("button", { class: "btn primary", type: "button" }, status && status.paired ? "Ghép đôi lại" : "Bắt đầu ghép đôi");
-  const view = h("div", {}, line, h("div", { class: "card-foot" }, start), h("p", { class: "empty" }, `Gateway: ${status ? status.gateway : "?"}`));
-  pairCard.fill(view);
+  const paired = !!(status && status.paired && !status.authError);
+  const auto = h("p", {}, paired
+    ? `Máy đã kết nối${status.email ? ` với ${status.email}` : ""}${status.kind === "oauth" ? " (tự đăng nhập qua Tailscale)" : ""}.`
+    : status && status.autoSigningIn ? "Đang tự đăng nhập máy của anh qua Tailscale…"
+      : "Máy của anh trong Tailscale sẽ tự kết nối, không cần làm gì. Không tự vào được thì dùng cách dự phòng dưới đây.");
+  const line = h("p", { class: "empty" }, "Dự phòng: quét mã QR bằng điện thoại hoặc mở link rồi bấm Duyệt.");
+  const start = h("button", { class: "btn", type: "button" }, paired ? "Ghép đôi lại" : "Ghép đôi bằng mã QR");
+  const keyInput = h("input", { type: "password", class: "key-input", placeholder: "hoặc dán khoá thiết bị", autocomplete: "off", spellcheck: "false" });
+  const keyBtn = h("button", { class: "btn ghost", type: "button" }, "Dùng khoá");
+  keyBtn.addEventListener("click", async () => {
+    const r = await desk.pairPasteKey(keyInput.value);
+    keyInput.value = "";
+    line.textContent = r && r.ok ? "Đã dùng khoá thiết bị. Em sẵn sàng!" : "Khoá chưa đúng định dạng.";
+    if (r && r.ok) onConnected("key");
+  });
+  pairCard.fill(h("div", {}, auto, line, h("div", { class: "card-foot" }, start), h("div", { class: "card-foot key-row" }, keyInput, keyBtn), h("p", { class: "empty" }, `Gateway: ${status ? status.gateway : "?"}`)));
+  pairCard.auto = auto;
   start.addEventListener("click", async () => {
     start.disabled = true;
     const r = await desk.pairStart();
@@ -475,14 +598,45 @@ async function showPairCard() {
     pairCard.line = pairLine;
   });
 }
+
+let connectedOnce = false;
+function onConnected(via) {
+  state.paired = true;
+  state.pairPromptPending = false;
+  updateLinkState();
+  if (ui.bubbleSticky) hideBubble();
+  if (!connectedOnce) {
+    connectedOnce = true;
+    say(via === "tailnet" ? "Em tự kết nối JAVIS xong rồi anh. Anh muốn xem gì trước?" : "Kết nối xong rồi anh. Anh muốn xem gì trước?", { quiet: state.mode === "open" });
+  }
+  startStream();
+  checkOwnerWork("pair");
+}
+
+function promptPairing() {
+  if (state.mode === "open") { showPairCard(); return; }
+  notify("Chào anh, em là JAVIS. Em chưa tự kết nối được máy này (Tailscale?). Anh bấm Kết nối để ghép đôi dự phòng nhé.", {
+    sticky: true, actions: [{ label: "Kết nối", tone: "primary", run: () => { openBoard(); showPairCard(); } }, { label: "Để sau", tone: "ghost", run: () => {} }],
+  });
+}
+
 desk.onPairUpdate((u) => {
   if (pairCard && pairCard.line) pairCard.line.textContent = PAIR_TEXT[u.status] || u.status;
-  if (u.status === "approved") {
-    state.paired = true;
-    updateLinkState();
-    say("Ghép đôi xong rồi anh. Anh muốn xem gì trước?", { quiet: state.mode === "open" });
-    startStream();
-    checkOwnerWork("pair");
+  if (u.status === "approved") onConnected(u.via || "pair");
+});
+desk.onAuth((s) => {
+  if (!s) return;
+  state.autoSigningIn = !!s.autoSigningIn;
+  if (s.paired && !s.authError) state.paired = true;
+  else if (!s.autoSigningIn) state.paired = false;
+  updateLinkState();
+  if (pairCard && pairCard.auto && pairCard.card.isConnected && !s.paired) {
+    pairCard.auto.textContent = s.autoSigningIn ? "Đang tự đăng nhập máy của anh qua Tailscale…" : "Chưa tự kết nối được. Anh dùng cách dự phòng dưới đây nhé.";
+  }
+  // The silent sign-in finished without success: now offer the pairing fallback once.
+  if (!s.paired && !s.autoSigningIn && state.pairPromptPending) {
+    state.pairPromptPending = false;
+    promptPairing();
   }
 });
 desk.onAuthError(() => { state.paired = false; updateLinkState(); });
@@ -492,10 +646,10 @@ desk.onSessions((s) => { state.sessions = s; refreshPhase(); });
 desk.onSessionNotice((n) => {
   const who = n.agent === "codex" ? "Codex" : n.agent === "claude-code" ? "Claude" : n.agent || "Phiên làm việc";
   const where = n.where ? ` ở ${n.where}` : "";
-  if (n.phase === "waiting") showBubble([h("b", {}, who), `${where} đang chờ anh trả lời.`], { warm: true, ttl: 20000, actions: [{ label: "Xem phiên", tone: "primary", run: () => { openBoard(); ask("phiên claude"); } }] });
-  else if (n.phase === "error") showBubble([h("b", {}, who), `${where} vừa gặp lỗi.`], { warm: true, ttl: 15000 });
-  else if (n.phase === "done") showBubble([h("b", {}, who), `${where} làm xong rồi anh.`], { ttl: 7000 });
-  else if (n.phase === "notice") showBubble([h("b", {}, n.title || "Thông báo"), n.message ? ` ${n.message}` : ""], { warm: n.level === "error" || n.level === "warning" });
+  if (n.phase === "waiting") notify([h("b", {}, who), `${where} đang chờ anh trả lời.`], { warm: true, ttl: 20000, actions: [{ label: "Xem phiên", tone: "primary", run: () => { openBoard(); ask("phiên claude"); } }] });
+  else if (n.phase === "error") notify([h("b", {}, who), `${where} vừa gặp lỗi.`], { warm: true, ttl: 15000 });
+  else if (n.phase === "done") notify([h("b", {}, who), `${where} làm xong rồi anh.`], { ttl: 7000 });
+  else if (n.phase === "notice") notify([h("b", {}, n.title || "Thông báo"), n.message ? ` ${n.message}` : ""], { warm: n.level === "error" || n.level === "warning" });
 });
 
 desk.onPermission((p) => {
@@ -516,7 +670,7 @@ desk.onPermission((p) => {
       ]),
   );
   if (state.mode !== "open") {
-    showBubble([h("b", {}, "Claude"), p.elicitation ? " đang hỏi anh." : ` xin chạy ${p.tool}: `, p.elicitation ? "" : (p.summary || "").slice(0, 80)], {
+    notify([h("b", {}, "Claude"), p.elicitation ? " đang hỏi anh." : ` xin chạy ${p.tool}: `, p.elicitation ? "" : (p.summary || "").slice(0, 80)], {
       warm: true,
       sticky: true,
       actions: p.elicitation ? [{ label: "Xem", tone: "primary", run: openBoard }] : [
@@ -562,14 +716,15 @@ async function checkOwnerWork(reason) {
     if (state.prefs.doNotDisturb || state.mode === "open") return;
     if (grewWaiting) {
       const first = (tasks.waiting || [])[0];
-      showBubble([`Có `, h("b", {}, `${waiting} việc`), ` đang chờ anh quyết.`, first ? ` Gấp nhất: ${String(first.title || "").slice(0, 70)}` : ""], {
-        warm: true, ttl: 25000, actions: [{ label: "Xem việc", tone: "warm", run: () => { openBoard(); ask("việc cần anh"); } }, { label: "Để sau", tone: "ghost", run: () => {} }],
+      // Tap the bubble → the answer box opens right here on that card (summary + choices).
+      notify([`Có `, h("b", {}, `${waiting} việc`), ` đang chờ anh quyết.`, first ? ` Gấp nhất: ${String(first.title || "").slice(0, 70)}` : ""], {
+        warm: true, ttl: 25000, actions: [{ label: "Trả lời ngay", tone: "warm", run: () => showAskCard(first ? first.id : null) }, { label: "Xem việc", tone: "primary", run: () => { openBoard(); ask("việc cần anh"); } }, { label: "Để sau", tone: "ghost", run: () => {} }],
       });
     } else if (grewAlerts) {
-      showBubble([h("b", {}, `${high} cảnh báo`), " mức cao đang mở."], { warm: true, ttl: 20000, actions: [{ label: "Xem", tone: "primary", run: () => { openBoard(); ask("cảnh báo"); } }] });
+      notify([h("b", {}, `${high} cảnh báo`), " mức cao đang mở."], { warm: true, ttl: 20000, actions: [{ label: "Xem", tone: "primary", run: () => { openBoard(); ask("cảnh báo"); } }] });
     }
   } catch (err) {
-    if (err instanceof GatewayError && (err.status === 401 || err.status === 403)) {
+    if (err instanceof GatewayError && err.status === 401) {
       state.paired = false;
       updateLinkState();
     }
@@ -619,7 +774,7 @@ function onGatewayEvent(ev) {
   if (type === "task.updated" || type === "alert.changed" || type === "approval.created" || type === "ticket.created") checkOwnerWork(type);
   else if (type === "avatar.command" && ev.data && (ev.data.say || ev.data.text)) {
     const text = String(ev.data.say || ev.data.text).slice(0, 220);
-    if (!state.prefs.doNotDisturb) showBubble(text, { ttl: 15000 });
+    if (!state.prefs.doNotDisturb) notify(text, { ttl: 15000 });
     if (state.prefs.voiceReply) speak(text);
   }
 }
@@ -633,19 +788,20 @@ function onGatewayEvent(ev) {
   if (s) state.sessions = s;
   const status = await desk.status();
   state.paired = status ? !!(status.paired && !status.authError) : null;
+  state.autoSigningIn = !!(status && status.autoSigningIn);
   updateLinkState();
   refreshPhase();
   setTimeout(() => {
     if (state.paired) {
-      showBubble(`${greeting()}, hôm nay mình làm gì?`, { ttl: 6000, actions: [{ label: "Việc hôm nay", tone: "primary", run: () => { openBoard(); ask("việc cần anh"); } }] });
+      connectedOnce = true;
+      notify(`${greeting()}, hôm nay mình làm gì?`, { ttl: 6000, actions: [{ label: "Việc hôm nay", tone: "primary", run: () => { openBoard(); ask("việc cần anh"); } }] });
       checkOwnerWork("start");
       startStream();
-    } else if (state.mode === "open") {
-      showPairCard();
+    } else if (state.paired === null || state.autoSigningIn) {
+      // Silent tailnet sign-in still running: offer pairing only if it ends without success.
+      state.pairPromptPending = true;
     } else {
-      showBubble("Chào anh, em là JAVIS. Ghép đôi máy này với JAVIS để em hiện việc, máy, kho cho anh nhé.", {
-        sticky: true, actions: [{ label: "Ghép đôi", tone: "primary", run: () => { openBoard(); showPairCard(); } }, { label: "Để sau", tone: "ghost", run: () => {} }],
-      });
+      promptPairing();
     }
   }, 2800);
 })();

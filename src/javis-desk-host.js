@@ -3,14 +3,19 @@
 //
 // The desk page is served from the privileged scheme javis-desk://app/. Requests to
 // javis-desk://app/fleet/* and /asset-files/* are proxied here in the main process
-// to the gateway with "Authorization: Bearer <device key>". The key comes from
-// device-code pairing (/fleet/auth/device/start → approve on web → /poll), is
-// stored encrypted with safeStorage, and never reaches the renderer.
+// to the gateway with "Authorization: Bearer <token>". Sign-in lives in javis-auth.js:
+//   1. the owner's machines in the tailnet sign in silently (POST /fleet/auth/desktop/tailnet)
+//      when the app starts, wakes up or unlocks — no pairing steps;
+//   2. fallback when the tailnet route is not available: device-code pairing (QR / link,
+//      /fleet/auth/device/start → approve on web → /poll) or a pasted device key.
+// Tokens/keys are stored encrypted with safeStorage and never reach the renderer.
 "use strict";
 
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { createAuth, createSessionStore, createAuthLog } = require("./javis-auth");
+const { createNetRecover } = require("./net-recover");
 
 const SCHEME = "javis-desk";
 const ORIGIN = `${SCHEME}://app`;
@@ -22,6 +27,7 @@ const CLIENT_ID_HEADER = "X-Javis-Client";
 // Retry policy (owner rule): at most 3 attempts with growing back-off, then stop.
 const MAX_FAILURES = 3;
 const PAIR_POLL_MIN_S = 3;
+const FEATURE_DENIED = "Tính năng này chưa có quyền với tài khoản trên máy. Anh vẫn đang đăng nhập, thử lại sau nhé.";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -72,6 +78,8 @@ const STATIC_FILES = {
   "/desk.bundle.js": ["src", "bundles/desk.bundle.js"],
   "/hologram/character.jpg": ["assets", "hologram/character.jpg"],
   "/icon.png": ["assets", "icons/128x128.png"],
+  // Shared "Cần anh duyệt" card (same web component as JAVIS web, vendored build).
+  "/ui/javis-ask-box.js": ["assets", "javis-ask-box/javis-ask-box.js"],
 };
 function resolveStaticPath(pathname, roots) {
   let rel;
@@ -149,79 +157,97 @@ function jsonResponse(status, body, extraHeaders = {}) {
   });
 }
 
-function jsonResponse(status, body, extraHeaders = {}) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...extraHeaders },
-  });
-}
-
 const FORWARD_REQUEST_HEADERS = ["content-type", "accept", "last-event-id", "range"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "cache-control", "content-disposition", "content-length", "content-range", "accept-ranges"];
 
 /**
  * Proxy for javis-desk://app/fleet/* and /asset-files/*. `fetchImpl` is Electron's
  * net.fetch in the app and a fake in tests (no real gateway / LLM calls from tests).
+ *
+ * A 401 is not "signed out" by itself: auth refreshes the token and the request is
+ * sent once more; if the token is still good (whoami) only this feature is refused
+ * (403 feature_denied, session kept). The session ends only when auth says so.
  */
-function createFleetProxy({ keyStore, configStore, fetchImpl, onAuthError = () => {}, log = () => {} }) {
-  const state = { authError: false, streamFailures: 0, streamBlockedUntil: 0 };
+function createFleetProxy({ auth, configStore, fetchImpl, log = () => {} }) {
+  const state = { streamFailures: 0, streamBlockedUntil: 0 };
+  // Open /fleet/stream connections, closed when the session ends (otherwise they keep
+  // sockets to the gateway busy and later calls queue behind them).
+  const liveStreams = new Set();
 
   function reset() {
-    state.authError = false;
     state.streamFailures = 0;
     state.streamBlockedUntil = 0;
+  }
+
+  function abortStreams() {
+    for (const ac of liveStreams) { try { ac.abort(); } catch {} }
+    liveStreams.clear();
   }
 
   async function handle(request) {
     const url = new URL(request.url);
     if (!isGatewayPath(url.pathname)) return jsonResponse(404, { error: "not_found" });
     const isStream = url.pathname === "/fleet/stream";
-    const creds = keyStore.read();
-    if (!creds) return jsonResponse(401, { error: "not_paired" });
-    // Gateway already rejected this key: stop calling it until the user re-pairs.
-    if (state.authError) return jsonResponse(401, { error: "pairing_rejected" });
+    if (!auth.isSignedIn()) return jsonResponse(401, { error: "not_paired" });
     if (isStream && state.streamFailures >= MAX_FAILURES) {
       // 204 tells the page to stop reconnecting (no endless retries).
       return new Response(null, { status: 204 });
     }
     if (isStream && Date.now() < state.streamBlockedUntil) return new Response(null, { status: 204 });
+    let token = await auth.token();
+    if (!token) return auth.isSignedIn() ? jsonResponse(502, { error: "gateway_unreachable" }) : jsonResponse(401, { error: "not_paired" });
 
-    // Never forward a token from the page; the key is added here.
+    // Never forward a token from the page; the bearer is added here.
     url.searchParams.delete("token");
     const target = configStore.getGateway() + url.pathname + (url.search || "");
-    const headers = new Headers();
+    const baseHeaders = new Headers();
     for (const name of FORWARD_REQUEST_HEADERS) {
       const v = request.headers.get(name);
-      if (v) headers.set(name, v);
+      if (v) baseHeaders.set(name, v);
     }
-    headers.set("Authorization", `Bearer ${creds.key}`);
-    headers.set(CLIENT_ID_HEADER, "javis-desktop");
+    baseHeaders.set(CLIENT_ID_HEADER, "javis-desktop");
+    const body = request.method !== "GET" && request.method !== "HEAD" ? await request.arrayBuffer() : undefined;
 
-    const init = { method: request.method, headers, redirect: "manual" };
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      init.body = await request.arrayBuffer();
+    let ac = null;
+    if (isStream) {
+      ac = new AbortController();
+      liveStreams.add(ac);
+      // The page closed its stream → close the upstream connection too.
+      if (request.signal) request.signal.addEventListener("abort", () => { ac.abort(); liveStreams.delete(ac); });
     }
-
     let res;
-    try {
-      res = await fetchImpl(target, init);
-    } catch (err) {
-      log(`JAVIS: gateway unreachable (${url.pathname}): ${err && err.message}`);
-      if (isStream) {
-        state.streamFailures++;
-        state.streamBlockedUntil = Date.now() + 5000 * 2 ** state.streamFailures;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const headers = new Headers(baseHeaders);
+      headers.set("Authorization", `Bearer ${token}`);
+      const init = { method: request.method, headers, redirect: "manual" };
+      if (body !== undefined) init.body = body;
+      if (ac) init.signal = ac.signal;
+      try {
+        res = await fetchImpl(target, init);
+      } catch (err) {
+        if (ac) liveStreams.delete(ac);
+        log(`JAVIS: gateway unreachable (${url.pathname}): ${err && err.message}`);
+        if (isStream) {
+          state.streamFailures++;
+          state.streamBlockedUntil = Date.now() + 5000 * 2 ** state.streamFailures;
+        }
+        return jsonResponse(502, { error: "gateway_unreachable" });
       }
-      return jsonResponse(502, { error: "gateway_unreachable" });
+      if (res.status !== 401) break;
+      const next = await auth.onUnauthorized(token, { retried: attempt > 0, path: url.pathname });
+      if (!next) {
+        if (ac) liveStreams.delete(ac);
+        if (!auth.isSignedIn()) return jsonResponse(401, { error: "pairing_rejected" });
+        if (isStream) { state.streamFailures = MAX_FAILURES; return new Response(null, { status: 204 }); }
+        return jsonResponse(403, { error: "feature_denied", detail: FEATURE_DENIED });
+      }
+      token = next;
     }
 
-    if (res.status === 401 || res.status === 403) {
-      state.authError = true;
-      onAuthError(res.status);
-      return jsonResponse(res.status, { error: "pairing_rejected" });
-    }
     if (isStream) {
       if (res.ok) state.streamFailures = 0;
       else {
+        liveStreams.delete(ac);
         state.streamFailures++;
         state.streamBlockedUntil = Date.now() + 5000 * 2 ** state.streamFailures;
       }
@@ -235,7 +261,7 @@ function createFleetProxy({ keyStore, configStore, fetchImpl, onAuthError = () =
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers: outHeaders });
   }
 
-  return { handle, reset, state };
+  return { handle, reset, abortStreams, state, liveStreams };
 }
 
 /**
@@ -307,9 +333,10 @@ function createPairing({ keyStore, configStore, fetchImpl, onUpdate, onPaired, s
     if (current !== me) return;
     const status = r.data.status;
     if (status === "approved" && isPlausibleDeviceKey(r.data.key)) {
-      keyStore.save(r.data.key.trim(), { email: r.data.email, name: r.data.name });
+      const meta = { email: r.data.email || "", name: r.data.name || "" };
+      keyStore.save(r.data.key.trim(), meta);
       stop();
-      onPaired();
+      onPaired(r.data.key.trim(), meta);
       onUpdate({ status: "approved", email: r.data.email || "", name: r.data.name || "" });
       return;
     }
@@ -337,34 +364,58 @@ function createPairing({ keyStore, configStore, fetchImpl, onUpdate, onPaired, s
 }
 
 /**
- * Wire the scheme, proxy and pairing IPC into the Electron app. Only the desk
- * window (getWindow()) may call the javis:* IPC handlers.
+ * Wire the scheme, sign-in, proxy and pairing IPC into the Electron app. Only the
+ * desk window (getWindow()) may call the javis:* IPC handlers.
  */
 function initDeskHost(deps) {
-  const { app, ipcMain, session, net, safeStorage, shell, getWindow } = deps;
+  const { app, ipcMain, session, net, safeStorage, shell, powerMonitor, getWindow, onAuthChange = () => {} } = deps;
   const roots = { src: __dirname, assets: path.resolve(__dirname, "..", "assets") };
   const userDataDir = app.getPath("userData");
   const keyStore = createKeyStore({ userDataDir, safeStorage });
+  const sessionStore = createSessionStore({ userDataDir, safeStorage });
   const configStore = createConfigStore({ userDataDir });
+  // userData/javis-auth.log: sign-in / refresh / 401 trail (never a token).
+  const authLog = createAuthLog({ userDataDir, mirror: (line) => console.warn(`JAVIS ${line}`) });
+  // Network changed (Wi-Fi/Tailscale, wake, unlock): drop stale connections/DNS and retry once.
+  const netRecover = createNetRecover({
+    getSession: () => session.defaultSession,
+    fetchImpl: (url, init) => net.fetch(url, init),
+    log: (line) => authLog(line),
+  });
+  const fetchImpl = netRecover.fetch;
 
   const send = (channel, payload) => {
     const win = getWindow();
     if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
   };
-  const proxy = createFleetProxy({
-    keyStore,
-    configStore,
-    fetchImpl: (url, init) => net.fetch(url, init),
-    onAuthError: (status) => send("javis:auth-error", { status }),
-    log: (msg) => console.warn(msg),
+  let proxy = null;
+  const auth = createAuth({
+    fetchImpl,
+    getGateway: () => configStore.getGateway(),
+    sessionStore,
+    legacyStore: keyStore,
+    openExternal: (url) => shell.openExternal(url),
+    deviceName: os.hostname().replace(/\.local$/, "") || "JAVIS Desktop",
+    onChange: (s, { wasIn }) => {
+      if (s.signedIn && !wasIn && proxy) proxy.reset();
+      if (!s.signedIn && wasIn && proxy) proxy.abortStreams();
+      send("javis:auth", status());
+      // Silent tailnet sign-in: the page reacts like a finished pairing (pairing sends its own).
+      if (s.signedIn && !wasIn && s.kind === "oauth") send("javis:pair-update", { status: "approved", email: s.email || "", name: s.name || "", via: "tailnet" });
+      try { onAuthChange(s); } catch {}
+    },
+    onExpired: (s) => send("javis:auth-error", { status: 401, notice: s.notice || "" }),
+    log: authLog,
   });
+  auth.init();
+  proxy = createFleetProxy({ auth, configStore, fetchImpl, log: authLog });
   const pairing = createPairing({
     keyStore,
     configStore,
-    fetchImpl: (url, init) => net.fetch(url, init),
+    fetchImpl,
     clientName: `JAVIS Desktop · ${os.hostname()}`,
     onUpdate: (u) => send("javis:pair-update", u),
-    onPaired: () => proxy.reset(),
+    onPaired: (key, meta) => auth.useLegacyKey(key, meta),
   });
 
   session.defaultSession.protocol.handle(SCHEME, async (request) => {
@@ -386,14 +437,17 @@ function initDeskHost(deps) {
   });
 
   function status() {
-    const creds = keyStore.read();
+    const s = auth.getState();
     return {
-      paired: !!creds,
-      email: creds ? creds.email : "",
-      name: creds ? creds.name : "",
+      paired: s.signedIn,
+      kind: s.kind,
+      email: s.email || "",
+      name: s.name || "",
+      autoSigningIn: !!s.autoSigningIn,
+      notice: s.notice || "",
       gateway: configStore.getGateway(),
       defaultGateway: DEFAULT_GATEWAY,
-      authError: proxy.state.authError,
+      authError: s.state === "expired",
       encrypted: !!(safeStorage && safeStorage.isEncryptionAvailable()),
     };
   }
@@ -402,12 +456,19 @@ function initDeskHost(deps) {
     const win = getWindow();
     return win && !win.isDestroyed() && event.sender === win.webContents;
   };
-  ipcMain.handle("javis:status", (e) => (fromDesk(e) ? status() : null));
+  ipcMain.handle("javis:status", (e) => {
+    if (!fromDesk(e)) return null;
+    // The page asks while signed out (start, pairing card): try the silent tailnet sign-in
+    // if tries are left (no extra try while a retry is already scheduled).
+    if (!auth.isSignedIn()) void auth.autoSignIn("login-view");
+    return status();
+  });
   ipcMain.handle("javis:set-gateway", (e, url) => {
     if (!fromDesk(e)) return null;
     try {
       configStore.setGateway(url);
       pairing.stop();
+      auth.resetConfig();
       proxy.reset();
       return { ok: true, status: status() };
     } catch (err) {
@@ -437,24 +498,39 @@ function initDeskHost(deps) {
   });
   ipcMain.handle("javis:pair-paste-key", (e, key) => {
     if (!fromDesk(e)) return null;
-    if (!isPlausibleDeviceKey(key)) return { ok: false, error: "invalid_key" };
-    keyStore.save(key.trim());
+    const r = auth.useLegacyKey(key);
+    if (!r.ok) return r;
     pairing.stop();
     proxy.reset();
     return { ok: true, status: status() };
   });
-  ipcMain.handle("javis:unpair", (e) => {
+  ipcMain.handle("javis:unpair", async (e) => {
     if (!fromDesk(e)) return null;
     pairing.stop();
-    keyStore.clear();
+    await auth.logout();
     proxy.reset();
     return { ok: true, status: status() };
   });
 
+  // Wake / unlock: the network may have changed — drop old connections, then try the
+  // silent sign-in again right away (only while signed out and tries are left).
+  if (powerMonitor) {
+    for (const ev of ["resume", "unlock-screen"]) {
+      powerMonitor.on(ev, () => {
+        void netRecover.reset(ev).then(() => auth.autoSignIn(ev));
+      });
+    }
+  }
+  // The owner's machine in the tailnet signs in by itself — no pairing steps.
+  void auth.autoSignIn("start");
+
   return {
     status,
+    auth,
     gateway: () => configStore.getGateway(),
-    stop: () => pairing.stop(),
+    token: async () => (auth.isSignedIn() ? auth.token() : null),
+    fetch: fetchImpl,
+    stop: () => { pairing.stop(); auth.dispose(); proxy.abortStreams(); },
   };
 }
 
@@ -465,5 +541,6 @@ module.exports = {
   MAX_FAILURES,
   registerJavisScheme,
   initDeskHost,
+  FEATURE_DENIED,
   __test: { normalizeGateway, isPlausibleDeviceKey, isGatewayPath, resolveStaticPath, createKeyStore, createConfigStore, createFleetProxy, createPairing },
 };

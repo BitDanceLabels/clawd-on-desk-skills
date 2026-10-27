@@ -154,11 +154,22 @@ export const CARD_META = {
 async function loadTasks() {
   return api("/fleet/home/tasks");
 }
+// Rows waiting for the owner open the shared "Cần anh duyệt" box inside the app
+// (ctx.openAsk → <javis-ask-box>: summary, choices, message, Gửi) — no jump to the web.
 function renderTasks(d, ctx) {
   const waiting = d.waiting || [];
   const top = (d.data || []).filter((t) => !waiting.some((w) => w.id === t.id));
   const approvals = (d.approvals || []).filter((a) => a.state === "open");
-  const row = (t, wait, i) => h("li", { class: `task ${wait ? "wait" : ""} ${wait && i === 0 ? "first" : ""}` },
+  const answer = (id) => h("button", { class: "chip-btn warm", type: "button", onclick: (e) => { e.stopPropagation(); ctx.openAsk(id); } }, "Trả lời");
+  const row = (t, wait, i) => h("li", {
+    class: `task ${wait ? "wait" : ""} ${wait && i === 0 ? "first" : ""}`,
+    "data-task-id": t.id,
+    role: wait ? "button" : null,
+    tabindex: wait ? "0" : null,
+    title: wait ? "Bấm để xem tóm tắt và trả lời ngay" : null,
+    onclick: wait ? () => ctx.openAsk(t.id) : null,
+    onkeydown: wait ? (e) => { if (e.key === "Enter") ctx.openAsk(t.id); } : null,
+  },
     h("div", { class: "task-main" },
       h("span", { class: `pill ${String(t.importance || "").toLowerCase()}` }, t.importance || "—"),
       h("b", {}, short(t.title, 110))),
@@ -168,16 +179,18 @@ function renderTasks(d, ctx) {
     h("div", { class: "task-meta" },
       h("span", {}, t.state_label || ""),
       t.due ? h("span", { class: dueText(t.due) === "quá hạn" ? "late" : "" }, dueText(t.due)) : null,
-      t.result_link ? linkButton("Mở", t.result_link, ctx) : null));
+      wait ? answer(t.id) : t.result_link ? linkButton("Mở", t.result_link, ctx) : null));
   return {
-    summary: waiting.length ? `${waiting.length} việc đang chờ anh quyết` : top.length ? `${top.length} việc quan trọng hôm nay` : "Không có việc nào chờ anh",
+    summary: waiting.length ? `${waiting.length} việc đang chờ anh quyết — bấm thẻ để trả lời ngay` : top.length ? `${top.length} việc quan trọng hôm nay` : "Không có việc nào chờ anh",
     body: h("div", {},
       waiting.length ? h("ul", { class: "tasks" }, waiting.map((t, i) => row(t, true, i))) : null,
       top.length ? h("ul", { class: "tasks" }, top.map((t, i) => row(t, false, i))) : null,
       approvals.length ? h("div", { class: "approvals" },
-        approvals.map((a) => h("div", { class: "approval" }, h("span", {}, short(a.title, 90)), a.link ? linkButton("Duyệt", a.link, ctx) : null))) : null,
+        approvals.map((a) => h("div", { class: "approval" }, h("span", {}, short(a.title, 90)), answer(a.id)))) : null,
       !waiting.length && !top.length && !approvals.length ? empty("Hôm nay anh rảnh tay — không có việc nào chờ.") : null),
-    foot: linkButton("Mở bàn làm việc JAVIS", "https://javis.bumbee.asia", ctx),
+    foot: h("div", { class: "foot-row" },
+      waiting.length || approvals.length ? h("button", { class: "btn primary", type: "button", onclick: () => ctx.openAsk(null) }, "Trả lời ngay tại đây") : null,
+      linkButton("Mở bàn làm việc JAVIS", "https://javis.bumbee.asia", ctx)),
   };
 }
 

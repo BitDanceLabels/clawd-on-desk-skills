@@ -1,7 +1,7 @@
 {
   "name": "clawd-on-desk",
   "productName": "JAVIS",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "JAVIS — bé trợ lý hologram trên máy tính: nói hoặc gõ, JAVIS hiện việc, máy, kho tài sản, cảnh báo, số liệu kênh, dòng tiền ngay cạnh; báo khi có việc cần anh.",
   "main": "src/main.js",
   "scripts": {
@@ -15,7 +15,8 @@
     "test": "node --test test/*.test.js",
     "install:gemini-hooks": "node hooks/gemini-install.js",
     "install:cursor-hooks": "node hooks/cursor-install.js",
-    "make:icons": "node scripts/make-icons.js"
+    "make:icons": "node scripts/make-icons.js",
+    "release": "bash scripts/publish-desk-release.sh"
   },
   "keywords": [
     "javis",
@@ -114,6 +115,7 @@
       "hooks/**/*",
       "agents/**/*",
       "assets/hologram/**/*",
+      "assets/javis-ask-box/**/*",
       "assets/tray-icon*.png",
       "assets/icons/**/*",
       "LICENSES.md"
@@ -127,14 +129,6 @@
         "to": "icon.ico"
       }
     ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "BitDanceLabels",
-        "repo": "clawd-on-desk-skills",
-        "releaseType": "release"
-      }
-    ],
     "artifactName": "JAVIS-${version}-${arch}.${ext}"
   },
   "devDependencies": {
@@ -145,7 +139,6 @@
     "three": "^0.184.0"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
     "qrcode": "^1.5.4"
   }
 }

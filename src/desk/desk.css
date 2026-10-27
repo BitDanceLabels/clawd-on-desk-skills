@@ -425,3 +425,30 @@ body[data-side="left"] .board { left: calc(var(--fig-w) - 4px); right: 0; }
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes ping { 70% { box-shadow: 0 0 0 10px rgba(255, 138, 42, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 138, 42, 0); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* waiting rows open the in-app answer box */
+.task.wait { cursor: pointer; }
+.task.wait:hover, .task.wait:focus-visible { border-color: rgba(255, 138, 42, 0.55); outline: none; }
+.chip-btn.warm { color: var(--core); border-color: rgba(255, 138, 42, 0.45); }
+.approvals .approval { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.foot-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* "Trả lời ngay": shared <javis-ask-box>, themed with the desk palette */
+javis-ask-box {
+  display: block;
+  --cc-surface: rgba(255, 255, 255, 0.04);
+  --cc-surface-2: rgba(20, 26, 56, 0.9);
+  --cc-line: var(--line);
+  --cc-text: var(--text);
+  --cc-text-2: var(--text-2);
+  --cc-muted: var(--text-3);
+  --cc-brand: var(--gold);
+  --cc-brand-ink: #1a1405;
+  --cc-info: var(--cyan);
+  --cc-r: 14px;
+  user-select: text;
+}
+
+/* connection card: pasted device key (fallback) */
+.key-row { align-items: center; }
+.key-input { flex: 1 1 160px; min-width: 0; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: inherit; }
