@@ -257,7 +257,8 @@ function renderAssets(d, ctx, params = {}) {
     } else {
       const ext = (String(a.file_url || "").match(/\.([a-z0-9]{2,5})(?:$|\?)/i) || [])[1];
       // No preview: a document glyph plus the real extension when there is one.
-      media.append(h("span", { class: "kind" }, ext ? ext.toUpperCase() : "▤"), ext ? h("small", { class: "kind-sub" }, KIND_LABEL[a.kind] || "") : null);
+      media.append(h("span", { class: "kind" }, ext ? ext.toUpperCase() : "▤"));
+      if (ext) media.append(h("small", { class: "kind-sub" }, KIND_LABEL[a.kind] || ""));
     }
     return h("figure", { class: "asset" }, media,
       h("figcaption", {}, h("b", { title: a.title }, short(a.title, 48)), h("small", {}, [a.team, ago(a.updated_at || a.created_at)].filter(Boolean).join(" · "))));
