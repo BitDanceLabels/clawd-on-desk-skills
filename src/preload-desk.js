@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("javisDesk", {
   unpair: () => ipcRenderer.invoke("javis:unpair"),
   onPairUpdate: on("javis:pair-update"),
   onAuthError: on("javis:auth-error"),
+  onAuth: on("javis:auth"),
 
   // window
   info: () => ipcRenderer.invoke("desk:info"),
@@ -28,6 +29,8 @@ contextBridge.exposeInMainWorld("javisDesk", {
   onLayout: on("desk:layout"),
   onCommand: on("desk:command"),
   onPrefs: on("desk:prefs"),
+  // true while the owner is typing / moving the mouse (automatic bubbles wait)
+  userBusy: () => ipcRenderer.invoke("desk:user-busy"),
 
   // voice
   transcribe: (base64Wav) => ipcRenderer.invoke("desk:stt", { data: base64Wav }),

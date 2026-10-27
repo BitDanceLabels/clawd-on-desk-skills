@@ -7,6 +7,7 @@ const path = require("path");
 const os = require("os");
 const { DEFAULT_GATEWAY, MAX_FAILURES, __test } = require("../src/javis-desk-host");
 const { normalizeGateway, isPlausibleDeviceKey, isGatewayPath, resolveStaticPath, createKeyStore, createConfigStore, createFleetProxy, createPairing } = __test;
+const { createAuth, createSessionStore } = require("../src/javis-auth");
 
 const FAKE_KEY = "jvk_" + "x".repeat(32);
 const tempDirs = [];
@@ -31,6 +32,17 @@ function setup() {
   const keyStore = createKeyStore({ userDataDir: dir, safeStorage: fakeSafeStorage });
   const configStore = createConfigStore({ userDataDir: dir });
   return { dir, keyStore, configStore };
+}
+
+// Sign-in over the device key store (pairing / pasted key = the fallback route).
+function authFor({ dir, keyStore, configStore }, fetchImpl) {
+  const auth = createAuth({
+    fetchImpl, getGateway: () => configStore.getGateway(),
+    sessionStore: createSessionStore({ userDataDir: dir, safeStorage: fakeSafeStorage }),
+    legacyStore: keyStore, sleep: async () => {},
+  });
+  auth.init();
+  return auth;
 }
 
 describe("JAVIS gateway config", () => {
@@ -77,6 +89,12 @@ describe("JAVIS device key store", () => {
 
 describe("javis-desk:// static files", () => {
   const roots = { src: "/app/src", assets: "/app/assets" };
+  it("serves the shared 'Cần anh duyệt' box (ui/javis-ask-box.js) and nothing else under ui/", () => {
+    assert.strictEqual(resolveStaticPath("/ui/javis-ask-box.js", roots), "/app/assets/javis-ask-box/javis-ask-box.js");
+    assert.strictEqual(resolveStaticPath("/ui/javis-ask-box2.js", roots), null);
+    assert.strictEqual(resolveStaticPath("/ui/../package.json", roots), null);
+    assert.ok(fs.existsSync(resolveStaticPath("/ui/javis-ask-box.js", { src: path.join(__dirname, "..", "src"), assets: path.join(__dirname, "..", "assets") })));
+  });
   it("serves the desk page, its bundle and the hologram character only", () => {
     assert.strictEqual(resolveStaticPath("/", roots), "/app/src/desk/index.html");
     assert.strictEqual(resolveStaticPath("/desk.bundle.js", roots), "/app/src/bundles/desk.bundle.js");
@@ -107,20 +125,20 @@ describe("JAVIS /fleet proxy", () => {
     return { calls, fetchImpl };
   }
 
-  it("answers 401 locally (no gateway call) when not paired", async () => {
-    const { keyStore, configStore } = setup();
+  it("answers 401 locally (no gateway call) when not signed in", async () => {
+    const env = setup();
     const gw = fakeGateway(() => new Response("{}"));
-    const proxy = createFleetProxy({ keyStore, configStore, fetchImpl: gw.fetchImpl });
+    const proxy = createFleetProxy({ auth: authFor(env, gw.fetchImpl), configStore: env.configStore, fetchImpl: gw.fetchImpl });
     const res = await proxy.handle(new Request("javis-desk://app/fleet/chat"));
     assert.strictEqual(res.status, 401);
     assert.strictEqual(gw.calls.length, 0);
   });
 
   it("adds the bearer key in main, strips page tokens, forwards body", async () => {
-    const { keyStore, configStore } = setup();
-    keyStore.save(FAKE_KEY);
+    const env = setup();
+    env.keyStore.save(FAKE_KEY);
     const gw = fakeGateway(() => new Response(JSON.stringify({ active: "s1", sessions: [] }), { headers: { "Content-Type": "application/json" } }));
-    const proxy = createFleetProxy({ keyStore, configStore, fetchImpl: gw.fetchImpl });
+    const proxy = createFleetProxy({ auth: authFor(env, gw.fetchImpl), configStore: env.configStore, fetchImpl: gw.fetchImpl });
     const res = await proxy.handle(new Request("javis-desk://app/fleet/chat/messages?token=leak", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,32 +146,61 @@ describe("JAVIS /fleet proxy", () => {
     }));
     assert.strictEqual(res.status, 200);
     const call = gw.calls[0];
-    assert.ok(call.url.startsWith(configStore.getGateway() + "/fleet/chat/messages"));
+    assert.ok(call.url.startsWith(env.configStore.getGateway() + "/fleet/chat/messages"));
     assert.ok(!call.url.includes("token="));
     assert.strictEqual(call.init.headers.get("authorization"), `Bearer ${FAKE_KEY}`);
     assert.strictEqual(Buffer.from(call.init.body).toString(), '{"session_id":"s1"}');
   });
 
-  it("stops calling the gateway after it rejects the key (circuit breaker)", async () => {
-    const { keyStore, configStore } = setup();
-    keyStore.save(FAKE_KEY);
-    let authErrors = 0;
+  it("answers a 'Cần anh duyệt' card: POST /fleet/tasklife/<id>/answer goes out with the bearer", async () => {
+    const env = setup();
+    env.keyStore.save(FAKE_KEY);
+    const gw = fakeGateway(() => new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } }));
+    const proxy = createFleetProxy({ auth: authFor(env, gw.fetchImpl), configStore: env.configStore, fetchImpl: gw.fetchImpl });
+    const res = await proxy.handle(new Request("javis-desk://app/fleet/tasklife/t-42/answer", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choice: "yes", text: "ok", via: "desk" }),
+    }));
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(new URL(gw.calls[0].url).pathname, "/fleet/tasklife/t-42/answer");
+    assert.strictEqual(gw.calls[0].init.method, "POST");
+    assert.deepStrictEqual(JSON.parse(Buffer.from(gw.calls[0].init.body).toString()), { choice: "yes", text: "ok", via: "desk" });
+  });
+
+  it("a rejected device key (gateway 401 + whoami 401) ends the session: no more gateway calls until re-pairing", async () => {
+    const env = setup();
+    env.keyStore.save(FAKE_KEY);
     const gw = fakeGateway(() => new Response("{}", { status: 401 }));
-    const proxy = createFleetProxy({ keyStore, configStore, fetchImpl: gw.fetchImpl, onAuthError: () => authErrors++ });
+    const auth = authFor(env, gw.fetchImpl);
+    const proxy = createFleetProxy({ auth, configStore: env.configStore, fetchImpl: gw.fetchImpl });
     assert.strictEqual((await proxy.handle(new Request("javis-desk://app/fleet/chat"))).status, 401);
+    const n = gw.calls.length; // the call + whoami
+    assert.strictEqual(auth.getState().state, "expired");
+    assert.strictEqual(env.keyStore.read(), null, "rejected key is forgotten");
     assert.strictEqual((await proxy.handle(new Request("javis-desk://app/fleet/chat"))).status, 401);
-    assert.strictEqual(gw.calls.length, 1);
-    assert.strictEqual(authErrors, 1);
+    assert.strictEqual(gw.calls.length, n);
+    auth.useLegacyKey(FAKE_KEY);
     proxy.reset();
     await proxy.handle(new Request("javis-desk://app/fleet/chat"));
-    assert.strictEqual(gw.calls.length, 2);
+    assert.ok(gw.calls.length > n);
+  });
+
+  it("a feature that answers 401 while the key is fine → 403 feature_denied, still signed in", async () => {
+    const env = setup();
+    env.keyStore.save(FAKE_KEY);
+    const gw = fakeGateway((url) => (url.endsWith("/fleet/whoami") ? new Response(JSON.stringify({ authenticated: true })) : new Response("{}", { status: 401 })));
+    const auth = authFor(env, gw.fetchImpl);
+    const proxy = createFleetProxy({ auth, configStore: env.configStore, fetchImpl: gw.fetchImpl });
+    const res = await proxy.handle(new Request("javis-desk://app/fleet/voice/tts", { method: "POST", body: "{}" }));
+    assert.strictEqual(res.status, 403);
+    assert.strictEqual((await res.json()).error, "feature_denied");
+    assert.strictEqual(auth.getState().state, "signed_in");
   });
 
   it("gives up on /fleet/stream after 3 failures (204 stops EventSource reconnects)", async () => {
-    const { keyStore, configStore } = setup();
-    keyStore.save(FAKE_KEY);
+    const env = setup();
+    env.keyStore.save(FAKE_KEY);
     const gw = fakeGateway(() => { throw new Error("ECONNREFUSED"); });
-    const proxy = createFleetProxy({ keyStore, configStore, fetchImpl: gw.fetchImpl });
+    const proxy = createFleetProxy({ auth: authFor(env, gw.fetchImpl), configStore: env.configStore, fetchImpl: gw.fetchImpl });
     for (let i = 0; i < MAX_FAILURES; i++) {
       proxy.state.streamBlockedUntil = 0; // skip back-off wait in test
       await proxy.handle(new Request("javis-desk://app/fleet/stream?v=2"));
@@ -192,7 +239,8 @@ describe("JAVIS pairing (device code)", () => {
       assert.strictEqual(body.device_code, "dc1");
       return new Response(JSON.stringify(polls < 2 ? { status: "pending" } : { status: "approved", key: FAKE_KEY, email: "o@example.test" }));
     };
-    const pairing = createPairing({ keyStore, configStore, fetchImpl, clientName: "JAVIS Desktop · test", onUpdate: (u) => updates.push(u), onPaired: () => paired++, ...timers });
+    const handed = [];
+    const pairing = createPairing({ keyStore, configStore, fetchImpl, clientName: "JAVIS Desktop · test", onUpdate: (u) => updates.push(u), onPaired: (key, meta) => { paired++; handed.push([key, meta]); }, ...timers });
     const info = await pairing.start();
     assert.strictEqual(info.userCode, "ABCD-EFGH");
     assert.strictEqual(info.verifyUrl, configStore.getGateway() + "/auth/device.html?code=ABCD-EFGH");
@@ -203,6 +251,8 @@ describe("JAVIS pairing (device code)", () => {
     assert.ok(!JSON.stringify(updates).includes(FAKE_KEY));
     assert.strictEqual(keyStore.read().key, FAKE_KEY);
     assert.strictEqual(paired, 1);
+    // main hands the key to sign-in (auth.useLegacyKey), never to the page
+    assert.deepStrictEqual(handed, [[FAKE_KEY, { email: "o@example.test", name: "" }]]);
     assert.strictEqual(timers.queue.length, 0);
   });
 

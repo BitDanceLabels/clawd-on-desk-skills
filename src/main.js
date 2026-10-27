@@ -4,17 +4,19 @@
 //   • compact  — just the hologram girl, draggable, click to open
 //   • open     — hologram + talk/type bar + the card board ("hiển hoá")
 // Plus a tray menu, the local hook server (Claude Code / Codex / Gemini / Cursor
-// session state + permission cards) and the auto-updater. Everything the old pet
-// app did besides this lives in archive/.
+// session state + permission cards) and the auto-updater (javis-updater.js, from the
+// JAVIS gateway). Everything the old pet app did besides this lives in archive/.
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, ipcMain, globalShortcut, screen, session, shell, nativeImage, protocol, net, safeStorage } = require("electron");
+const { app, BrowserWindow, Menu, Tray, ipcMain, globalShortcut, screen, session, shell, nativeImage, protocol, net, safeStorage, powerMonitor, dialog } = require("electron");
 require("./user-data-path").pinUserDataPath(app);
 const path = require("path");
 const fs = require("fs");
 const deskHost = require("./javis-desk-host");
 const { createSessionTracker } = require("./sessions");
 const { createHookServer } = require("./hook-server");
+// Pop-ups JAVIS shows by itself wait while the owner is typing/moving the mouse (idle < 30 s).
+const focusGuard = require("./focus-guard").createFocusGuard({ powerMonitor });
 
 deskHost.registerJavisScheme(protocol);
 
@@ -119,6 +121,8 @@ function applyMode(nextMode) {
   send("desk:layout", { mode, side, figure: FIGURE, figureOffset: { x: figX - b.x, y: b.height - FIGURE.height } });
   if (mode === "open") {
     win.setIgnoreMouseEvents(false);
+    // The board opens only from the owner's own click/shortcut/menu, so taking focus here
+    // is expected. Automatic notices use "peek" and never focus the window.
     win.focus();
   }
 }
@@ -225,10 +229,10 @@ function menuTemplate() {
     { label: "Không làm phiền", type: "checkbox", checked: !!prefs.doNotDisturb, click: (item) => setPref({ doNotDisturb: item.checked }) },
     { label: "Đọc to câu trả lời", type: "checkbox", checked: !!prefs.voiceReply, click: (item) => setPref({ voiceReply: item.checked }) },
     ...(loginItem ? [{ label: "Mở cùng máy", type: "checkbox", checked: !!loginItem.openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) }] : []),
-    { label: "Ghép đôi JAVIS…", click: () => openBoard({ type: "pair" }) },
+    { label: host && host.status().paired ? "Kết nối JAVIS…" : "Kết nối JAVIS (ghép đôi dự phòng)…", click: () => openBoard({ type: "pair" }) },
     { label: "Mở JAVIS web", click: () => shell.openExternal("https://javis.bumbee.asia") },
     { type: "separator" },
-    updater ? updater.getUpdateMenuItem() : { label: "Kiểm tra cập nhật", enabled: false },
+    updateMenuItem(),
     { label: `JAVIS ${app.getVersion()}`, enabled: false },
     { label: "Thoát", accelerator: isMac ? "Command+Q" : undefined, click: () => { isQuitting = true; app.quit(); } },
   ];
@@ -264,37 +268,66 @@ function setPref(patch) {
   return publicPrefs();
 }
 
-// ── Updater (electron-updater + GitHub releases) ──
-const UPDATE_TEXT = {
-  checkForUpdates: "Kiểm tra cập nhật",
-  checkingForUpdates: "Đang kiểm tra cập nhật…",
-  download: "Tải về",
-  restartLater: "Để sau",
-  restartNow: "Khởi động lại",
-  updateAvailable: "Có bản mới",
-  updateAvailableMacMsg: "Đã có JAVIS v{version}. Mở trang tải về?",
-  updateAvailableMsg: "Đã có JAVIS v{version}. Tải và cài ngay?",
-  updateDownloading: "Đang tải bản cập nhật…",
-  updateError: "Lỗi cập nhật",
-  updateErrorMsg: "Chưa kiểm tra được bản mới. Thử lại sau.",
-  updateNotAvailable: "Đang là bản mới nhất",
-  updateNotAvailableMsg: "JAVIS v{version} là bản mới nhất.",
-  updateReady: "Bản cập nhật đã sẵn sàng",
-  updateReadyMsg: "Đã tải xong v{version}. Khởi động lại để cập nhật?",
-};
+// ── Updater: GET {gateway}/fleet/desk/app/latest (javis-updater.js) ──
+// sha256 + size checked; Mac: signature + bundle id + same JAVIS certificate (DR), swap.sh
+// then `open -g`; Windows: NSIS /S. Installs when the owner is idle or when the app quits.
 let updater = null;
 let updateLogFile = null;
+function updateLog(msg) {
+  if (!updateLogFile) return;
+  try { require("./log-rotate").rotatedAppend(updateLogFile, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
+}
 function initUpdater() {
-  updater = require("./updater")({
-    get doNotDisturb() { return !!prefs.doNotDisturb; },
-    get miniMode() { return false; },
-    t: (key) => UPDATE_TEXT[key] || key,
-    rebuildAllMenus: rebuildMenus,
-    updateLog: (msg) => {
-      if (!updateLogFile) return;
-      try { require("./log-rotate").rotatedAppend(updateLogFile, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
-    },
+  updater = require("./javis-updater").createUpdater({
+    currentVersion: app.getVersion(),
+    userDataDir: app.getPath("userData"),
+    getGateway: () => (host ? host.gateway() : deskHost.DEFAULT_GATEWAY),
+    getToken: async () => (host ? host.token() : null),
+    fetchImpl: (url, init) => (host ? host.fetch(url, init) : net.fetch(url, init)),
+    isUserBusy: () => focusGuard.isUserBusy(),
+    quitApp: () => { isQuitting = true; app.quit(); },
+    onChange: () => rebuildMenus(),
+    log: updateLog,
+    // Only a packaged build replaces itself; `npm start` never does.
+    enabled: app.isPackaged && process.env.JAVIS_AUTO_UPDATE !== "0",
   });
+}
+
+async function checkForUpdates(manual = false) {
+  if (!updater) return null;
+  const s = await updater.check({ manual });
+  if (!manual) return s;
+  const msg = {
+    latest: `Anh đang dùng bản mới nhất (${app.getVersion()}).`,
+    error: s.message || "Chưa kiểm được bản mới, thử lại sau nhé.",
+    unsupported: s.message,
+  }[s.state];
+  if (msg) dialog.showMessageBox({ type: "info", title: "JAVIS", message: msg, noLink: true }).catch(() => {});
+  return s;
+}
+
+function installUpdate() {
+  if (!updater) return;
+  const s = updater.getStatus();
+  if (s.state === "ready") { updater.installNow({ reason: "menu" }); return; }
+  if (s.state === "manual" && updater.stagedApp()) {
+    // /Applications not writable: show the new app in Finder so the owner drags it over.
+    shell.showItemInFolder(updater.stagedApp());
+    dialog.showMessageBox({
+      type: "info", title: "JAVIS",
+      message: `Bản ${s.version} đã tải và kiểm chữ ký xong. Anh thoát JAVIS rồi kéo JAVIS.app vừa mở vào thư mục Applications (thay bản cũ) nhé.`,
+      noLink: true,
+    }).catch(() => {});
+  }
+}
+
+function updateMenuItem() {
+  const s = updater ? updater.getStatus() : { state: "idle" };
+  if (s.state === "checking") return { label: "Đang kiểm bản mới…", enabled: false };
+  if (s.state === "downloading") return { label: `Đang tải bản ${s.version}…`, enabled: false };
+  if (s.state === "installing") return { label: "Đang cài bản mới…", enabled: false };
+  if (s.state === "ready" || s.state === "manual") return { label: `Có bản mới ${s.version} — bấm để cài`, click: installUpdate };
+  return { label: `Kiểm tra bản mới (đang dùng ${app.getVersion()})`, click: () => { void checkForUpdates(true); } };
 }
 
 // ── Local AI sessions (hooks) ──
@@ -392,6 +425,8 @@ function registerIpc() {
   });
   ipcMain.handle("desk:sessions", (e) => (fromDesk(e) ? tracker.summary() : null));
   ipcMain.handle("desk:decide", (e, id, behavior) => (fromDesk(e) ? hookServer.decide(String(id), String(behavior)) : false));
+  // focus-guard for the page: automatic bubbles wait while the owner is typing / using the mouse.
+  ipcMain.handle("desk:user-busy", (e) => (fromDesk(e) ? focusGuard.isUserBusy() : false));
 }
 
 // Mic for voice input, only for our own page.
@@ -413,7 +448,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     if (isMac && app.dock) app.dock.hide();
     updateLogFile = path.join(app.getPath("userData"), "update-debug.log");
-    host = deskHost.initDeskHost({ app, ipcMain, session, net, safeStorage, shell, getWindow: () => win });
+    host = deskHost.initDeskHost({ app, ipcMain, session, net, safeStorage, shell, powerMonitor, getWindow: () => win, onAuthChange: () => rebuildMenus() });
     configureMediaPermissions();
     registerIpc();
     initUpdater();
@@ -422,8 +457,7 @@ if (!app.requestSingleInstanceLock()) {
     try { globalShortcut.register(TOGGLE_SHORTCUT, toggleWindow); } catch {}
     hookServer.start().catch((err) => console.warn("JAVIS: hook server not started:", err.message));
     startCodexMonitor();
-    updater.setupAutoUpdater();
-    setTimeout(() => updater.checkForUpdates(false), 8000);
+    try { updater.start(); } catch (err) { updateLog(`update: start failed: ${err && err.message}`); }
     // Dev-only screenshot helper: JAVIS_DEV_OPEN="tasks" opens the board on that card.
     if (!app.isPackaged && process.env.JAVIS_DEV_OPEN) {
       setTimeout(() => openBoard({ type: "ask", text: process.env.JAVIS_DEV_OPEN }), 2500);
@@ -435,6 +469,7 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll();
     hookServer.stop();
     if (codexMonitor) codexMonitor.stop();
+    if (updater) { try { updater.onQuit(); updater.stop(); } catch {} }
     if (host) host.stop();
   });
 
