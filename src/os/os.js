@@ -71,6 +71,8 @@ const G = {
   present: "M3 3h18v2h-1v10a1 1 0 0 1-1 1h-6v2.3l3.6 2.9-1.2 1.6L12 20.2l-3.4 2.6-1.2-1.6 3.6-2.9V16H5a1 1 0 0 1-1-1V5H3zm4 9h2V8H7zm4 0h2V6h-2zm4 0h2V9h-2z",
   crown: "M2 7l5 4 5-7 5 7 5-4-2 12H4zm3 14h14v2H5z",
   bolt: "M13 2 4 14h6l-1 8 9-12h-6z",
+  phone: "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 3v13h10V5zm4 14.2v1.6h2v-1.6z",
+  bulb: "M12 2a7 7 0 0 1 4 12.7V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.3A7 7 0 0 1 12 2zM9 19.5h6V21a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z",
   launch: "M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z",
 };
 function svg(glyph) {
@@ -209,10 +211,13 @@ function saveGeom(w) {
   try { localStorage.setItem(`javis-os:geom:${w.app.id}`, JSON.stringify(w.geom)); } catch {}
 }
 
-function defaultGeom() {
+function defaultGeom(app) {
   const r = desktopRect();
-  const width = Math.min(1160, Math.max(720, r.w - 160));
-  const height = Math.min(760, Math.max(460, r.h - r.bottom - 40));
+  // Work apps (inbox, task board, reports) need room for 3 columns: open them large.
+  const big = app && ["crm", "ban-viec", "bao-cao", "ban-hang"].includes(app.id);
+  const width = big ? Math.max(720, Math.min(1440, r.w - 40)) : Math.min(1160, Math.max(720, r.w - 160));
+  const height = big ? Math.max(460, r.h - r.bottom - 20) : Math.min(760, Math.max(460, r.h - r.bottom - 40));
+  if (big) { const off = (cascade++ % 4) * 24; return { x: Math.round((r.w - width) / 2 + off), y: 8 + off, w: width - off, h: height - off }; }
   const off = (cascade++ % 6) * 28;
   return { x: Math.round((r.w - width) / 2 + off - 40), y: Math.round(16 + off), w: width, h: height };
 }
@@ -291,7 +296,7 @@ function createWindow(app, url) {
   el.append(bar, body, ...["e", "s", "w", "se", "sw"].map((d) => h("div", { class: `grip ${d}`, "data-dir": d })));
   $("windows").append(el);
 
-  const w = { app, el, webview, load, titleText, url, geom: clampGeom(loadGeom(app.id) || defaultGeom()), zoomed: false, min: false, failures: 0 };
+  const w = { app, el, webview, load, titleText, url, geom: clampGeom(loadGeom(app.id) || defaultGeom(app)), zoomed: false, min: false, failures: 0 };
   applyGeom(w, w.geom);
   windows.set(app.id, w);
 
@@ -546,12 +551,14 @@ function resizeBehaviour(w, grip) {
 // ═══════════════════════ Dock ═══════════════════════
 const LAUNCH_APP = { id: "launchpad", name: "Launchpad", glyph: "launch", tint: ["#e9edf5", "#b8c1d6"] };
 
+let dockClicked = ""; // no tooltip on the icon just clicked until the pointer leaves the Dock
 function dockItem(app, { onClick, badge = 0, running = false, extraClass = "" } = {}) {
   const icon = iconEl(app, extraClass);
   const it = h("button", { class: `dock-item${running ? " running" : ""}`, type: "button", "data-app": app.id, "aria-label": app.name },
     icon, h("i", { class: "run" }), h("span", { class: "tip" }, app.name),
     badge > 0 ? h("b", { class: "badge" }, badge > 99 ? "99+" : String(badge)) : null);
-  it.addEventListener("click", onClick);
+  if (dockClicked === app.id) it.classList.add("clicked");
+  it.addEventListener("click", (e) => { dockClicked = app.id; it.classList.add("clicked"); onClick(e); });
   return it;
 }
 
@@ -605,7 +612,7 @@ function bounceDock(id) {
     }
   };
   dock.addEventListener("pointermove", (e) => { mx = e.clientX; if (!raf) raf = requestAnimationFrame(apply); });
-  dock.addEventListener("pointerleave", () => { mx = null; if (!raf) raf = requestAnimationFrame(apply); });
+  dock.addEventListener("pointerleave", () => { dockClicked = ""; for (const it of dock.querySelectorAll(".clicked")) it.classList.remove("clicked"); mx = null; if (!raf) raf = requestAnimationFrame(apply); });
 })();
 
 // ═══════════════════════ Launchpad ═══════════════════════

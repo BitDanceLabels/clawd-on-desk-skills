@@ -85,6 +85,12 @@ function check(name, ok, detail = "") {
       if (await osPage.$('.win[data-app="crm"] .wload.done')) break;
       await sleep(500);
     }
+    // Preview images for the owner: the inbox's own sample data (no real customer messages in screenshots).
+    if (process.env.JAVIS_E2E_DEMO_INBOX) {
+      await osPage.evaluate(() => { const w = window.__javisOS.windows.get("crm"); w.webview.loadURL(w.url + "&demo=1"); });
+      await sleep(3000);
+    }
+    await osPage.mouse.move(700, 400);
     await sleep(4000);
     const crmTitle = await osPage.$eval('.win[data-app="crm"] webview', (w) => w.getTitle());
     const crmUrl = await osPage.$eval('.win[data-app="crm"] webview', (w) => w.getURL());
@@ -93,7 +99,7 @@ function check(name, ok, detail = "") {
 
     // 3. second window + focus + minimize/restore
     await osPage.click('#dock [data-app="ban-viec"]');
-    await sleep(5000);
+    await sleep(11000);
     const front = await osPage.$eval(".win.front", (e) => e.dataset.app);
     check("nhiều cửa sổ, cửa sổ mới lên trước", front === "ban-viec" && (await osPage.$$(".win")).length === 2, front);
     await osPage.screenshot({ path: path.join(SHOTS, "os-3-hai-cua-so.png") });
