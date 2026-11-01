@@ -111,7 +111,8 @@ export function createPortraitAvatar(canvas, opts = {}) {
 
     // âm thanh → miệng: mở nhanh, khép chậm hơn một chút cho tự nhiên; im lặng >250ms thì khép hẳn
     if (now - lastLevelAt > 250) level = 0;
-    const target = Math.min(1, Math.max(0, (level - 0.04) * 2.4));
+    // trần 0,78: bỏ 2 mức mở to nhất (nhìn bè, lệch mặt)
+    const target = Math.min(0.78, Math.max(0, (level - 0.05) * 1.9));
     mouth += (target - mouth) * (target > mouth ? 0.55 : 0.28);
     sgx += (gx - sgx) * 0.08; sgy += (gy - sgy) * 0.08;
 
@@ -122,10 +123,9 @@ export function createPortraitAvatar(canvas, opts = {}) {
       scale = Math.max(W / m.w, H / m.h);
       ox = (W - m.w * scale) / 2; oy = (H - m.h * scale) / 2;
     } else {
-      scale = Math.max(W / m.w, (H * 0.92) / (face.h * 3.1));
-      scale = Math.max(scale, W / m.w);
+      scale = Math.max(W / m.w, H / (face.h * 3.9));
       ox = W / 2 - face.cx * scale;
-      oy = H * 0.40 - face.cy * scale;
+      oy = H * 0.43 - face.cy * scale;
       oy = Math.min(0, Math.max(H - m.h * scale, oy));
       ox = Math.min(0, Math.max(W - m.w * scale, ox));
     }
@@ -154,7 +154,8 @@ export function createPortraitAvatar(canvas, opts = {}) {
     const pos = mouth * (n - 1);
     const k0 = Math.floor(pos), k1 = Math.min(n - 1, k0 + 1), f = pos - k0;
     const mx = ox + m.mouth.x * scale, my = oy + m.mouth.y * scale, mw = m.mouth.w * scale, mh = m.mouth.h * scale;
-    if (pos > 0.02) {
+    // luôn phủ lớp miệng (kể cả lúc im = mức 0) để mặt lúc nói và lúc nghỉ là cùng một người
+    {
       ctx.globalAlpha = ease;
       ctx.drawImage(ch.mouths[k0], mx, my, mw, mh);
       if (f > 0.02 && k1 !== k0) { ctx.globalAlpha = ease * f; ctx.drawImage(ch.mouths[k1], mx, my, mw, mh); }
