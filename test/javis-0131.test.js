@@ -138,8 +138,9 @@ describe("0.13.1 · máy trong tailnet tự đăng nhập, không còn bước g
 
 describe("0.13.1 · bản tối giản giữ nguyên + updater qua gateway", () => {
   const pkg = JSON.parse(read("package.json"));
-  it("version 0.13.1, không còn electron-updater / publish GitHub", () => {
-    assert.strictEqual(pkg.version, "0.13.1");
+  it("version ≥ 0.13.1, không còn electron-updater / publish GitHub", () => {
+    const [ma, mi, pa] = pkg.version.split(".").map(Number);
+    assert.ok(ma > 0 || mi > 13 || (mi === 13 && pa >= 1), `version ${pkg.version} ≥ 0.13.1`);
     assert.ok(!pkg.dependencies["electron-updater"]);
     assert.ok(!("publish" in pkg.build));
     assert.ok(!fs.existsSync(path.join(ROOT, "src", "updater.js")));

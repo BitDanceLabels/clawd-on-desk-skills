@@ -1,7 +1,7 @@
 {
   "name": "clawd-on-desk",
   "productName": "JAVIS",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "description": "JAVIS — bé trợ lý hologram trên máy tính: nói hoặc gõ, JAVIS hiện việc, máy, kho tài sản, cảnh báo, số liệu kênh, dòng tiền ngay cạnh; báo khi có việc cần anh.",
   "main": "src/main.js",
   "scripts": {
@@ -112,6 +112,9 @@
       "!src/desk/*.js",
       "src/desk/index.html",
       "src/desk/desk.css",
+      "!src/os/*.js",
+      "src/os/os.html",
+      "src/os/os.css",
       "hooks/**/*",
       "agents/**/*",
       "assets/hologram/**/*",

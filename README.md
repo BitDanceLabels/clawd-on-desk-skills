@@ -4,6 +4,20 @@
 Bé trợ lý JAVIS nổi trên màn hình: một cô gái hologram bằng hạt sáng (tim cam ở ngực).
 Anh nói hoặc gõ, JAVIS **hiển hoá** câu trả lời thành thẻ ngay cạnh bé — không menu, không màn phụ.
 
+## JAVIS OS (0.14)
+
+**Bấm vào bé** → mở **JAVIS OS**, một màn hình kiểu macOS:
+
+- **Menu bar**: logo JAVIS (menu), tên app đang mở, Cửa sổ, Đi tới · máy đang chạy · tìm · chuông *việc cần anh* · giờ Việt Nam.
+- **Desktop vũ trụ** + widget *Tin khách / Việc chờ anh / Gấp nhất / Máy móc* + nút JAVIS lơ lửng (bấm để nói).
+- **Dock**: Giao việc · **Hộp thư chung** · Bàn việc · Kho tài sản · Nhạc · Video & Media · Bán hàng · Báo cáo · Máy móc · Launchpad.
+  Bấm là mở cửa sổ (kéo, đổi cỡ, đèn đỏ/vàng/xanh, nhiều cửa sổ); chấm sáng dưới app đang mở; badge số tin chưa đọc.
+- **Spotlight** `Ctrl/⌘ + Space` (hoặc `⌘K`, toàn máy: `Ctrl/⌘ + Shift + Space`): gõ hay nói 1 câu → *Giao cho JAVIS*, tìm việc/idea, mở app.
+- **Launchpad** `F4`: mọi app theo team, gõ để lọc.
+- **Khách nhắn** → banner kiểu macOS (JAVIS OS đang mở) hoặc thông báo hệ thống; bấm là mở đúng hội thoại. JAVIS chỉ gợi ý, không tự gửi.
+- Mỗi cửa sổ nhúng module có sẵn của JAVIS web (`?module=…`), đăng nhập 1 lần: khoá thiết bị gắn ở tiến trình chính, trang không thấy token.
+- Đóng JAVIS OS chỉ là ẩn (vẫn nghe tin khách). Bảng nhanh cũ của bé: chuột phải bé → *Bảng nhanh của bé*.
+
 ## Dùng
 
 - **Bấm vào bé** → mở bảng; **kéo** để dời chỗ; **chuột phải** → menu. Phím tắt hiện/ẩn: `Ctrl/Cmd+Shift+J`.
@@ -45,6 +59,8 @@ Kết nối lỗi thì thử tối đa 3 lần, giãn cách, rồi dừng.
 npm install
 npm start            # build desk.bundle.js rồi mở app
 npm test             # node --test test/*.test.js
+# xem thử JAVIS OS (bấm thật, chụp ảnh):
+# NODE_PATH=<playwright-core> xvfb-run -a -s "-screen 0 1512x945x24" node e2e/tester-os.js
 npm run build:mac    # / build / build:linux — chạy trên CI (build.yml) khi đẩy tag v*
 ```
 
@@ -56,6 +72,8 @@ Cấu trúc:
 | `src/javis-desk-host.js` | scheme `javis-desk://app`, proxy `/fleet/*` + `/asset-files/*` kèm khoá thiết bị, ghép đôi |
 | `src/hook-server.js`, `src/sessions.js` | nhận hook Claude Code/Gemini/Cursor (127.0.0.1:23333), theo dõi phiên, thẻ xin quyền |
 | `src/voice-stt.js` | giọng nói → chữ (1 lần/câu) |
+| `src/os-host.js`, `src/preload-os.js` | cửa sổ JAVIS OS, webview (chỉ web JAVIS, partition riêng, gắn bearer), thông báo hệ thống |
+| `src/os/` | trang JAVIS OS: `os.js` (menu bar, Dock, cửa sổ, Spotlight, Launchpad, banner), `apps.js` (Dock/Launchpad ↔ module web), `inbox-watch.js` |
 | `src/desk/` | trang: `desk.js`, `hologram-desk.js`, `intent.js` (ý định → thẻ), `cards.js`, `voice-input.js` |
 | `hooks/`, `agents/` | hook Claude/Codex/Gemini/Cursor (giữ từ Clawd on Desk; không đăng ký WorktreeCreate) |
 | `archive/` | toàn bộ chức năng cũ đã gỡ (vocab, english game, rabbit, phase hub, Bumbee OS, wiki, donation, Live2D/VRM…) — chỉ để tra cứu, không đóng gói |

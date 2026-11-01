@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; frame-src https: http:">
+  <title>JAVIS OS</title>
+  <link rel="stylesheet" href="os.css">
+</head>
+<body>
+  <div class="wallpaper" aria-hidden="true"><i class="aurora a1"></i><i class="aurora a2"></i><i class="aurora a3"></i><i class="stars"></i></div>
+
+  <header id="menubar" class="menubar">
+    <div class="mb-left">
+      <button id="mb-logo" class="mb-item mb-logo" type="button" aria-label="Menu JAVIS"><span class="logo-orb"></span></button>
+      <button id="mb-app" class="mb-item mb-app" type="button">JAVIS</button>
+      <button id="mb-window" class="mb-item" type="button">Cửa sổ</button>
+      <button id="mb-go" class="mb-item" type="button">Đi tới</button>
+    </div>
+    <div class="mb-right">
+      <span id="mb-host" class="mb-item mb-host" title="Máy đang chạy JAVIS"><i class="dot"></i><span></span></span>
+      <button id="mb-search" class="mb-item mb-icon" type="button" aria-label="Tìm và giao việc (Ctrl/⌘ + Space)"></button>
+      <button id="mb-bell" class="mb-item mb-icon mb-bell" type="button" aria-label="Việc cần anh"><b id="bell-count" class="mb-count" hidden></b></button>
+      <span id="mb-clock" class="mb-item mb-clock"></span>
+    </div>
+  </header>
+
+  <div id="menu" class="menu" role="menu" hidden></div>
+
+  <main id="desktop" class="desktop">
+    <section id="widgets" class="widgets" aria-label="Hôm nay"></section>
+    <div id="windows" class="windows"></div>
+    <button id="orb" class="orb" type="button" aria-label="Nói với JAVIS">
+      <span class="orb-ring"></span><span class="orb-face"></span><span class="orb-heart"></span>
+    </button>
+  </main>
+
+  <nav id="dock" class="dock" aria-label="Dock"></nav>
+
+  <section id="notify" class="notify" aria-live="polite"></section>
+
+  <section id="bell-panel" class="bell-panel glass" hidden></section>
+
+  <div id="spotlight" class="spotlight-veil" hidden>
+    <div class="spotlight glass" role="dialog" aria-label="Spotlight JAVIS">
+      <form id="sp-form" class="sp-row" autocomplete="off">
+        <span class="sp-glass" aria-hidden="true"></span>
+        <input id="sp-input" type="text" maxlength="2000" placeholder="Giao việc, tìm việc, mở ứng dụng…" aria-label="Giao việc hoặc tìm">
+        <button id="sp-mic" class="sp-mic" type="button" aria-label="Nói"></button>
+      </form>
+      <div id="sp-results" class="sp-results" role="listbox"></div>
+    </div>
+  </div>
+
+  <div id="launchpad" class="launchpad" hidden>
+    <input id="lp-search" class="lp-search" type="text" placeholder="Tìm ứng dụng" aria-label="Tìm ứng dụng">
+    <div id="lp-grid" class="lp-grid"></div>
+  </div>
+
+  <script src="os.bundle.js"></script>
+</body>
+</html>

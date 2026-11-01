@@ -8,7 +8,7 @@
 // JAVIS gateway). Everything the old pet app did besides this lives in archive/.
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, ipcMain, globalShortcut, screen, session, shell, nativeImage, protocol, net, safeStorage, powerMonitor, dialog } = require("electron");
+const { app, BrowserWindow, Menu, Tray, Notification, ipcMain, globalShortcut, screen, session, shell, nativeImage, protocol, net, safeStorage, powerMonitor, dialog } = require("electron");
 require("./user-data-path").pinUserDataPath(app);
 const path = require("path");
 const fs = require("fs");
@@ -32,6 +32,8 @@ const OPEN = { width: 800, height: 620 };
 const PEEK = { width: 320, height: 470 };
 const SIZES = { open: OPEN, peek: PEEK };
 const TOGGLE_SHORTCUT = "CommandOrControl+Shift+J";
+// JAVIS OS + Spotlight from anywhere (⌘Space itself belongs to macOS Spotlight).
+const OS_SHORTCUT = "CommandOrControl+Shift+Space";
 
 // ── Prefs ──
 const PREFS_FILE = path.join(app.getPath("userData"), "javis-desk.json");
@@ -60,6 +62,7 @@ let mode = "compact";
 let side = "right";
 let isQuitting = false;
 let codexMonitor = null;
+let osHost = null;
 
 const send = (channel, payload) => {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -211,6 +214,17 @@ function openBoard(command) {
   if (command) send("desk:command", command);
 }
 
+function openOs(command) {
+  if (osHost) osHost.show(command);
+}
+
+// Unread customer messages next to the menu-bar icon (mac) / in the tooltip.
+function setTrayCount(n) {
+  if (!tray) return;
+  if (isMac) tray.setTitle(n > 0 ? ` ${n > 99 ? "99+" : n}` : "");
+  tray.setToolTip(n > 0 ? `JAVIS — ${n} tin khách chưa đọc` : "JAVIS");
+}
+
 function publicPrefs() {
   return { doNotDisturb: !!prefs.doNotDisturb, voiceReply: !!prefs.voiceReply, palette: prefs.palette, version: app.getVersion(), platform: process.platform };
 }
@@ -219,8 +233,12 @@ function publicPrefs() {
 function menuTemplate() {
   const loginItem = isLinux ? null : app.getLoginItemSettings();
   return [
-    { label: win && win.isVisible() ? "Ẩn JAVIS" : "Hiện JAVIS", accelerator: TOGGLE_SHORTCUT, click: toggleWindow },
-    { label: "Mở bảng JAVIS", click: () => openBoard({ type: "focus-input" }) },
+    { label: "Mở JAVIS OS", accelerator: OS_SHORTCUT, click: () => openOs() },
+    { label: "Hộp thư chung", click: () => openOs({ type: "open", app: "crm" }) },
+    { label: "Giao việc nhanh (Spotlight)", click: () => openOs({ type: "spotlight" }) },
+    { type: "separator" },
+    { label: win && win.isVisible() ? "Ẩn bé JAVIS" : "Hiện bé JAVIS", accelerator: TOGGLE_SHORTCUT, click: toggleWindow },
+    { label: "Bảng nhanh của bé", click: () => openBoard({ type: "focus-input" }) },
     { type: "separator" },
     { label: "Việc cần anh", click: () => openBoard({ type: "ask", text: "việc cần anh" }) },
     { label: "Máy + tải", click: () => openBoard({ type: "ask", text: "các máy đang sao" }) },
@@ -414,6 +432,10 @@ function registerIpc() {
     shell.openExternal(u.href);
     return { ok: true };
   });
+  ipcMain.on("desk:open-os", (e, command) => {
+    if (!fromDesk(e)) return;
+    openOs(command && typeof command === "object" ? command : undefined);
+  });
   ipcMain.handle("desk:set-prefs", (e, patch) => (fromDesk(e) && patch && typeof patch === "object" ? setPref(patch) : null));
   ipcMain.handle("desk:stt", async (e, payload) => {
     if (!fromDesk(e)) return null;
@@ -431,7 +453,8 @@ function registerIpc() {
 
 // Mic for voice input, only for our own page.
 function configureMediaPermissions() {
-  const ours = (wc) => !!(win && !win.isDestroyed() && wc === win.webContents);
+  const osWin = () => (osHost ? osHost.window() : null);
+  const ours = (wc) => !!((win && !win.isDestroyed() && wc === win.webContents) || (osWin() && !osWin().isDestroyed() && wc === osWin().webContents));
   session.defaultSession.setPermissionCheckHandler((wc, permission) => ours(wc) && (permission === "media" || permission === "speaker-selection"));
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
     const audioOnly = !details || !details.mediaTypes || details.mediaTypes.every((t) => t === "audio");
@@ -443,22 +466,43 @@ function configureMediaPermissions() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => openBoard({ type: "focus-input" }));
+  app.on("second-instance", () => openOs());
 
   app.whenReady().then(() => {
     if (isMac && app.dock) app.dock.hide();
     updateLogFile = path.join(app.getPath("userData"), "update-debug.log");
-    host = deskHost.initDeskHost({ app, ipcMain, session, net, safeStorage, shell, powerMonitor, getWindow: () => win, onAuthChange: () => rebuildMenus() });
+    host = deskHost.initDeskHost({ app, ipcMain, session, net, safeStorage, shell, powerMonitor, getWindow: () => win, onAuthChange: () => { rebuildMenus(); if (osHost) osHost.authChanged(host ? host.status() : null); } });
+    osHost = require("./os-host").createOsHost({
+      BrowserWindow, Notification, screen, session, shell, ipcMain, app,
+      ORIGIN: deskHost.ORIGIN,
+      getGateway: () => host.gateway(),
+      getToken: () => host.token(),
+      authStatus: () => host.status(),
+      setTrayCount,
+      openDeskBoard: () => openBoard({ type: "focus-input" }),
+      transcribe: (payload) => require("./voice-stt").transcribe(payload),
+      isDoNotDisturb: () => !!prefs.doNotDisturb,
+      isQuitting: () => isQuitting,
+      quit: () => { isQuitting = true; app.quit(); },
+      log: (m) => console.log(m),
+    });
+    osHost.registerIpc();
     configureMediaPermissions();
     registerIpc();
     initUpdater();
     createWindow();
     createTray();
+    // Created hidden at start: it listens for customer messages (Dock badge + banners).
+    osHost.create();
     try { globalShortcut.register(TOGGLE_SHORTCUT, toggleWindow); } catch {}
+    try { globalShortcut.register(OS_SHORTCUT, () => openOs({ type: "spotlight" })); } catch {}
     hookServer.start().catch((err) => console.warn("JAVIS: hook server not started:", err.message));
     startCodexMonitor();
     try { updater.start(); } catch (err) { updateLog(`update: start failed: ${err && err.message}`); }
     // Dev-only screenshot helper: JAVIS_DEV_OPEN="tasks" opens the board on that card.
+    if (!app.isPackaged && process.env.JAVIS_DEV_OS) {
+      setTimeout(() => openOs(process.env.JAVIS_DEV_OS === "1" ? undefined : { type: "open", app: process.env.JAVIS_DEV_OS }), 1500);
+    }
     if (!app.isPackaged && process.env.JAVIS_DEV_OPEN) {
       setTimeout(() => openBoard({ type: "ask", text: process.env.JAVIS_DEV_OPEN }), 2500);
     }
