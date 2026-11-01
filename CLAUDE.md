@@ -16,5 +16,8 @@ and a card board that visualises gateway data. Read `README.md` first (structure
   a loader/renderer in `src/desk/cards.js` using an existing `/fleet/*` endpoint.
 - Owner rules: retries ≤ 3 with back-off then stop; event-driven, no timed polling loops; no "AI"
   word in UI copy; data questions must not spend LLM calls.
+- JAVIS OS (`src/os-host.js`, `src/os/`): app windows are `<webview>`s on the gateway web only
+  (`isAllowedWebUrl`), partition `persist:javis-web`, bearer injected in main — never re-implement a
+  web module in the desk, just embed `?module=<id>` (add it in `src/os/apps.js` + `test/os.test.js`).
 - Hooks: `hooks/install.js` appends to `~/.claude/settings.json`; never register `WorktreeCreate`.
 - `archive/` is reference only (old Clawd/Bumbee features). Do not import from it.

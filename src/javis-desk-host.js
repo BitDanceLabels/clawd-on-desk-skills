@@ -78,6 +78,10 @@ const STATIC_FILES = {
   "/desk.bundle.js": ["src", "bundles/desk.bundle.js"],
   "/hologram/character.jpg": ["assets", "hologram/character.jpg"],
   "/icon.png": ["assets", "icons/128x128.png"],
+  // JAVIS OS (macOS-like desktop window)
+  "/os.html": ["src", "os/os.html"],
+  "/os.css": ["src", "os/os.css"],
+  "/os.bundle.js": ["src", "bundles/os.bundle.js"],
   // Shared "Cần anh duyệt" card (same web component as JAVIS web, vendored build).
   "/ui/javis-ask-box.js": ["assets", "javis-ask-box/javis-ask-box.js"],
 };

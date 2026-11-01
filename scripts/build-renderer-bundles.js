@@ -18,6 +18,11 @@ const targets = [
     out: path.join(OUT, "desk.bundle.js"),
     globalName: "JavisDesk",
   },
+  {
+    entry: path.join(ROOT, "src", "os", "os.js"),
+    out: path.join(OUT, "os.bundle.js"),
+    globalName: "JavisOS",
+  },
 ];
 
 async function build() {

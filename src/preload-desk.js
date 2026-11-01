@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("javisDesk", {
   moveBy: (dx, dy) => ipcRenderer.send("desk:move-by", dx, dy),
   moveEnd: () => ipcRenderer.send("desk:move-end"),
   showMenu: () => ipcRenderer.send("desk:menu"),
+  openOs: (command) => ipcRenderer.send("desk:open-os", command || null),
   openUrl: (url) => ipcRenderer.invoke("desk:open-url", url),
   setPrefs: (patch) => ipcRenderer.invoke("desk:set-prefs", patch),
   onLayout: on("desk:layout"),

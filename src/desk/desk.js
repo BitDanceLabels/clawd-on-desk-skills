@@ -139,12 +139,20 @@ ui.stage.addEventListener("pointerup", () => {
   drag = null;
   ui.stage.classList.remove("dragging");
   if (wasDrag) desk.moveEnd();
-  else toggleBoard();
+  else tapGirl();
 });
 ui.stage.addEventListener("contextmenu", (e) => { e.preventDefault(); desk.showMenu(); });
 ui.stage.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleBoard(); }
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tapGirl(); }
 });
+
+// Tap the girl → JAVIS OS (the macOS-like desktop). The quick board stays one menu away
+// (right click → "Bảng nhanh của bé"), and still opens from bubbles and the tray.
+function tapGirl() {
+  if (state.mode === "open") { closeBoard(); return; }
+  if (desk.openOs) desk.openOs();
+  else openBoard();
+}
 
 function openBoard() {
   if (state.mode !== "open") desk.setMode("open");
