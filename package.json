@@ -1,8 +1,8 @@
 {
   "name": "clawd-on-desk",
   "productName": "JAVIS",
-  "version": "0.14.0",
-  "description": "JAVIS — bé trợ lý hologram trên máy tính: nói hoặc gõ, JAVIS hiện việc, máy, kho tài sản, cảnh báo, số liệu kênh, dòng tiền ngay cạnh; báo khi có việc cần anh.",
+  "version": "0.14.1",
+  "description": "JAVIS — trợ lý nhân vật thật trên máy tính: nói hoặc gõ, JAVIS hiện việc, máy, kho tài sản, cảnh báo, số liệu kênh, dòng tiền ngay cạnh; báo khi có việc cần anh.",
   "main": "src/main.js",
   "scripts": {
     "start": "npm run build:renderer && node launch.js",
@@ -21,7 +21,7 @@
   "keywords": [
     "javis",
     "desktop-assistant",
-    "hologram",
+    "ai-companion",
     "electron",
     "claude-code"
   ],
@@ -117,7 +117,7 @@
       "src/os/os.css",
       "hooks/**/*",
       "agents/**/*",
-      "assets/hologram/**/*",
+      "assets/nhan-vat/**/*",
       "assets/javis-ask-box/**/*",
       "assets/tray-icon*.png",
       "assets/icons/**/*",

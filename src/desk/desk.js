@@ -1,6 +1,6 @@
-// src/desk/desk.js — JAVIS On Desk page: the hologram girl, the talk/type bar,
+// src/desk/desk.js — JAVIS On Desk page: the assistant girl (2.5D, nhân vật thật), the talk/type bar,
 // the card board and the notice bubble. Bundled by esbuild into desk.bundle.js.
-import { createDeskHologram } from "./hologram-desk.js";
+import { createPortraitAvatar } from "./portrait-avatar.js";
 import { classifyIntent } from "./intent.js";
 import { h, api, GatewayError, LOADERS, CARD_META, sseDeltas, richText, ago } from "./cards.js";
 import { recordUtterance } from "./voice-input.js";
@@ -42,22 +42,9 @@ const state = {
   pairPromptPending: false,
 };
 
-// ── hologram ──
-// No WebGL (old GPU, remote desktop, blocklisted driver): show the character as a
-// still glowing portrait so the assistant keeps working.
-function stillPortrait() {
-  const canvas = $("holo");
-  const img = h("img", { class: "still", src: "hologram/character.jpg", alt: "" });
-  canvas.replaceWith(img);
-  return { setState() {}, setAudioLevel() {}, setGaze() {}, setActive() {}, setPalette() {}, playIntro() {}, stats: () => ({ points: 0 }), destroy() {} };
-}
-let holo;
-try {
-  holo = createDeskHologram($("holo"), { palette: "cyan", intro: !window.__JAVIS_SKIP_INTRO });
-} catch (err) {
-  console.warn("JAVIS: hologram unavailable, using still portrait:", err && err.message);
-  holo = stillPortrait();
-}
+// ── nhân vật (thay bé hologram hạt sáng, 01/11/2026) ──
+// Canvas 2D thuần, không WebGL → máy yếu / remote desktop vẫn chạy. Lỗi tải ảnh thì giữ khung trống, JAVIS vẫn dùng được.
+const holo = createPortraitAvatar($("holo"), { root: "nhan-vat", character: "mai" });
 
 function phase() {
   if (state.recorder) return "listening";
@@ -183,7 +170,7 @@ desk.onCommand((cmd) => {
     if (!ui.input.value.trim() && !state.recorder && !playing && !state.permissions.size && !answering) closeBoard();
   }
 });
-desk.onPrefs((p) => { state.prefs = { ...state.prefs, ...p }; });
+desk.onPrefs((p) => { state.prefs = { ...state.prefs, ...p }; if (p.character && p.character !== holo.character()) holo.setCharacter(p.character); });
 
 // ── bubble ──
 function showBubble(text, { actions = [], warm = false, sticky = false, ttl = 12000 } = {}) {
@@ -482,7 +469,7 @@ ui.mic.addEventListener("click", async () => {
   if (state.speakingAudio) state.speakingAudio.pause();
   ui.mic.classList.add("on");
   ui.input.placeholder = "Em đang nghe…";
-  state.recorder = recordUtterance({ onLevel: (l) => holo.setAudioLevel(l) });
+  state.recorder = recordUtterance({ onLevel: () => {} });
   refreshPhase();
   try {
     const clip = await state.recorder.done;
@@ -792,6 +779,7 @@ function onGatewayEvent(ev) {
   ui.greeting.textContent = greeting();
   const info = await desk.info();
   if (info) state.prefs = { ...state.prefs, ...info };
+  if (info && info.character && info.character !== holo.character()) holo.setCharacter(info.character);
   const s = await desk.sessions();
   if (s) state.sessions = s;
   const status = await desk.status();

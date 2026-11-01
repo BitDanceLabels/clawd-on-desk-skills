@@ -1,4 +1,4 @@
-/* JAVIS On Desk — hologram assistant + "hiển hoá" board.
+/* JAVIS On Desk — trợ lý nhân vật thật 2.5D + "hiển hoá" board.
    Palette from the JAVIS brand: deep navy glass, hologram cyan, a gold accent,
    the orange heart core for anything that needs the owner. */
 :root {
@@ -452,3 +452,18 @@ javis-ask-box {
 /* connection card: pasted device key (fallback) */
 .key-row { align-items: center; }
 .key-input { flex: 1 1 160px; min-width: 0; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: inherit; }
+
+/* ── Nhân vật thật 2.5D (thay hologram hạt sáng, 0.14.1) ──
+   Canvas tự mờ đáy; khung bo tròn mềm, viền sáng nhẹ đổi màu theo trạng thái. */
+.stage canvas#holo {
+  border-radius: 46% 46% 22px 22px / 34% 34% 22px 22px;
+  -webkit-mask-image: radial-gradient(120% 92% at 50% 38%, #000 62%, transparent 100%);
+  mask-image: radial-gradient(120% 92% at 50% 38%, #000 62%, transparent 100%);
+  filter: drop-shadow(0 10px 24px rgba(10, 12, 40, 0.45));
+  transition: filter 0.4s;
+}
+.stage .halo { display: none; }
+body[data-phase="listening"] .stage canvas#holo { filter: drop-shadow(0 0 14px rgba(95, 231, 255, 0.55)); }
+body[data-phase="thinking"] .stage canvas#holo { filter: drop-shadow(0 0 12px rgba(160, 140, 255, 0.5)); }
+body[data-phase="waiting"] .stage canvas#holo,
+body[data-phase="alert"] .stage canvas#holo { filter: drop-shadow(0 0 12px rgba(245, 184, 61, 0.6)); }

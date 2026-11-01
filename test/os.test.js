@@ -116,10 +116,10 @@ test("OS page is served from the app scheme", () => {
   assert.strictEqual(__test.resolveStaticPath("/os/../main.js", roots), null);
 });
 
-test.describe("0.14.0 · JAVIS Agents OS phát hành", () => {
-  test.it("package.json version 0.14.0, giữ appId để nâng cấp không mất dữ liệu", () => {
+test.describe("0.14.x · JAVIS Agents OS phát hành", () => {
+  test.it("package.json version 0.14.1 (nhân vật thật thay hologram), giữ appId để nâng cấp không mất dữ liệu", () => {
     const pkg = require("../package.json");
-    assert.strictEqual(pkg.version, "0.14.0");
+    assert.strictEqual(pkg.version, "0.14.1");
     assert.strictEqual(pkg.build.appId, "com.clawd.on-desk");
   });
 });

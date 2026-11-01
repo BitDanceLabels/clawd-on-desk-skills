@@ -1,8 +1,8 @@
-// src/main.js — JAVIS On Desk: one floating hologram assistant.
+// src/main.js — JAVIS On Desk: one floating assistant (nhân vật thật 2.5D, thay hologram hạt sáng từ 0.14.1).
 //
 // One transparent always-on-top window (javis-desk://app/index.html):
-//   • compact  — just the hologram girl, draggable, click to open
-//   • open     — hologram + talk/type bar + the card board ("hiển hoá")
+//   • compact  — just the assistant girl, draggable, click to open
+//   • open     — girl + talk/type bar + the card board ("hiển hoá")
 // Plus a tray menu, the local hook server (Claude Code / Codex / Gemini / Cursor
 // session state + permission cards) and the auto-updater (javis-updater.js, from the
 // JAVIS gateway). Everything the old pet app did besides this lives in archive/.
@@ -37,7 +37,8 @@ const OS_SHORTCUT = "CommandOrControl+Shift+Space";
 
 // ── Prefs ──
 const PREFS_FILE = path.join(app.getPath("userData"), "javis-desk.json");
-const DEFAULT_PREFS = { figureX: null, figureY: null, doNotDisturb: false, voiceReply: false, autoStartWithClaude: false, palette: "cyan" };
+const DEFAULT_PREFS = { figureX: null, figureY: null, doNotDisturb: false, voiceReply: false, autoStartWithClaude: false, palette: "cyan", character: "mai" };
+const CHARACTERS = [["mai", "Mai · áo dài"], ["linh", "Linh · công sở"], ["an", "An · 3D"], ["vy", "Vy · 3D digital human"]];
 function loadPrefs() {
   try { return { ...DEFAULT_PREFS, ...JSON.parse(fs.readFileSync(PREFS_FILE, "utf8")) }; } catch { return { ...DEFAULT_PREFS }; }
 }
@@ -226,7 +227,7 @@ function setTrayCount(n) {
 }
 
 function publicPrefs() {
-  return { doNotDisturb: !!prefs.doNotDisturb, voiceReply: !!prefs.voiceReply, palette: prefs.palette, version: app.getVersion(), platform: process.platform };
+  return { doNotDisturb: !!prefs.doNotDisturb, voiceReply: !!prefs.voiceReply, palette: prefs.palette, character: CHARACTERS.some(([id]) => id === prefs.character) ? prefs.character : "mai", version: app.getVersion(), platform: process.platform };
 }
 
 // ── Tray + menu ──
@@ -237,13 +238,14 @@ function menuTemplate() {
     { label: "Hộp thư chung", click: () => openOs({ type: "open", app: "crm" }) },
     { label: "Giao việc nhanh (Spotlight)", click: () => openOs({ type: "spotlight" }) },
     { type: "separator" },
-    { label: win && win.isVisible() ? "Ẩn bé JAVIS" : "Hiện bé JAVIS", accelerator: TOGGLE_SHORTCUT, click: toggleWindow },
+    { label: win && win.isVisible() ? "Ẩn JAVIS" : "Hiện JAVIS", accelerator: TOGGLE_SHORTCUT, click: toggleWindow },
     { label: "Bảng nhanh của bé", click: () => openBoard({ type: "focus-input" }) },
     { type: "separator" },
     { label: "Việc cần anh", click: () => openBoard({ type: "ask", text: "việc cần anh" }) },
     { label: "Máy + tải", click: () => openBoard({ type: "ask", text: "các máy đang sao" }) },
     { label: "Kho tài sản", click: () => openBoard({ type: "ask", text: "kho tài sản" }) },
     { type: "separator" },
+    { label: "Nhân vật", submenu: CHARACTERS.map(([id, label]) => ({ label, type: "radio", checked: (prefs.character || "mai") === id, click: () => setPref({ character: id }) })) },
     { label: "Không làm phiền", type: "checkbox", checked: !!prefs.doNotDisturb, click: (item) => setPref({ doNotDisturb: item.checked }) },
     { label: "Đọc to câu trả lời", type: "checkbox", checked: !!prefs.voiceReply, click: (item) => setPref({ voiceReply: item.checked }) },
     ...(loginItem ? [{ label: "Mở cùng máy", type: "checkbox", checked: !!loginItem.openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) }] : []),
@@ -279,6 +281,7 @@ function setPref(patch) {
   for (const key of ["doNotDisturb", "voiceReply", "palette"]) {
     if (key in patch) allowed[key] = key === "palette" ? String(patch[key]).slice(0, 16) : !!patch[key];
   }
+  if ("character" in patch && CHARACTERS.some(([id]) => id === patch.character)) allowed.character = patch.character;
   prefs = { ...prefs, ...allowed };
   savePrefs();
   rebuildMenus();
