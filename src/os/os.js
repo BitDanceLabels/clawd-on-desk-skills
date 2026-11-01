@@ -92,7 +92,8 @@ const state = {
   unread: 0,
   waiting: [],
   machines: null,
-  denied: false, // signed in, but this device may not read owner data yet
+  // Per source: null (not loaded) | "ok" | "denied" (signed in, but this device may not read it yet).
+  src: { inbox: null, tasks: null, machines: null },
   recent: [], // banners shown this session (bell panel)
   focused: true,
 };
@@ -874,50 +875,57 @@ function toggleBellPanel() {
 function renderWidgets() {
   const wait = state.waiting;
   const m = state.machines;
-  const locked = state.denied || state.signedIn === false;
-  const lockText = state.signedIn === false ? "Chưa kết nối JAVIS" : "Máy này chưa có quyền xem — duyệt máy trên JAVIS web";
-  const num = (n) => (locked ? "—" : String(n));
+  const off = state.signedIn === false;
+  const lockedOf = (k) => off || state.src[k] === "denied";
+  const lockText = off ? "Chưa kết nối JAVIS" : "Máy này chưa có quyền xem — duyệt máy trên JAVIS web";
   const wico = (glyph, t1, t2) => h("span", { class: "w-ico", style: { background: `linear-gradient(160deg,${t1},${t2})` }, html: svg(glyph) });
   $("widgets").replaceChildren(
-    h("button", { class: `widget${!locked && state.unread ? " hot" : !locked ? " calm" : ""}`, type: "button", onclick: () => openApp("crm") },
+    ((locked) => h("button", { class: `widget${!locked && state.unread ? " hot" : !locked ? " calm" : ""}`, type: "button", onclick: () => openApp("crm") },
       h("div", { class: "w-top" }, wico("chat", "#33e1a0", "#0a9f74"), "Tin khách"),
-      h("div", {}, h("div", { class: "w-num" }, num(state.unread), h("small", {}, "chưa đọc")), h("div", { class: "w-sub" }, locked ? lockText : state.unread ? `${state.needReply ? state.needReply + " cần trả lời · " : ""}bấm để mở` : state.inboxReal === 0 ? "Chưa nối kênh thật" : "Hộp thư đã sạch"))),
-    h("button", { class: `widget${!locked && wait.length ? " hot" : !locked ? " calm" : ""}`, type: "button", onclick: () => openApp("ban-viec") },
+      h("div", {}, h("div", { class: "w-num" }, locked ? "—" : String(state.unread), h("small", {}, "chưa đọc")), h("div", { class: "w-sub" }, locked ? lockText : state.unread ? `${state.needReply ? state.needReply + " cần trả lời · " : ""}bấm để mở` : state.inboxReal === 0 ? "Chưa nối kênh thật" : "Hộp thư đã sạch"))))(lockedOf("inbox")),
+    ((locked) => h("button", { class: `widget${!locked && wait.length ? " hot" : !locked ? " calm" : ""}`, type: "button", onclick: () => openApp("ban-viec") },
       h("div", { class: "w-top" }, wico("check", "#ffb340", "#ff7a1a"), "Việc chờ anh"),
-      h("div", {}, h("div", { class: "w-num" }, num(wait.length), h("small", {}, "việc")), h("div", { class: "w-sub" }, locked ? lockText : wait.length ? "Cần anh quyết hôm nay" : "Anh rảnh tay"))),
-    h("button", { class: "widget wide", type: "button", onclick: () => openApp("ban-viec") },
+      h("div", {}, h("div", { class: "w-num" }, locked ? "—" : String(wait.length), h("small", {}, "việc")), h("div", { class: "w-sub" }, locked ? lockText : wait.length ? "Cần anh quyết hôm nay" : "Anh rảnh tay"))))(lockedOf("tasks")),
+    ((locked) => h("button", { class: "widget wide", type: "button", onclick: () => openApp("ban-viec") },
       h("div", { class: "w-top" }, wico("spark", "#7b5cff", "#2a5bff"), "Gấp nhất hôm nay"),
       !locked && wait.length ? h("ul", { class: "w-list" }, wait.slice(0, 3).map((t) => h("li", {}, h("b"), h("span", {}, String(t.title || "Việc")), t.team ? h("em", {}, t.team) : null)))
-        : h("div", { class: "w-empty" }, locked ? lockText : "Không có việc nào chờ anh quyết.")),
+        : h("div", { class: "w-empty" }, locked ? lockText : "Không có việc nào chờ anh quyết.")))(lockedOf("tasks")),
     h("button", { class: "widget wide", type: "button", onclick: () => openApp("may") },
       h("div", { class: "w-top" }, wico("chip", "#9aa6c2", "#4b5675"), "Máy móc"),
       m ? h("div", {}, h("div", { class: "w-big" }, h("b", {}, `${m.online}/${m.total}`), "máy online · ", `${m.heavy} việc nặng · ${m.queued} chờ`),
         h("div", { class: "bars" }, Array.from({ length: Math.min(12, m.total) }, (_, i) => h("i", { class: i < m.online ? "on" : "" }))))
-        : h("div", { class: "w-empty" }, locked ? lockText : "Bấm để xem RAM/GPU từng máy")),
+        : h("div", { class: "w-empty" }, lockedOf("machines") ? lockText : "Bấm để xem RAM/GPU từng máy")),
   );
 }
 
 // ═══════════════════════ data (event-driven) ═══════════════════════
 async function refreshInbox() {
+  const n = ++seq.inbox;
   try {
     const v = await api("/fleet/inbox?folder=chua_doc");
+    if (n !== seq.inbox) return;
     const r = inbox.apply(v);
     state.unread = r.unread;
     state.inboxReal = Number(v && v.real_total) || 0;
     state.needReply = Number(v && v.counts && v.counts.can_tra_loi) || 0;
-    state.denied = false;
+    state.src.inbox = "ok";
     jos.setUnread(r.unread);
     for (const n of r.fresh.slice().reverse()) announceCustomer(n);
     renderDock();
     renderWidgets();
   } catch (err) {
-    onDataError(err);
+    onDataError("inbox", n, err);
   }
 }
 
-function onDataError(err) {
+// Newest request per source wins: a slow answer from before sign-in must not overwrite a fresh one.
+const seq = { inbox: 0, tasks: 0, machines: 0 };
+function onDataError(source, n, err) {
+  if (n !== seq[source]) return;
   if (err.status === 401 || err.status === 403) {
-    if (!state.denied) { state.denied = true; renderWidgets(); }
+    state.src[source] = "denied";
+    renderWidgets();
+    renderDock();
   }
 }
 
@@ -928,13 +936,15 @@ async function refreshTasks(force = false) {
   const gap = Date.now() - lastTasksAt;
   if (!force && gap < 15000) { clearTimeout(tasksTimer); tasksTimer = setTimeout(() => refreshTasks(true), 15000 - gap); return; }
   lastTasksAt = Date.now();
+  const n = ++seq.tasks;
   try {
     const t = await api("/fleet/home/tasks");
+    if (n !== seq.tasks) return;
     const grew = tasksPrimed && (t.waiting || []).length > state.waiting.length;
     tasksPrimed = true;
     const first = (t.waiting || [])[0];
     state.waiting = t.waiting || [];
-    state.denied = false;
+    state.src.tasks = "ok";
     setSigned(true);
     setBell();
     renderDock();
@@ -944,18 +954,21 @@ async function refreshTasks(force = false) {
         actions: [{ label: "Xem ngay", primary: true, run: () => openApp("ban-viec", { card: first.id }) }] });
     }
   } catch (err) {
-    onDataError(err);
+    onDataError("tasks", n, err);
   }
 }
 
 async function refreshMachines() {
+  const n = ++seq.machines;
   try {
     const d = await api("/fleet/load");
+    if (n !== seq.machines) return;
+    state.src.machines = "ok";
     const nodes = d.nodes || [];
     const t = d.tong || d.total || {};
     state.machines = { online: t.online ?? nodes.filter((n) => n.online).length, total: t.may ?? nodes.length, heavy: t.heavy_running ?? 0, queued: t.queued ?? 0 };
     renderWidgets();
-  } catch (err) { onDataError(err); }
+  } catch (err) { onDataError("machines", n, err); }
 }
 
 function setSigned(on) {
@@ -1050,7 +1063,7 @@ jos.onFocus((on) => {
 jos.onAuth((s) => {
   if (!s) return;
   setSigned(!!(s.paired && !s.authError));
-  if (s.paired) { state.denied = false; refreshInbox(); refreshTasks(true); refreshMachines(); }
+  if (s.paired) { refreshInbox(); refreshTasks(true); refreshMachines(); }
 });
 
 // ═══════════════════════ start ═══════════════════════
