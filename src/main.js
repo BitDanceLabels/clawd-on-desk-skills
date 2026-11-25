@@ -187,6 +187,7 @@ function createWindow() {
     if (!url.startsWith(deskHost.ORIGIN + "/")) event.preventDefault();
   });
   win.loadURL(`${deskHost.ORIGIN}/index.html`);
+  win.webContents.on("did-finish-load", () => syncCursorFeed());
   win.once("ready-to-show", () => {
     if (!win || win.isDestroyed()) return;
     if (!prefs.figureHidden) win.showInactive();
@@ -230,6 +231,8 @@ let cursorTimer = null;
 let lastCursor = null;
 let screenLocked = false;
 function syncCursorFeed() {
+  // Trang không tự biết cửa sổ đang ẩn (Electron vẫn vẽ cửa sổ ẩn) → báo thẳng: ẩn thì dừng vẽ, chưa nạp model.
+  if (win && !win.isDestroyed()) setRenderPaused("figure-hidden", !win.isVisible());
   const want = !!(win && !win.isDestroyed() && win.isVisible() && !screenLocked);
   if (want && !cursorTimer) {
     cursorTimer = setInterval(() => {

@@ -42,10 +42,51 @@ const state = {
   pairPromptPending: false,
 };
 
+// Vỏ trì hoãn: ghi nhớ lệnh khi chưa tạo, tạo lúc trang hiện lần đầu rồi phát lại trạng thái.
+function createLazyAvatar(make) {
+  let real = null;
+  const mem = { character: null, fps: null, state: "idle", pauses: new Map(), started: false };
+  const ensure = () => {
+    // Chờ main báo cửa sổ đang hiện (figure-hidden=false); main cũ không báo thì sau 3 s vẫn chạy.
+    if (real || document.hidden || !mem.started || mem.pauses.get("figure-hidden") !== false && !mem.noReport) return real;
+    real = make();
+    if (mem.character && mem.character !== real.character()) real.setCharacter(mem.character);
+    if (mem.fps) real.setFps(mem.fps);
+    for (const [r, on] of mem.pauses) real.setPaused(r, on);
+    real.setState(mem.state);
+    return real;
+  };
+  document.addEventListener("visibilitychange", ensure);
+  // Bắt đầu khi đã biết lựa chọn của anh (desk.info); lỡ không có thì 2 s sau vẫn chạy.
+  setTimeout(() => { mem.started = true; ensure(); }, 2000);
+  setTimeout(() => { if (!mem.pauses.has("figure-hidden")) { mem.noReport = true; ensure(); } }, 3000);
+  const pass = (name, fallback) => (...a) => { const r = ensure(); return r ? r[name](...a) : fallback; };
+  return {
+    start: () => { mem.started = true; ensure(); },
+    character: () => (real ? real.character() : mem.character),
+    kind: () => (real ? real.kind() : "none"),
+    setCharacter: (id) => { mem.character = id; if (real) real.setCharacter(id); },
+    setFps: (n) => { mem.fps = n; if (real) real.setFps(n); },
+    setPaused: (r, on) => { mem.pauses.set(r, !!on); if (real) real.setPaused(r, on); else if (!on) ensure(); },
+    setState: (s) => { mem.state = s; if (real) real.setState(s); },
+    setAudioLevel: (v) => real && real.setAudioLevel(v),
+    setGaze: (x, y) => real && real.setGaze(x, y),
+    setActive: (v) => real && real.setActive(v),
+    setPalette: (p) => real && real.setPalette(p),
+    playIntro: () => real && real.playIntro(),
+    tap: pass("tap", null),
+    hitTest: (x, y) => (real ? real.hitTest(x, y) : false),
+    stats: () => (real ? real.stats() : { kind: "none" }),
+    resetStats: () => real && real.resetStats(),
+    destroy: () => real && real.destroy(),
+  };
+}
+
 // ── nhân vật (thay bé hologram hạt sáng, 01/11/2026) ──
 // Canvas 2D thuần, không WebGL → máy yếu / remote desktop vẫn chạy. Lỗi tải ảnh thì giữ khung trống, JAVIS vẫn dùng được.
 // 25/11: mặc định nhân vật Live2D VTuber "mao" (tóc/áo vật lý, mắt + đầu theo chuột toàn màn hình).
-const holo = createAvatar({ portraitCanvas: $("holo"), live2dCanvas: $("l2d"), character: "mao" });
+// Chỉ nạp model khi nhân vật thật sự hiện: anh tắt nhân vật (⌘⇧J) thì không tốn RAM/GPU cho model.
+const holo = createLazyAvatar(() => createAvatar({ portraitCanvas: $("holo"), live2dCanvas: $("l2d"), character: state.prefs.character || "mao", fps: state.prefs.fps || 30 }));
 
 function phase() {
   if (state.recorder) return "listening";
@@ -820,6 +861,7 @@ function onGatewayEvent(ev) {
   if (info) state.prefs = { ...state.prefs, ...info };
   if (info && info.character && info.character !== holo.character()) holo.setCharacter(info.character);
   if (info && info.fps) holo.setFps(info.fps);
+  holo.start();
   const s = await desk.sessions();
   if (s) state.sessions = s;
   const status = await desk.status();

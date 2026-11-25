@@ -329,8 +329,10 @@ export function createDeskLive2D(canvas: HTMLCanvasElement, opts: Live2DOptions 
     raf = 0;
     if (destroyed || pauses.size || !model) return;
     const now = performance.now();
-    const dt = lastStep ? Math.min((now - lastStep) / 1000, 0.1) : 1 / fps;
     const interval = 1000 / effectiveFps(now);
+    // rAF đến sớm hơn nhịp (máy 120 Hz) → chờ vsync sau, không vẽ thừa.
+    if (lastStep && now - lastStep < interval - 6) { raf = requestAnimationFrame(frame); return; }
+    const dt = lastStep ? Math.min((now - lastStep) / 1000, 0.1) : 1 / fps;
     if (lastStep) {
       const gap = now - lastStep;
       perf.gaps.push(gap);
@@ -358,10 +360,13 @@ export function createDeskLive2D(canvas: HTMLCanvasElement, opts: Live2DOptions 
     schedule(interval - (performance.now() - now));
   }
 
-  // Hẹn đúng nhịp FPS rồi mới xin rAF (khớp vsync) — không thức dậy mỗi vsync 60/120 Hz.
+  // Ngủ gần hết khoảng chờ rồi mới xin rAF: rAF rơi đúng vsync kế tiếp → nhịp đều (30 FPS = mỗi 2 vsync
+  // ở 60 Hz), mà không thức dậy mỗi vsync 60/120 Hz. Chừa 12 ms (> nửa vsync) để timer trễ vẫn kịp.
   function schedule(delay: number) {
     if (destroyed || pauses.size || timer || raf) return;
-    timer = setTimeout(() => { timer = null; raf = requestAnimationFrame(frame); }, Math.max(0, delay - 2));
+    const wait = delay - 12;
+    if (wait <= 0) { raf = requestAnimationFrame(frame); return; }
+    timer = setTimeout(() => { timer = null; raf = requestAnimationFrame(frame); }, wait);
   }
   function stopLoop() {
     if (timer) { clearTimeout(timer); timer = null; }
