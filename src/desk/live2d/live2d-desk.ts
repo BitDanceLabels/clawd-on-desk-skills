@@ -140,6 +140,10 @@ class DeskModel extends CubismUserModel {
     const r = this.getRenderer();
     r.startUp(gl);
     r.setIsPremultipliedAlpha(true);
+    // Canvas WebGL này chỉ nhân vật dùng → bỏ lưu/khôi phục ~20 trạng thái GL mỗi khung
+    // (mỗi gl.getParameter là 1 lần gọi đồng bộ sang tiến trình GPU; đo trên M4: tốn nhất sau Core).
+    (r as any).saveProfile = () => {};
+    (r as any).restoreProfile = () => {};
     for (let i = 0; i < s.getTextureCount(); i++) {
       const img = await loadImage(dir + s.getTextureFileName(i));
       const tex = createTexture(gl, img, maxTexture);
@@ -220,7 +224,7 @@ class DeskModel extends CubismUserModel {
     m.multiplyByMatrix(this._modelMatrix);
     const r = this.getRenderer();
     r.setMvpMatrix(m);
-    r.setRenderState(gl.getParameter(gl.FRAMEBUFFER_BINDING), [0, 0, w, h]);
+    r.setRenderState(null as unknown as WebGLFramebuffer, [0, 0, w, h]); // khung mặc định, không hỏi GPU
     r.drawModel();
   }
 
