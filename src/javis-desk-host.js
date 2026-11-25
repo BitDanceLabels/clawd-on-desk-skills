@@ -92,6 +92,9 @@ function resolveStaticPath(pathname, roots) {
   if (rel.includes("..")) return null;
   const nv = /^\/nhan-vat\/(mai|linh|an|vy)\/(base\.webp|eyes\.webp|thumb\.webp|meta\.json|mouth-\d{2}\.webp)$/.exec(rel);
   if (nv) return path.join(roots.assets, "nhan-vat", nv[1], nv[2]);
+  // Live2D: Cubism Core + model mẫu Mao (chỉ đúng các đuôi file của model, không liệt kê thư mục).
+  const l2 = /^\/live2d\/(core\/live2dcubismcore\.min\.js|(?:mao|hiyori)\/(?:[A-Za-z0-9_.]+\/)?[A-Za-z0-9_.]+\.(?:moc3|json|png))$/.exec(rel);
+  if (l2) return path.join(roots.assets, "live2d", ...l2[1].split("/"));
   const hit = STATIC_FILES[rel];
   if (!hit) return null;
   return path.join(roots[hit[0]], ...hit[1].split("/"));
