@@ -1,6 +1,6 @@
-// src/desk/desk.js — JAVIS On Desk page: the hologram girl, the talk/type bar,
+// src/desk/desk.js — JAVIS On Desk page: the assistant girl (2.5D, nhân vật thật), the talk/type bar,
 // the card board and the notice bubble. Bundled by esbuild into desk.bundle.js.
-import { createDeskHologram } from "./hologram-desk.js";
+import { createAvatar } from "./avatar.js";
 import { classifyIntent } from "./intent.js";
 import { h, api, GatewayError, LOADERS, CARD_META, sseDeltas, richText, ago } from "./cards.js";
 import { recordUtterance } from "./voice-input.js";
@@ -42,22 +42,51 @@ const state = {
   pairPromptPending: false,
 };
 
-// ── hologram ──
-// No WebGL (old GPU, remote desktop, blocklisted driver): show the character as a
-// still glowing portrait so the assistant keeps working.
-function stillPortrait() {
-  const canvas = $("holo");
-  const img = h("img", { class: "still", src: "hologram/character.jpg", alt: "" });
-  canvas.replaceWith(img);
-  return { setState() {}, setAudioLevel() {}, setGaze() {}, setActive() {}, setPalette() {}, playIntro() {}, stats: () => ({ points: 0 }), destroy() {} };
+// Vỏ trì hoãn: ghi nhớ lệnh khi chưa tạo, tạo lúc trang hiện lần đầu rồi phát lại trạng thái.
+function createLazyAvatar(make) {
+  let real = null;
+  const mem = { character: null, fps: null, state: "idle", pauses: new Map(), started: false };
+  const ensure = () => {
+    // Chờ main báo cửa sổ đang hiện (figure-hidden=false); main cũ không báo thì sau 3 s vẫn chạy.
+    if (real || document.hidden || !mem.started || mem.pauses.get("figure-hidden") !== false && !mem.noReport) return real;
+    real = make();
+    if (mem.character && mem.character !== real.character()) real.setCharacter(mem.character);
+    if (mem.fps) real.setFps(mem.fps);
+    for (const [r, on] of mem.pauses) real.setPaused(r, on);
+    real.setState(mem.state);
+    return real;
+  };
+  document.addEventListener("visibilitychange", ensure);
+  // Bắt đầu khi đã biết lựa chọn của anh (desk.info); lỡ không có thì 2 s sau vẫn chạy.
+  setTimeout(() => { mem.started = true; ensure(); }, 2000);
+  setTimeout(() => { if (!mem.pauses.has("figure-hidden")) { mem.noReport = true; ensure(); } }, 3000);
+  const pass = (name, fallback) => (...a) => { const r = ensure(); return r ? r[name](...a) : fallback; };
+  return {
+    start: () => { mem.started = true; ensure(); },
+    character: () => (real ? real.character() : mem.character),
+    kind: () => (real ? real.kind() : "none"),
+    setCharacter: (id) => { mem.character = id; if (real) real.setCharacter(id); },
+    setFps: (n) => { mem.fps = n; if (real) real.setFps(n); },
+    setPaused: (r, on) => { mem.pauses.set(r, !!on); if (real) real.setPaused(r, on); else if (!on) ensure(); },
+    setState: (s) => { mem.state = s; if (real) real.setState(s); },
+    setAudioLevel: (v) => real && real.setAudioLevel(v),
+    setGaze: (x, y) => real && real.setGaze(x, y),
+    setActive: (v) => real && real.setActive(v),
+    setPalette: (p) => real && real.setPalette(p),
+    playIntro: () => real && real.playIntro(),
+    tap: pass("tap", null),
+    hitTest: (x, y) => (real ? real.hitTest(x, y) : false),
+    stats: () => (real ? real.stats() : { kind: "none" }),
+    resetStats: () => real && real.resetStats(),
+    destroy: () => real && real.destroy(),
+  };
 }
-let holo;
-try {
-  holo = createDeskHologram($("holo"), { palette: "cyan", intro: !window.__JAVIS_SKIP_INTRO });
-} catch (err) {
-  console.warn("JAVIS: hologram unavailable, using still portrait:", err && err.message);
-  holo = stillPortrait();
-}
+
+// ── nhân vật (thay bé hologram hạt sáng, 01/11/2026) ──
+// Canvas 2D thuần, không WebGL → máy yếu / remote desktop vẫn chạy. Lỗi tải ảnh thì giữ khung trống, JAVIS vẫn dùng được.
+// 25/11: mặc định nhân vật Live2D VTuber "mao" (tóc/áo vật lý, mắt + đầu theo chuột toàn màn hình).
+// Chỉ nạp model khi nhân vật thật sự hiện: anh tắt nhân vật (⌘⇧J) thì không tốn RAM/GPU cho model.
+const holo = createLazyAvatar(() => createAvatar({ portraitCanvas: $("holo"), live2dCanvas: $("l2d"), character: state.prefs.character || "mao", fps: state.prefs.fps || 30 }));
 
 function phase() {
   if (state.recorder) return "listening";
@@ -104,11 +133,36 @@ function setInteractive(next) {
   interactive = next;
   desk.setInteractive(next);
 }
+// Mắt + đầu nhìn theo con trỏ ở BẤT KỲ đâu trên màn hình: main gửi độ lệch (px) từ đầu nhân vật.
+let globalGaze = false;
+if (desk.onCursor) {
+  desk.onCursor((c) => {
+    if (!c) return;
+    globalGaze = true;
+    holo.setGaze(Math.tanh(c.dx / 420), Math.tanh(c.dy / 320));
+  });
+}
+if (desk.onRender) desk.onRender((r) => { if (r && r.reason) holo.setPaused(r.reason, !!r.paused); });
+// Pin: rút sạc → 24 FPS; pin ≤ 20 % đang xả → dừng vẽ (giữ khung hình cuối).
+if (navigator.getBattery) {
+  navigator.getBattery().then((b) => {
+    const apply = () => {
+      holo.setPaused("battery", !b.charging && b.level <= 0.2);
+      holo.setFps(!b.charging ? Math.min(24, state.prefs.fps || 30) : (state.prefs.fps || 30));
+    };
+    b.addEventListener("chargingchange", apply);
+    b.addEventListener("levelchange", apply);
+    apply();
+  }).catch(() => {});
+}
 // In compact/peek mode the transparent window lets clicks through except over
 // the girl and the bubble. Mouse moves are forwarded so we can tell.
 document.addEventListener("mousemove", (e) => {
   const el = document.elementFromPoint(e.clientX, e.clientY);
-  setInteractive(!!(el && el.closest("[data-hit]")));
+  const onStage = !!(el && el.closest("#stage"));
+  // Trên khung nhân vật: chỉ phần có người bắt chuột; vùng trống xung quanh để chuột xuyên qua.
+  setInteractive(!!(el && el.closest("[data-hit]")) && (!onStage || state.mode === "open" || !!drag || holo.hitTest(e.clientX, e.clientY)));
+  if (globalGaze) return; // main gửi vị trí con trỏ toàn màn hình (desk:cursor)
   const r = ui.stage.getBoundingClientRect();
   holo.setGaze(((e.clientX - (r.left + r.width / 2)) / (r.width / 2)) * 0.8, ((e.clientY - (r.top + r.height * 0.35)) / r.height) * 1.2);
   holo.setActive(state.mode === "open" || !!(el && el.closest("#stage")));
@@ -133,13 +187,13 @@ ui.stage.addEventListener("pointermove", (e) => {
   drag.y = e.screenY;
   desk.moveBy(dx, dy);
 });
-ui.stage.addEventListener("pointerup", () => {
+ui.stage.addEventListener("pointerup", (e) => {
   if (!drag) return;
   const wasDrag = drag.moved;
   drag = null;
   ui.stage.classList.remove("dragging");
   if (wasDrag) desk.moveEnd();
-  else tapGirl();
+  else tapGirl(e);
 });
 ui.stage.addEventListener("contextmenu", (e) => { e.preventDefault(); desk.showMenu(); });
 ui.stage.addEventListener("keydown", (e) => {
@@ -148,10 +202,19 @@ ui.stage.addEventListener("keydown", (e) => {
 
 // Tap the girl → JAVIS OS (the macOS-like desktop). The quick board stays one menu away
 // (right click → "Bảng nhanh của bé"), and still opens from bubbles and the tray.
-function tapGirl() {
+// 25/11: bấm vào nhân vật → bé làm 1 động tác nhỏ + bong bóng hỏi anh cần gì (mở bảng / JAVIS OS).
+function tapGirl(e) {
   if (state.mode === "open") { closeBoard(); return; }
-  if (desk.openOs) desk.openOs();
-  else openBoard();
+  const r = ui.stage.getBoundingClientRect();
+  const area = holo.tap(e && e.clientX != null ? e.clientX : r.left + r.width / 2, e && e.clientY != null ? e.clientY : r.top + r.height * 0.4);
+  if (!area) { if (desk.openOs) desk.openOs(); else openBoard(); return; }
+  showBubble(area === "Head" ? "Hihi, anh gọi em ạ?" : "Dạ, anh cần em làm gì ạ?", {
+    actions: [
+      { label: "Mở bảng", tone: "primary", run: openBoard },
+      ...(desk.openOs ? [{ label: "JAVIS OS", run: () => desk.openOs() }] : []),
+    ],
+    ttl: 6000,
+  });
 }
 
 function openBoard() {
@@ -183,7 +246,11 @@ desk.onCommand((cmd) => {
     if (!ui.input.value.trim() && !state.recorder && !playing && !state.permissions.size && !answering) closeBoard();
   }
 });
-desk.onPrefs((p) => { state.prefs = { ...state.prefs, ...p }; });
+desk.onPrefs((p) => {
+  state.prefs = { ...state.prefs, ...p };
+  if (p.character && p.character !== holo.character()) holo.setCharacter(p.character);
+  if (p.fps) holo.setFps(p.fps);
+});
 
 // ── bubble ──
 function showBubble(text, { actions = [], warm = false, sticky = false, ttl = 12000 } = {}) {
@@ -482,7 +549,7 @@ ui.mic.addEventListener("click", async () => {
   if (state.speakingAudio) state.speakingAudio.pause();
   ui.mic.classList.add("on");
   ui.input.placeholder = "Em đang nghe…";
-  state.recorder = recordUtterance({ onLevel: (l) => holo.setAudioLevel(l) });
+  state.recorder = recordUtterance({ onLevel: () => {} });
   refreshPhase();
   try {
     const clip = await state.recorder.done;
@@ -792,6 +859,9 @@ function onGatewayEvent(ev) {
   ui.greeting.textContent = greeting();
   const info = await desk.info();
   if (info) state.prefs = { ...state.prefs, ...info };
+  if (info && info.character && info.character !== holo.character()) holo.setCharacter(info.character);
+  if (info && info.fps) holo.setFps(info.fps);
+  holo.start();
   const s = await desk.sessions();
   if (s) state.sessions = s;
   const status = await desk.status();

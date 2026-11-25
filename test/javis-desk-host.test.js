@@ -95,11 +95,16 @@ describe("javis-desk:// static files", () => {
     assert.strictEqual(resolveStaticPath("/ui/../package.json", roots), null);
     assert.ok(fs.existsSync(resolveStaticPath("/ui/javis-ask-box.js", { src: path.join(__dirname, "..", "src"), assets: path.join(__dirname, "..", "assets") })));
   });
-  it("serves the desk page, its bundle and the hologram character only", () => {
+  it("serves the desk page, its bundle and the character sprites only (hologram gỡ 0.14.1)", () => {
     assert.strictEqual(resolveStaticPath("/", roots), "/app/src/desk/index.html");
     assert.strictEqual(resolveStaticPath("/desk.bundle.js", roots), "/app/src/bundles/desk.bundle.js");
     assert.strictEqual(resolveStaticPath("/desk.css", roots), "/app/src/desk/desk.css");
-    assert.strictEqual(resolveStaticPath("/hologram/character.jpg", roots), "/app/assets/hologram/character.jpg");
+    assert.strictEqual(resolveStaticPath("/hologram/character.jpg", roots), null);
+    assert.strictEqual(resolveStaticPath("/nhan-vat/mai/base.webp", roots), "/app/assets/nhan-vat/mai/base.webp");
+    assert.strictEqual(resolveStaticPath("/nhan-vat/vy/mouth-09.webp", roots), "/app/assets/nhan-vat/vy/mouth-09.webp");
+    assert.strictEqual(resolveStaticPath("/nhan-vat/an/meta.json", roots), "/app/assets/nhan-vat/an/meta.json");
+    assert.strictEqual(resolveStaticPath("/nhan-vat/khac/base.webp", roots), null);
+    assert.strictEqual(resolveStaticPath("/nhan-vat/mai/../../package.json", roots), null);
   });
   it("refuses traversal and anything else", () => {
     assert.strictEqual(resolveStaticPath("/desk/../../src/main.js", roots), null);
@@ -277,5 +282,26 @@ describe("JAVIS pairing (device code)", () => {
     assert.deepStrictEqual(updates.map((u) => u.status), ["error"]);
     assert.strictEqual(pairing.isActive(), false);
     assert.strictEqual(keyStore.read(), null);
+  });
+});
+
+describe("nhân vật thật thay hologram (0.14.1)", () => {
+  const root = path.join(__dirname, "..");
+  it("không còn mã/asset hologram hạt sáng trong bản build", () => {
+    assert.strictEqual(fs.existsSync(path.join(root, "src", "desk", "hologram-desk.js")), false);
+    assert.strictEqual(fs.existsSync(path.join(root, "assets", "hologram")), false);
+    const pkg = require("../package.json");
+    assert.ok(!pkg.build.files.some((f) => f.includes("hologram")));
+    assert.ok(pkg.build.files.includes("assets/nhan-vat/**/*"));
+  });
+  it("đủ 4 nhân vật, mỗi bộ có base + mắt + 10 khẩu hình + meta", () => {
+    for (const id of ["mai", "linh", "an", "vy"]) {
+      const d = path.join(root, "assets", "nhan-vat", id);
+      const meta = JSON.parse(fs.readFileSync(path.join(d, "meta.json"), "utf8"));
+      assert.strictEqual(meta.mouth.levels.length, 10);
+      for (const f of ["base.webp", "eyes.webp", "thumb.webp", ...meta.mouth.levels.map((_, k) => `mouth-${String(k).padStart(2, "0")}.webp`)]) {
+        assert.ok(fs.existsSync(path.join(d, f)), `${id}/${f}`);
+      }
+    }
   });
 });

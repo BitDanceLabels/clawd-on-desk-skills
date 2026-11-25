@@ -1,8 +1,8 @@
-// src/main.js — JAVIS On Desk: one floating hologram assistant.
+// src/main.js — JAVIS On Desk: one floating assistant (nhân vật thật 2.5D, thay hologram hạt sáng từ 0.14.1).
 //
 // One transparent always-on-top window (javis-desk://app/index.html):
-//   • compact  — just the hologram girl, draggable, click to open
-//   • open     — hologram + talk/type bar + the card board ("hiển hoá")
+//   • compact  — just the assistant girl, draggable, click to open
+//   • open     — girl + talk/type bar + the card board ("hiển hoá")
 // Plus a tray menu, the local hook server (Claude Code / Codex / Gemini / Cursor
 // session state + permission cards) and the auto-updater (javis-updater.js, from the
 // JAVIS gateway). Everything the old pet app did besides this lives in archive/.
@@ -37,11 +37,19 @@ const OS_SHORTCUT = "CommandOrControl+Shift+Space";
 
 // ── Prefs ──
 const PREFS_FILE = path.join(app.getPath("userData"), "javis-desk.json");
-const DEFAULT_PREFS = { figureX: null, figureY: null, doNotDisturb: false, voiceReply: false, autoStartWithClaude: false, palette: "cyan" };
+const DEFAULT_PREFS = { figureX: null, figureY: null, doNotDisturb: false, voiceReply: false, autoStartWithClaude: false, palette: "cyan", character: "mao", fps: 30, figureHidden: false, live2dIntro: false };
+// "mao" = Live2D VTuber (mặc định từ 0.15.0); còn lại là chân dung 2.5D của 0.14.1.
+const CHARACTERS = [["mao", "Mao · VTuber Live2D"], ["hiyori", "Hiyori · tóc dài Live2D"], ["mai", "Mai · áo dài"], ["linh", "Linh · công sở"], ["an", "An · 3D"], ["vy", "Vy · 3D digital human"]];
+const FPS_CHOICES = [24, 30, 60];
 function loadPrefs() {
   try { return { ...DEFAULT_PREFS, ...JSON.parse(fs.readFileSync(PREFS_FILE, "utf8")) }; } catch { return { ...DEFAULT_PREFS }; }
 }
 let prefs = loadPrefs();
+// Lần đầu mở bản có Live2D: hiện nhân vật Mao để anh xem (anh đổi/ẩn lại được, lựa chọn sau đó được nhớ).
+if (!prefs.live2dIntro) {
+  prefs = { ...prefs, character: "mao", figureHidden: false, live2dIntro: true };
+  setImmediate(() => savePrefs());
+}
 let savePrefsTimer = null;
 function savePrefs() {
   clearTimeout(savePrefsTimer);
@@ -167,7 +175,8 @@ function createWindow() {
     },
   });
   win.setAlwaysOnTop(true, isMac ? "floating" : "screen-saver");
-  if (isMac) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Không hiện trên app toàn màn hình (Mac: Space riêng) → cửa sổ bị che, trang tự dừng vẽ.
+  if (isMac) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
 
   const wc = win.webContents;
   wc.setWindowOpenHandler(({ url }) => {
@@ -178,10 +187,12 @@ function createWindow() {
     if (!url.startsWith(deskHost.ORIGIN + "/")) event.preventDefault();
   });
   win.loadURL(`${deskHost.ORIGIN}/index.html`);
+  win.webContents.on("did-finish-load", () => syncCursorFeed());
   win.once("ready-to-show", () => {
     if (!win || win.isDestroyed()) return;
-    win.showInactive();
+    if (!prefs.figureHidden) win.showInactive();
     applyMode("compact");
+    syncCursorFeed();
     send("desk:prefs", publicPrefs());
     send("desk:sessions", tracker.summary());
   });
@@ -189,7 +200,9 @@ function createWindow() {
   win.on("blur", () => {
     if (mode === "open" && !keepOpen) send("desk:command", { type: "blur" });
   });
-  win.on("closed", () => { win = null; });
+  win.on("closed", () => { win = null; syncCursorFeed(); });
+  win.on("show", syncCursorFeed);
+  win.on("hide", syncCursorFeed);
   // Keep the girl reachable when displays change.
   screen.on("display-removed", () => {
     if (!win || win.isDestroyed()) return;
@@ -202,9 +215,43 @@ function createWindow() {
 let keepOpen = false;
 
 function toggleWindow() {
-  if (!win || win.isDestroyed()) return createWindow();
+  if (!win || win.isDestroyed()) { prefs.figureHidden = false; savePrefs(); return createWindow(); }
   if (win.isVisible()) win.hide();
   else win.showInactive();
+  prefs.figureHidden = !win.isVisible();
+  savePrefs();
+  rebuildMenus();
+}
+
+// ── Mắt nhìn theo con trỏ toàn màn hình ──
+// Chỉ chạy khi nhân vật đang hiện và máy không khoá/ngủ; 20 lần/giây, chỉ gửi khi con trỏ đổi chỗ
+// (đọc vị trí con trỏ là gọi hệ điều hành tại chỗ, không mạng). Trang tự làm mượt bằng CubismTargetPoint.
+const CURSOR_MS = 50;
+let cursorTimer = null;
+let lastCursor = null;
+let screenLocked = false;
+function syncCursorFeed() {
+  // Trang không tự biết cửa sổ đang ẩn (Electron vẫn vẽ cửa sổ ẩn) → báo thẳng: ẩn thì dừng vẽ, chưa nạp model.
+  if (win && !win.isDestroyed()) setRenderPaused("figure-hidden", !win.isVisible());
+  const want = !!(win && !win.isDestroyed() && win.isVisible() && !screenLocked);
+  if (want && !cursorTimer) {
+    cursorTimer = setInterval(() => {
+      if (!win || win.isDestroyed()) return;
+      const p = screen.getCursorScreenPoint();
+      if (lastCursor && lastCursor.x === p.x && lastCursor.y === p.y) return;
+      lastCursor = p;
+      const fig = figureRect();
+      // Điểm nhìn: giữa mặt nhân vật (~30 % chiều cao khung tính từ trên).
+      send("desk:cursor", { dx: p.x - (fig.x + fig.width / 2), dy: p.y - (fig.y + fig.height * 0.3) });
+    }, CURSOR_MS);
+  } else if (!want && cursorTimer) {
+    clearInterval(cursorTimer);
+    cursorTimer = null;
+    lastCursor = null;
+  }
+}
+function setRenderPaused(reason, paused) {
+  send("desk:render", { reason, paused });
 }
 
 function openBoard(command) {
@@ -226,7 +273,7 @@ function setTrayCount(n) {
 }
 
 function publicPrefs() {
-  return { doNotDisturb: !!prefs.doNotDisturb, voiceReply: !!prefs.voiceReply, palette: prefs.palette, version: app.getVersion(), platform: process.platform };
+  return { doNotDisturb: !!prefs.doNotDisturb, voiceReply: !!prefs.voiceReply, palette: prefs.palette, character: CHARACTERS.some(([id]) => id === prefs.character) ? prefs.character : "mao", fps: FPS_CHOICES.includes(prefs.fps) ? prefs.fps : 30, version: app.getVersion(), platform: process.platform };
 }
 
 // ── Tray + menu ──
@@ -237,13 +284,15 @@ function menuTemplate() {
     { label: "Hộp thư chung", click: () => openOs({ type: "open", app: "crm" }) },
     { label: "Giao việc nhanh (Spotlight)", click: () => openOs({ type: "spotlight" }) },
     { type: "separator" },
-    { label: win && win.isVisible() ? "Ẩn bé JAVIS" : "Hiện bé JAVIS", accelerator: TOGGLE_SHORTCUT, click: toggleWindow },
+    { label: win && win.isVisible() ? "Ẩn nhân vật" : "Hiện nhân vật", accelerator: TOGGLE_SHORTCUT, click: toggleWindow },
     { label: "Bảng nhanh của bé", click: () => openBoard({ type: "focus-input" }) },
     { type: "separator" },
     { label: "Việc cần anh", click: () => openBoard({ type: "ask", text: "việc cần anh" }) },
     { label: "Máy + tải", click: () => openBoard({ type: "ask", text: "các máy đang sao" }) },
     { label: "Kho tài sản", click: () => openBoard({ type: "ask", text: "kho tài sản" }) },
     { type: "separator" },
+    { label: "Nhân vật", submenu: CHARACTERS.map(([id, label]) => ({ label, type: "radio", checked: (prefs.character || "mao") === id, click: () => setPref({ character: id }) })) },
+    { label: "Độ mượt nhân vật", submenu: FPS_CHOICES.map((n) => ({ label: `${n} khung/giây${n === 30 ? " (nhẹ máy, khuyên dùng)" : n === 24 ? " (nhẹ nhất)" : " (mượt nhất, tốn pin hơn)"}`, type: "radio", checked: (prefs.fps || 30) === n, click: () => setPref({ fps: n }) })) },
     { label: "Không làm phiền", type: "checkbox", checked: !!prefs.doNotDisturb, click: (item) => setPref({ doNotDisturb: item.checked }) },
     { label: "Đọc to câu trả lời", type: "checkbox", checked: !!prefs.voiceReply, click: (item) => setPref({ voiceReply: item.checked }) },
     ...(loginItem ? [{ label: "Mở cùng máy", type: "checkbox", checked: !!loginItem.openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) }] : []),
@@ -279,6 +328,8 @@ function setPref(patch) {
   for (const key of ["doNotDisturb", "voiceReply", "palette"]) {
     if (key in patch) allowed[key] = key === "palette" ? String(patch[key]).slice(0, 16) : !!patch[key];
   }
+  if ("character" in patch && CHARACTERS.some(([id]) => id === patch.character)) allowed.character = patch.character;
+  if ("fps" in patch && FPS_CHOICES.includes(Number(patch.fps))) allowed.fps = Number(patch.fps);
   prefs = { ...prefs, ...allowed };
   savePrefs();
   rebuildMenus();
@@ -492,6 +543,12 @@ if (!app.requestSingleInstanceLock()) {
     initUpdater();
     createWindow();
     createTray();
+    // Khoá màn hình / ngủ: dừng vẽ + dừng đọc con trỏ; mở lại thì chạy tiếp.
+    const lock = (on) => { screenLocked = on; setRenderPaused("lock", on); syncCursorFeed(); };
+    powerMonitor.on("lock-screen", () => lock(true));
+    powerMonitor.on("unlock-screen", () => lock(false));
+    powerMonitor.on("suspend", () => lock(true));
+    powerMonitor.on("resume", () => lock(false));
     // Created hidden at start: it listens for customer messages (Dock badge + banners).
     osHost.create();
     try { globalShortcut.register(TOGGLE_SHORTCUT, toggleWindow); } catch {}

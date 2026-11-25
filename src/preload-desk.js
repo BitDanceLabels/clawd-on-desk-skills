@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld("javisDesk", {
   onLayout: on("desk:layout"),
   onCommand: on("desk:command"),
   onPrefs: on("desk:prefs"),
+  // con trỏ toàn màn hình (độ lệch px so với đầu nhân vật) + lệnh dừng/chạy vẽ (khoá máy, ngủ, toàn màn hình)
+  onCursor: on("desk:cursor"),
+  onRender: on("desk:render"),
   // true while the owner is typing / moving the mouse (automatic bubbles wait)
   userBusy: () => ipcRenderer.invoke("desk:user-busy"),
 
